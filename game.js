@@ -724,12 +724,13 @@ const scenes = {
       },
       {
         step: 2,
-        at: 10,
+        at: 9,
         text: [
           { speaker: "无意识", className: "revealed fracture", text: "---令人感到兴奋的知识：什么时候那些巨大存在，为我们之师者的消息和在幻海间这么畅销了？果然是发生了什么很大的事情吧，不，或许只是我们错过了这一切而已---" },
         ],
       },
     ],
+    progressiveRetroactive: true,
     revealAfterRewrite: [
       {
         speaker: "前传人物",
@@ -1041,13 +1042,39 @@ function filterAvailableLines(lines) {
 }
 
 function getSceneText(scene) {
-  const baseText = filterAvailableLines(Array.isArray(scene.text) ? [...scene.text] : []);
+  let baseText = filterAvailableLines(Array.isArray(scene.text) ? [...scene.text] : []);
   const retroactiveStep = Number(state.counters.metaUnconsciousStep || 0);
 
-  for (const reveal of scene.retroactiveReveals || []) {
-    if (retroactiveStep < reveal.step) continue;
-    const insertAt = Math.min(reveal.at, baseText.length);
-    baseText.splice(insertAt, 0, ...filterAvailableLines(reveal.text || []));
+  if (scene.progressiveRetroactive && scene.retroactiveReveals?.length >= 2) {
+    const [firstReveal, secondReveal] = scene.retroactiveReveals;
+    const firstBoundary = Math.min(firstReveal.at, baseText.length);
+    const secondBoundary = Math.min(secondReveal.at, baseText.length);
+    const firstText = filterAvailableLines(firstReveal.text || []);
+    const secondText = filterAvailableLines(secondReveal.text || []);
+
+    if (retroactiveStep <= 0) {
+      baseText = baseText.slice(0, firstBoundary);
+    } else if (retroactiveStep === 1) {
+      baseText = [
+        ...baseText.slice(0, firstBoundary),
+        ...firstText,
+        ...baseText.slice(firstBoundary, secondBoundary),
+      ];
+    } else {
+      baseText = [
+        ...baseText.slice(0, firstBoundary),
+        ...firstText,
+        ...baseText.slice(firstBoundary, secondBoundary),
+        ...secondText,
+        ...baseText.slice(secondBoundary),
+      ];
+    }
+  } else {
+    for (const reveal of scene.retroactiveReveals || []) {
+      if (retroactiveStep < reveal.step) continue;
+      const insertAt = Math.min(reveal.at, baseText.length);
+      baseText.splice(insertAt, 0, ...filterAvailableLines(reveal.text || []));
+    }
   }
 
   if (scene.badEnding) {
