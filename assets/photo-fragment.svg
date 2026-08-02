@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" role="img" aria-label="残破的全家福">
+  <defs>
+    <linearGradient id="paper" x1="0" x2="1" y1="0" y2="1">
+      <stop stop-color="#d9d0c2"/>
+      <stop offset=".58" stop-color="#9d8b73"/>
+      <stop offset="1" stop-color="#3a2b22"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="760" fill="#14110f"/>
+  <path d="M342 142l532 76-94 436-508-102z" fill="url(#paper)" stroke="#f2eee7" stroke-opacity=".26" stroke-width="5"/>
+  <path d="M342 142c44 57 94 100 150 128 74 38 130 64 165 130 46 87 104 127 123 254l-508-102z" fill="#14110f" opacity=".13"/>
+  <path d="M502 334c0-52 38-92 88-92s88 40 88 92c0 36-19 67-47 82 48 21 82 72 88 132H460c6-60 40-111 88-132-28-15-46-46-46-82z" fill="#201b18" opacity=".66"/>
+  <g fill="none" stroke="#201b18" stroke-width="22" stroke-linecap="round" opacity=".68">
+    <path d="M421 572l18-102"/>
+    <path d="M518 586l2-110"/>
+    <path d="M711 592l-18-112"/>
+    <path d="M814 580l-26-104"/>
+  </g>
+  <path d="M766 192L624 646" stroke="#f2eee7" stroke-opacity=".72" stroke-width="8"/>
+  <path d="M848 260L256 514" stroke="#f2eee7" stroke-opacity=".42" stroke-width="5"/>
+  <g fill="#d35f5f" opacity=".28">
+    <circle cx="684" cy="376" r="8"/>
+    <circle cx="704" cy="398" r="5"/>
+    <circle cx="714" cy="422" r="4"/>
+  </g>
+</svg>

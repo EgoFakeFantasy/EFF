@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>无中归来者</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">文字梦境 / 记忆画廊</p>
+          <h1 id="gameTitle">无中归来者</h1>
+        </div>
+        <nav class="top-actions" aria-label="游戏操作">
+          <button id="audioButton" type="button">声音：关</button>
+          <label class="volume-control" for="volumeControl">
+            <span>音量</span>
+            <input id="volumeControl" type="range" min="0" max="1" step="0.01" value="0.58" />
+          </label>
+          <button id="galleryButton" type="button">画廊</button>
+          <button id="restartButton" type="button">重启</button>
+        </nav>
+      </header>
+
+      <main class="game-layout">
+        <section class="stage" aria-live="polite">
+          <div class="art-frame">
+            <img id="sceneArt" alt="" src="./assets/mirror.svg" />
+            <div class="scene-meta">
+              <p id="sceneKicker">镜像阶段</p>
+              <h2 id="sceneTitle">镜前的拼接物</h2>
+            </div>
+          </div>
+
+          <article id="storyText" class="story-text"></article>
+
+          <div class="advance-row">
+            <button id="continueButton" class="continue-button" type="button">继续</button>
+          </div>
+
+          <div id="choices" class="choices"></div>
+        </section>
+
+        <aside class="memory-panel" aria-label="记忆与铭文">
+          <section>
+            <h2>当前主体</h2>
+            <p id="protagonistName" class="protagonist-name">周防</p>
+          </section>
+
+          <section>
+            <h2>记忆锚点</h2>
+            <ul id="memoryList" class="memory-list"></ul>
+          </section>
+
+          <section>
+            <h2>棺材铭文</h2>
+            <div id="inscriptionList" class="inscription-list"></div>
+          </section>
+
+          <section>
+            <h2>当前残响</h2>
+            <p id="echoText" class="echo-text"></p>
+          </section>
+
+          <details class="audio-credits">
+            <summary>声音素材</summary>
+            <p>当前音景由浏览器本地程序化生成，不加载第三方音频文件。</p>
+            <p>暴雨、远雷、房间静噪、心跳、滴水与元语言脉冲会随章节自动切换。</p>
+          </details>
+        </aside>
+      </main>
+    </div>
+
+    <div id="transitionOverlay" class="transition-overlay" aria-hidden="true">
+      <img
+        class="transition-image"
+        src="./assets/storm-tower.svg"
+        alt=""
+        aria-hidden="true"
+      />
+      <div class="transition-tower"></div>
+      <div class="transition-moon"></div>
+      <div class="transition-rain"></div>
+      <p>雨水的织机开始在时间上运转</p>
+    </div>
+
+    <dialog id="galleryDialog" class="gallery-dialog">
+      <div class="dialog-head">
+        <h2>记忆画廊</h2>
+        <button id="closeGalleryButton" type="button" aria-label="关闭画廊">关闭</button>
+      </div>
+      <div id="galleryGrid" class="gallery-grid"></div>
+    </dialog>
+
+    <script src="./game.js"></script>
+  </body>
+</html>

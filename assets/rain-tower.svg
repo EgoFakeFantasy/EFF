@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" role="img" aria-label="雨塔与水潭">
+  <defs>
+    <linearGradient id="deep" x1="0" x2="1" y1="0" y2="1">
+      <stop stop-color="#0e0d0b"/>
+      <stop offset=".5" stop-color="#1d1713"/>
+      <stop offset="1" stop-color="#111815"/>
+    </linearGradient>
+    <radialGradient id="pool" cx=".5" cy=".72" r=".45">
+      <stop stop-color="#7fb4aa" stop-opacity=".45"/>
+      <stop offset=".55" stop-color="#273b36" stop-opacity=".3"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="760" fill="url(#deep)"/>
+  <rect width="1200" height="760" fill="url(#pool)"/>
+  <g stroke="#f2eee7" stroke-opacity=".12" stroke-width="4" fill="none">
+    <path d="M600-20c-190 150-230 360-70 502 112 99 308 84 374-18 74-115-62-239-220-188"/>
+    <path d="M550-10C402 134 376 312 508 430c94 83 244 70 299-15 58-90-50-184-174-145"/>
+    <path d="M650-6c154 138 190 317 62 442-90 88-235 85-295 9-67-86 28-183 155-153"/>
+  </g>
+  <g stroke="#7fb4aa" stroke-opacity=".42" stroke-width="3" stroke-linecap="round">
+    <path d="M252 0v760M410 0v760M596 0v760M784 0v760M950 0v760"/>
+    <path d="M316 0l-70 760M530 0l-44 760M704 0l36 760M1010 0l-82 760"/>
+  </g>
+  <ellipse cx="600" cy="572" rx="350" ry="92" fill="#0a0908" opacity=".54"/>
+  <path d="M416 568c96 36 274 43 382 0" fill="none" stroke="#7fb4aa" stroke-opacity=".58" stroke-width="5"/>
+  <path d="M526 484c46 58 106 58 150 0" fill="none" stroke="#f2eee7" stroke-opacity=".28" stroke-width="8" stroke-linecap="round"/>
+  <path d="M484 520c72 66 158 66 232 0" fill="none" stroke="#d09338" stroke-opacity=".42" stroke-width="7" stroke-linecap="round"/>
+</svg>

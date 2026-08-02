@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" role="img" aria-label="水晶花与无垠之萍">
+  <defs>
+    <linearGradient id="void" x1="0" x2="1" y1="0" y2="1">
+      <stop stop-color="#100e0c"/>
+      <stop offset=".55" stop-color="#191414"/>
+      <stop offset="1" stop-color="#171d18"/>
+    </linearGradient>
+    <radialGradient id="center" cx=".5" cy=".5" r=".46">
+      <stop stop-color="#f2eee7" stop-opacity=".28"/>
+      <stop offset=".5" stop-color="#7fb4aa" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="760" fill="url(#void)"/>
+  <rect width="1200" height="760" fill="url(#center)"/>
+  <g transform="translate(600 382)" fill="none">
+    <g stroke="#7fb4aa" stroke-width="4" stroke-opacity=".7">
+      <path d="M0-256C92-174 92-82 0 0-92-82-92-174 0-256z"/>
+      <path d="M0 256C92 174 92 82 0 0-92 82-92 174 0 256z"/>
+      <path d="M-256 0c82-92 174-92 256 0-82 92-174 92-256 0z"/>
+      <path d="M256 0c-82-92-174-92-256 0 82 92 174 92 256 0z"/>
+    </g>
+    <g stroke="#d09338" stroke-width="3" stroke-opacity=".55" transform="rotate(45)">
+      <path d="M0-210C74-142 74-68 0 0-74-68-74-142 0-210z"/>
+      <path d="M0 210C74 142 74 68 0 0-74 68-74 142 0 210z"/>
+      <path d="M-210 0c68-74 142-74 210 0-68 74-142 74-210 0z"/>
+      <path d="M210 0c-68-74-142-74-210 0 68 74 142 74 210 0z"/>
+    </g>
+    <circle r="78" fill="#0c0a09" stroke="#f2eee7" stroke-opacity=".45" stroke-width="3"/>
+    <path d="M-42 12c25-48 59-48 84 0" stroke="#d35f5f" stroke-opacity=".72" stroke-width="6" stroke-linecap="round"/>
+  </g>
+  <g stroke="#f2eee7" stroke-opacity=".16" stroke-width="2">
+    <path d="M174 172h852M244 252h712M300 586h600"/>
+    <path d="M264 124l672 490M936 124L264 614"/>
+  </g>
+</svg>
