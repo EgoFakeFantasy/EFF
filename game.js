@@ -70,7 +70,7 @@ const scenes = {
     kicker: "镜像阶段",
     title: "镜前的拼接物",
     art: "./assets/mirror.svg",
-    echo: "站在镜子前的，到底是什么样的存在？",
+    echo: "从一开始，自我的构筑就混入了别的东西吧。",
     gallery: ["mirror"],
     memories: ["[是的]要素"],
     text: [
@@ -99,7 +99,7 @@ const scenes = {
     kicker: "镜像阶段",
     title: "被放逐的名",
     art: "./assets/mirror.svg",
-    echo: "但是啊，总是会回来的，那些我们不愿意去接受，没有办法去接受的[名]。",
+    echo: "在进入Ta的世界时，我们就已经被分割为了两种形态。",
     memories: ["无法接受的名", "缺失的法则", "永恒的变动者", "无意识主体"],
     text: [
       "再后来，人们终于在一次又一次的表演，一次又一次的遵循中明白，ta在渴求着什么，因为ta没有了这个东西。",
@@ -121,7 +121,7 @@ const scenes = {
     kicker: "故事揭幕之前",
     title: "名字擦过耳边",
     art: "./assets/storm-tower.svg",
-    echo: "有什么在呼喊着一个名字？那是我的名字吗？",
+    echo: "是从什么时候开始的呢？是在什么地方结束的呢？",
     gallery: ["storm"],
     memories: ["被呼喊的名字"],
     text: [
@@ -359,7 +359,7 @@ const scenes = {
     kicker: "第一幕支流",
     title: "没有留下照片的手",
     art: "./assets/empty-house.svg",
-    echo: "这一次，连照片也没有跟着他回来。",
+    echo: "没有得到确认的记忆，无法成为回归的锚点。",
     memories: ["过早打开的水箱"],
     badEnding: {
       code: "00",
@@ -554,7 +554,7 @@ const scenes = {
     kicker: "黄昏支流",
     title: "被写成结局",
     art: "./assets/blood-courtyard.svg",
-    echo: "是接受这一切然后就此堕入魔渊？",
+    echo: "是接受这一切然后就此堕入魔渊，还是因为接受不了这一切而自刎归天？",
     badEnding: {
       code: "01",
       name: "被写成结局",
@@ -590,7 +590,7 @@ const scenes = {
     kicker: "黄昏终局",
     title: "落入黄昏之海",
     art: "./assets/rain-tower.svg",
-    echo: "泯灭于高塔尽头的红月。",
+    echo: "你的真灵将会落入那昏黄的大海，泯灭于高塔尽头的红月。",
     badEnding: {
       code: "03",
       name: "落入黄昏之海",
@@ -931,7 +931,7 @@ const scenes = {
     kicker: "Normal Ending",
     title: "无中归来者",
     art: "./assets/crystal-flower.svg",
-    echo: "周防自此终于把握了自己所有过往的记忆。",
+    echo: "周防自此终于把握了自己所有过往的记忆，并且再度来到了对更高层次礁石的新征途，和几位前辈再也没有见过了。",
     memories: ["完整的过往", "新的征途"],
     ending: true,
     text: [
