@@ -70,7 +70,7 @@ const scenes = {
     kicker: "镜像阶段",
     title: "镜前的拼接物",
     art: "./assets/mirror.svg",
-    echo: "故事开始之前，自我已经被他者的承认与误认缝合过一次。",
+    echo: "站在镜子前的，到底是什么样的存在？",
     gallery: ["mirror"],
     memories: ["[是的]要素"],
     text: [
@@ -99,7 +99,7 @@ const scenes = {
     kicker: "镜像阶段",
     title: "被放逐的名",
     art: "./assets/mirror.svg",
-    echo: "被拒绝的东西不会死去，它们会换一种形式回来。",
+    echo: "但是啊，总是会回来的，那些我们不愿意去接受，没有办法去接受的[名]。",
     memories: ["无法接受的名", "缺失的法则", "永恒的变动者", "无意识主体"],
     text: [
       "再后来，人们终于在一次又一次的表演，一次又一次的遵循中明白，ta在渴求着什么，因为ta没有了这个东西。",
@@ -121,7 +121,7 @@ const scenes = {
     kicker: "故事揭幕之前",
     title: "名字擦过耳边",
     art: "./assets/storm-tower.svg",
-    echo: "被呼喊的名字未必是你的名字，名字本身也可能是一段争夺。",
+    echo: "有什么在呼喊着一个名字？那是我的名字吗？",
     gallery: ["storm"],
     memories: ["被呼喊的名字"],
     text: [
@@ -137,7 +137,7 @@ const scenes = {
     kicker: "无尽圆塔",
     title: "红月之下",
     art: "./assets/storm-tower.svg",
-    echo: "螺旋塔第一次出现，之后它会成为每次重新塑造自身的通道。",
+    echo: "下一个奇点再见吧，无名的旅伴。",
     memories: ["红月", "螺旋之塔"],
     text: [
       "这双手似乎还想留住什么。向上抓去，余留在手心的却只有仍然向下流去的雨滴。",
@@ -152,7 +152,7 @@ const scenes = {
     kicker: "神圣虚无",
     title: "花园中的周防",
     art: "./assets/coffin-garden.svg",
-    echo: "周防在这里只拥有必要信息，追溯过去这一行为本身会带来痛苦。",
+    echo: "自花园中醒来的，是一头雾水的男人。",
     gallery: ["coffin"],
     memories: ["周防", "无中归来者"],
     text: [
@@ -171,7 +171,7 @@ const scenes = {
     kicker: "神圣虚无",
     title: "追溯不能发生",
     art: "./assets/coffin-garden.svg",
-    echo: "痛苦不是信息，而是信息被挡住时留下的形状。",
+    echo: "到底是什么样的过去，才会使得连追溯这一行为本身都不能发生？",
     memories: ["偏头痛"],
     text: [
       "周防试图回忆一下，检查是否有哪个记忆的角落幸存下来。",
@@ -193,7 +193,7 @@ const scenes = {
     kicker: "神圣虚无",
     title: "世界边界",
     art: "./assets/coffin-garden.svg",
-    echo: "这里像游戏中的边界，但边界本身也是一条叙事事实。",
+    echo: "这个小花园像是有着游戏中的世界边界一样。",
     memories: ["花园边界"],
     text: [
       "这个小花园像是有着游戏中的世界边界一样。",
@@ -206,7 +206,7 @@ const scenes = {
     kicker: "神圣虚无",
     title: "棺材铭文",
     art: "./assets/coffin-garden.svg",
-    echo: "棺材只给出原文里的句子；它不是解释者，只是通道与记录物。",
+    echo: "回到你的梦里去，回到那永恒的拒绝中去。",
     inscriptions: ["自无中归来的人啊，醒来，醒来\n回到你的梦里去，回到那永恒的拒绝中去"],
     text: [
       "周防打开棺木，看向底部。果然，如同棺材表面一样，上面也铭刻着些许字符。",
@@ -223,7 +223,7 @@ const scenes = {
     kicker: "神圣虚无",
     title: "梦中沉眠",
     art: "./assets/coffin-garden.svg",
-    echo: "周防选择的不是死亡，而是用睡眠反向打开下一层。",
+    echo: "如果我在梦中清醒，那么我必然在现实中沉眠。",
     memories: ["梦中沉眠"],
     text: [
       "如果这是多重梦境，那么从中醒来就好解释了。我只需要找到一种脱出本层的方法即可，例如自杀。",
@@ -236,7 +236,7 @@ const scenes = {
     kicker: "神圣虚无",
     title: "表象碎裂",
     art: "./assets/coffin-garden.svg",
-    echo: "故事揭幕是外部入侵者对开始挖掘记忆的戏称。",
+    echo: "看来新的倒霉蛋出现了呢。",
     text: [
       "周防再一度迈入棺材，躺下，将自己刚刚推开的棺材板重新覆盖在头顶，然后再一度陷入沉眠。",
       "在一切尚未发生之时，万千的表象被撕扯开联系，撕扯开因果，化为无数片。",
@@ -250,7 +250,7 @@ const scenes = {
     kicker: "第一幕",
     title: "故事开场",
     art: "./assets/storm-tower.svg",
-    echo: "七日梦境从空屋开始。最熟悉之处，先以空白的形式出现。",
+    echo: "故事应当在最熟悉的地方开场，不是吗？",
     text: [
       "故事应当在最熟悉的地方开场，不是吗？不，或许还是在最为日常的一处展开为好吧。或许，应该在最激烈的高潮开始？",
       "呓语般争论不休，不知从哪里开始，又不知什么时候结束。",
@@ -262,7 +262,7 @@ const scenes = {
     kicker: "第一幕",
     title: "空屋",
     art: "./assets/empty-house.svg",
-    echo: "家作为结构存在，生活作为痕迹被抹去。",
+    echo: "只是空荡荡的。",
     memories: ["十八岁的身体"],
     text: [
       "在这个清晨，头发凌乱的少年猛然从床上弹起。",
@@ -279,7 +279,7 @@ const scenes = {
     kicker: "第一幕",
     title: "年轻的身体",
     art: "./assets/empty-house.svg",
-    echo: "身体活力像记忆一样涌现，却没有显意识能说明来源。",
+    echo: "这具年轻的肉体带来的一切。",
     memories: ["身体的前意识"],
     text: [
       "周防感受着这具年轻肉体带来的一切。他好像很久没有过身体这么有活力的时候了。",
@@ -292,7 +292,7 @@ const scenes = {
     kicker: "第一幕",
     title: "没有早餐",
     art: "./assets/empty-house.svg",
-    echo: "空并非没有结构，而是结构中不该缺席的东西被抽走。",
+    echo: "只是空荡荡的，没有人坐在餐桌上。",
     memories: ["空荡的家"],
     text: [
       "客厅里面只是空荡荡的。",
@@ -309,7 +309,7 @@ const scenes = {
     kicker: "第一幕",
     title: "不赖",
     art: "./assets/mirror.svg",
-    echo: "镜子让周防误以为这里更接近现实，但这仍然只是他的推论。",
+    echo: "不赖。",
     memories: ["镜中的周防"],
     text: [
       "周防缓缓推开卫生间的门。不出意外，他在镜子里面看到了自己新躯体的容颜。",
@@ -326,7 +326,7 @@ const scenes = {
     kicker: "第一幕",
     title: "照片残片",
     art: "./assets/photo-fragment.svg",
-    echo: "照片不是物证式线索，而是周防重新认可某段记忆归属后的象征。",
+    echo: "或许是我的父母？",
     gallery: ["photo"],
     memories: ["照片残片", "全家福的残角"],
     text: [
@@ -344,7 +344,7 @@ const scenes = {
     kicker: "第一幕",
     title: "被压缩的容器",
     art: "./assets/empty-house.svg",
-    echo: "水箱中的血水与残肢对应第四日血流成河的场面，此刻只以痛苦封锁出现。",
+    echo: "右侧头部剧烈的痛苦吞噬了一切。",
     memories: ["不可打开的水箱"],
     text: [
       "当周防刚刚试图打开这坐便器的盖子时，右侧头部剧烈的痛苦吞噬了一切。",
@@ -359,8 +359,14 @@ const scenes = {
     kicker: "第一幕支流",
     title: "没有留下照片的手",
     art: "./assets/empty-house.svg",
-    echo: "有些门不是不能打开，而是不能在没有留下某种东西之前打开。",
+    echo: "这一次，连照片也没有跟着他回来。",
     memories: ["过早打开的水箱"],
+    badEnding: {
+      code: "00",
+      name: "没有留下照片的手",
+      summary: "周防过早打开水箱，没有让照片残片成为回归的锚点。",
+    },
+    ending: true,
     text: [
       "周防没有先去调查洗衣机，也没有让那片残破的照片落入手中。",
       "当他打开水箱时，痛苦没有把他送回任何可以辨认的地方。",
@@ -374,7 +380,7 @@ const scenes = {
     kicker: "棺材外",
     title: "带回来的东西",
     art: "./assets/photo-fragment.svg",
-    echo: "梦境和异界的区别已经不重要，重要的是它能否组织起记忆。",
+    echo: "不然，这片照片是怎么来到此处的？",
     text: [
       "我真的脱离梦境了吗？不，那不是梦境，那是另一个世界。不然，这片照片是怎么来到此处的？",
       "不，也不一定。或许是什么东西根据梦中的情节为我重新构造出了这张照片的残片。",
@@ -388,7 +394,7 @@ const scenes = {
     kicker: "棺材外",
     title: "雨水的织机",
     art: "./assets/coffin-garden.svg",
-    echo: "这句新增铭文来自原文；之后不会额外扩写棺材文字。",
+    echo: "雨水的织机开始在时间上运转。",
     inscriptions: ["雨水的织机开始在时间上运转"],
     text: [
       "看来想要获得进一步的线索，得再一次入梦了。",
@@ -402,7 +408,7 @@ const scenes = {
     kicker: "无尽圆塔",
     title: "又一次旅途",
     art: "./assets/storm-tower.svg",
-    echo: "无名者与逆时而落的男人再度错过。",
+    echo: "你又一次踏上旅途了吗……愿你能找到你想要的答案。",
     text: [
       "噔。噔。噔。",
       "无限螺旋的高塔上，逆时而落的男人与那始终在攀登的无名者再一度错过。",
@@ -416,7 +422,7 @@ const scenes = {
     kicker: "第一幕",
     title: "咸香味",
     art: "./assets/family-breakfast.svg",
-    echo: "生活痕迹归位后，周防开始认可这段家庭关系。",
+    echo: "咸香味，是厨房里面飘出来的。",
     gallery: ["breakfast"],
     memories: ["父亲", "母亲", "小防"],
     text: [
@@ -433,7 +439,7 @@ const scenes = {
     kicker: "第一幕",
     title: "小防",
     art: "./assets/family-breakfast.svg",
-    echo: "称呼不是设定说明，而是家庭承认主角的方式。",
+    echo: "吃饭了，小防，还有老公……",
     memories: ["三碗白粥", "雪菜炒毛豆"],
     text: [
       "厨房门被打开，端着雪菜炒毛豆的女人走入客厅。",
@@ -441,6 +447,7 @@ const scenes = {
       "周防赶忙应付过去：没事，妈，我就是发现你好像又长了一根白头发。",
       "母亲果然很快被转移了注意力。随着电视机被关掉，白头发的寻找又以眼花为由不了了之，一家人坐在餐桌上准备享用早饭。",
       "桌上摆着三大碗白粥和榨菜，咸鸭蛋和包子也摆在一旁。好久没吃饭的周防决定大快朵颐。",
+      "果然还是吃饭最令人享受啊，这可不比在那个硬的要死的地方睡觉爽多了。",
       { className: "quote", text: "慢慢喝，没人抢你的吃。" },
     ],
     choices: [{ label: "让这三日平淡过去", to: "three_days", primary: true }],
@@ -449,7 +456,7 @@ const scenes = {
     kicker: "第一幕",
     title: "安宁的轮廓",
     art: "./assets/family-breakfast.svg",
-    echo: "选择不打开水箱，是周防主动参与的拒绝与保护。",
+    echo: "或许我应该再等等几天再去看看，说不定有新的变化。",
     memories: ["妹妹在外婆家", "大学录取通知书"],
     text: [
       "家中又很快恢复寂静。父母不急不忙地去上班了。",
@@ -458,6 +465,7 @@ const scenes = {
       "或许我应该再等等几天再去看看，说不定有新的变化。",
       "或许是贪恋于饮食，或许是贪恋于日常的生活，又或许是因为之前那次剧痛的顾虑，周防停止了下一步的计划。",
       "于是平平淡淡的三日过去。周防知道了自己已经接到大学录取通知书，也知道自己似乎还有一个妹妹，现在应该在外婆家暂住着玩。",
+      { className: "quote", text: "草，我怎么没想到这一点。" },
     ],
     choices: [{ label: "进入第四日", to: "interlude_actors", primary: true }],
   },
@@ -465,7 +473,7 @@ const scenes = {
     kicker: "幕间",
     title: "演员入场",
     art: "./assets/storm-tower.svg",
-    echo: "恶意观众把周防的痛苦当作演出，并向同类转播。",
+    echo: "新的一幕落下，演员也该正式入场了。",
     memories: ["恶意观众"],
     text: [
       { className: "quote", text: "要开始了吗？新的一幕落下，演员也该正式入场了。" },
@@ -480,7 +488,7 @@ const scenes = {
     kicker: "第二幕",
     title: "身体被牵引",
     art: "./assets/blood-courtyard.svg",
-    echo: "反方不是制造虚假元素，而是争夺它们如何组合成故事。",
+    echo: "被束缚了。",
     gallery: ["blood"],
     memories: ["身体控制权被夺走"],
     text: [
@@ -496,7 +504,7 @@ const scenes = {
     kicker: "第二幕",
     title: "妹妹",
     art: "./assets/blood-courtyard.svg",
-    echo: "妹妹从缺席位置回归，但以无法接受的形式回归。",
+    echo: "妹妹？你是……我的妹妹吗？",
     memories: ["妹妹"],
     text: [
       "血液被残余的迸发鼓出撕裂的血管，洒在已经变得褐色的地板上。",
@@ -513,7 +521,7 @@ const scenes = {
     kicker: "第二幕",
     title: "相拥的焦炭",
     art: "./assets/blood-courtyard.svg",
-    echo: "血色庭院是舞台化的记忆组合，并非案发现场原貌。",
+    echo: "最后留在他面前的，是两具紧紧相拥。",
     memories: ["被焚毁的家"],
     text: [
       "只预留直感的周防缓缓站起，而后走出那个血色的庭院。",
@@ -546,7 +554,7 @@ const scenes = {
     kicker: "黄昏支流",
     title: "被写成结局",
     art: "./assets/blood-courtyard.svg",
-    echo: "这不是正史，只是外部入侵者期待周防承认的支流。",
+    echo: "是接受这一切然后就此堕入魔渊？",
     badEnding: {
       code: "01",
       name: "被写成结局",
@@ -564,7 +572,7 @@ const scenes = {
     kicker: "黄昏支流",
     title: "只剩逃避",
     art: "./assets/blood-courtyard.svg",
-    echo: "逃避可以暂时止痛，却会把主导权留给他者。",
+    echo: "只是这样恍恍惚惚茫茫然然，疯疯癫癫的度过余生？",
     badEnding: {
       code: "02",
       name: "只剩逃避",
@@ -582,7 +590,7 @@ const scenes = {
     kicker: "黄昏终局",
     title: "落入黄昏之海",
     art: "./assets/rain-tower.svg",
-    echo: "追溯本身变成了无穷循环，真灵先于答案抵达高塔尽头。",
+    echo: "泯灭于高塔尽头的红月。",
     badEnding: {
       code: "03",
       name: "落入黄昏之海",
