@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#111313" />
+    <title>无中归来者 · 新版本</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <p class="eyebrow">无中归来者 / 新版本</p>
+          <h1 id="gameTitle">无中归来者</h1>
+          <p class="brand-note">从空名返回，沿着仍未说完的句子继续。</p>
+        </div>
+        <nav class="top-actions" aria-label="游戏操作">
+          <button id="audioButton" class="icon-button" type="button" title="声音开关" aria-label="声音开关">
+            <span aria-hidden="true">◌</span><span>声音</span>
+          </button>
+          <button id="readButton" class="icon-button" type="button" title="回读已经抵达的故事" aria-label="回读已经抵达的故事" disabled>
+            <span aria-hidden="true">↶</span><span>回读</span>
+          </button>
+          <button id="galleryButton" class="icon-button" type="button" title="打开记忆画廊" aria-label="打开记忆画廊">
+            <span aria-hidden="true">▧</span><span>画廊</span>
+          </button>
+          <button id="restartButton" class="icon-button" type="button" title="重启本版本" aria-label="重启本版本">
+            <span aria-hidden="true">↻</span><span>重启</span>
+          </button>
+        </nav>
+      </header>
+
+      <main class="game-layout">
+        <section id="stage" class="stage" aria-live="polite">
+          <div class="art-frame">
+            <img id="sceneArt" src="./assets/mirror.svg" alt="" />
+            <div class="art-surface" aria-hidden="true"></div>
+            <div class="scene-index" id="sceneIndex">01</div>
+            <div class="scene-meta">
+              <p id="sceneKicker">镜像阶段</p>
+              <h2 id="sceneTitle">镜前的拼接物</h2>
+            </div>
+          </div>
+
+          <article id="storyText" class="story-text" tabindex="0"></article>
+
+          <div class="advance-row">
+            <button id="continueButton" class="continue-button" type="button">继续</button>
+          </div>
+
+          <div id="choices" class="choices"></div>
+
+          <section id="contestPanel" class="contest-panel" hidden>
+            <div class="contest-heading">
+              <p class="section-kicker">句子仍在争夺它的结尾</p>
+              <h3>在它们互相覆盖以前，抓住其中一个</h3>
+              <p id="contestInstruction" class="contest-instruction">随着时间流逝，黄昏会逐渐升高。点击一个要素，让它退去，把留下的位置交给另一方。</p>
+            </div>
+            <div class="contest-clock" aria-live="polite">
+              <span>剩余</span><strong id="contestTimer">18</strong><span>秒</span>
+            </div>
+            <div class="contest-time-track" aria-hidden="true"><span id="contestTimeProgress"></span></div>
+            <div class="contest-state" aria-live="polite">
+              <p id="contestPhase" class="contest-phase">尚未覆盖</p>
+              <p id="contestWhisper" class="contest-whisper">两种结尾都还在原来的位置。</p>
+              <div class="contest-balance" aria-hidden="true">
+                <span id="contestABalance"></span>
+                <span id="contestBBalance"></span>
+                <i id="contestBalanceMarker"></i>
+              </div>
+              <div class="contest-state-meta">
+                <span>已经触碰 <strong id="contestHits">0</strong> 次</span>
+                <span>手心重量 <strong id="contestPower">1</strong></span>
+                <span>雨水重量 <strong id="contestRainPower">1</strong></span>
+                <span>节拍 <strong id="contestRhythm">0</strong></span>
+              </div>
+              <div class="contest-rhythm" aria-hidden="true"><span id="contestRhythmProgress"></span></div>
+              <p id="contestBeat" class="contest-beat">第一句话正替黄昏落下一枚刻度。</p>
+            </div>
+            <div class="contest-target" aria-live="polite">
+              <span class="target-mark" aria-hidden="true"></span>
+              <span id="contestTargetLabel">正在上升：黄昏</span>
+              <small id="contestTargetHint">顺着它下落以前触碰</small>
+            </div>
+            <div id="contestMemoryRoute" class="contest-memory-route" hidden>
+              <p id="contestMemoryHint">四滴雨水都停在了手心。</p>
+              <button id="contestMemoryButton" class="memory-route-button" type="button">抓住仍在下落的雨</button>
+            </div>
+            <div class="contest-duel">
+              <article id="contestA" class="duel-side duel-side-a">
+                <div class="duel-head"><strong id="contestATitle">承认乌有的罪孽</strong><span id="contestAScore">0</span></div>
+                <p id="contestAStatus" class="duel-status">仍在等候一句承认。</p>
+                <div class="strength-track"><span id="contestAStrength"></span></div>
+                <button id="contestAButton" class="duel-button" type="button">让承认退去</button>
+              </article>
+              <div class="duel-axis" aria-hidden="true"><span>对抗</span></div>
+              <article id="contestB" class="duel-side duel-side-b">
+                <div class="duel-head"><strong id="contestBTitle">陷入黄昏</strong><span id="contestBScore">0</span></div>
+                <p id="contestBStatus" class="duel-status">时间正在替它添上一笔。</p>
+                <div class="strength-track"><span id="contestBStrength"></span></div>
+                <button id="contestBButton" class="duel-button" type="button">让黄昏退去</button>
+              </article>
+            </div>
+            <div id="contestImpactLayer" class="contest-impact-layer" aria-hidden="true"></div>
+            <p id="contestResult" class="contest-result" aria-live="polite"></p>
+          </section>
+
+          <section id="rewindPanel" class="rewind-panel" hidden>
+            <div class="rewind-copy">
+              <p class="section-kicker">结局之前</p>
+              <h3 id="rewindTitle">雨水从上方落下</h3>
+              <p id="rewindInstruction">普通的雨水会留下分数。四滴金色的雨水藏着关键记忆。</p>
+            </div>
+            <div id="rainField" class="rain-field" aria-label="从雨中拾回的记忆"></div>
+            <div id="rainImpactLayer" class="rain-impact-layer" aria-hidden="true"></div>
+            <div class="rain-catch-zone" aria-hidden="true"><span>手心</span></div>
+            <div class="rain-hud" aria-live="polite">
+              <span>雨水分数 <strong id="rainScore">0</strong></span>
+              <span>本轮留下 <strong id="rainRunScore">0</strong></span>
+              <span>关键记忆 <strong id="keyRainCount">0 / 4</strong></span>
+              <span>接住 <strong id="rainCaught">0</strong></span>
+              <span>漏过 <strong id="rainMissed">0</strong></span>
+              <span>连住 <strong id="rainComboHud">0</strong></span>
+              <span>剩余 <strong id="rainTimer">18</strong> 秒</span>
+            </div>
+            <div class="rain-feedback" aria-live="polite">
+              <span id="rainCombo">连住 0</span>
+              <p id="rainFeedback">雨还没有落到手心。</p>
+            </div>
+            <div class="rain-time-track" aria-hidden="true"><span id="rainTimeProgress"></span></div>
+            <button id="rewriteButton" class="continue-button" type="button" hidden>让故事继续</button>
+          </section>
+        </section>
+
+        <aside class="memory-panel" aria-label="记忆与残响">
+          <section>
+            <h2>当前主体</h2>
+            <p id="protagonistName" class="protagonist-name">周防</p>
+            <p id="stateWhisper" class="state-whisper">镜子还没有说完。</p>
+          </section>
+          <section>
+            <h2>记忆锚点</h2>
+            <ul id="memoryList" class="memory-list"></ul>
+          </section>
+          <section class="memory-route-section">
+            <h2>四滴记忆</h2>
+            <ol id="memoryRouteList" class="memory-route-list"></ol>
+            <p id="memoryRouteHint" class="memory-route-hint">还没有一滴停在手心。</p>
+          </section>
+          <section>
+            <h2>已经抵达</h2>
+            <p id="endingProgress" class="ending-progress">0 / 6 已抵达</p>
+            <ol id="endingList" class="ending-list"></ol>
+          </section>
+          <section>
+            <h2>当前残响</h2>
+            <p id="echoText" class="echo-text"></p>
+          </section>
+          <section id="companionSection" class="companion-section" hidden>
+            <h2>同行者</h2>
+            <p id="companionEcho" class="echo-text"></p>
+          </section>
+        </aside>
+      </main>
+    </div>
+
+    <div id="transitionOverlay" class="transition-overlay" aria-hidden="true">
+      <img class="transition-image" src="./assets/storm-tower.svg" alt="" aria-hidden="true" />
+      <div class="transition-tower"></div>
+      <div class="transition-moon"></div>
+      <div class="transition-rain"></div>
+      <p>雨水的织机开始在时间上运转</p>
+    </div>
+
+    <dialog id="galleryDialog" class="gallery-dialog">
+      <div class="dialog-head">
+        <h2>记忆画廊</h2>
+        <button id="closeGalleryButton" class="icon-button" type="button" title="关闭画廊" aria-label="关闭画廊">×</button>
+      </div>
+      <div id="galleryGrid" class="gallery-grid"></div>
+    </dialog>
+
+    <script src="./game.js"></script>
+  </body>
+</html>
