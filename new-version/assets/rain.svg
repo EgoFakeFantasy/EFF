@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-labelledby="title desc">
+  <title id="title">接住雨水的手</title>
+  <desc id="desc">从黑暗上方落下的雨滴在手心中留下微光。</desc>
+  <rect width="1200" height="700" fill="#111617"/>
+  <path d="M0 104h1200M0 190h1200M0 278h1200M0 372h1200M0 465h1200M0 560h1200" stroke="#83aca0" stroke-opacity=".13" stroke-width="2"/>
+  <path d="M302 700c19-104 90-206 180-229 50-13 65 20 101 52 41 36 76 38 132 23 60-16 136 29 183 154" fill="#202827" stroke="#d2be97" stroke-opacity=".52" stroke-width="5"/>
+  <path d="M489 494c-18-73-5-157 36-170 39-12 62 65 69 144M593 458c0-106 28-175 69-171 43 4 34 93 20 175M684 472c23-95 63-146 98-129 36 18-3 98-46 157" fill="none" stroke="#d2be97" stroke-opacity=".56" stroke-width="21" stroke-linecap="round"/>
+  <path d="M508 112l-29 91M639 28l-25 103M795 162l-23 93M976 74l-26 103M1084 295l-31 88" stroke="#b4d3c8" stroke-opacity=".72" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="479" cy="206" r="12" fill="#e2c985" opacity=".88"/>
+  <circle cx="614" cy="131" r="12" fill="#e2c985" opacity=".88"/>
+  <circle cx="772" cy="255" r="12" fill="#e2c985" opacity=".88"/>
+  <circle cx="950" cy="177" r="12" fill="#e2c985" opacity=".88"/>
+</svg>

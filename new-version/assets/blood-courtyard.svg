@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" role="img" aria-label="血色庭院">
+  <defs>
+    <linearGradient id="fire" x1="0" x2="1" y1="0" y2="1">
+      <stop stop-color="#120807"/>
+      <stop offset=".45" stop-color="#32100d"/>
+      <stop offset="1" stop-color="#090807"/>
+    </linearGradient>
+    <radialGradient id="red" cx=".5" cy=".48" r=".45">
+      <stop stop-color="#d35f5f" stop-opacity=".5"/>
+      <stop offset=".55" stop-color="#8f1f24" stop-opacity=".28"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="760" fill="url(#fire)"/>
+  <rect width="1200" height="760" fill="url(#red)"/>
+  <g fill="#d09338" opacity=".56">
+    <path d="M170 704c42-136 80-242 26-380 88 90 104 197 62 348z"/>
+    <path d="M990 704c-36-158-22-277 48-402-14 140 52 224 26 402z"/>
+    <path d="M842 704c22-93-22-156 24-255 50 108 76 163 40 255z"/>
+  </g>
+  <path d="M292 512c148 34 310 44 512 0" fill="none" stroke="#2b0808" stroke-width="64" stroke-linecap="round" opacity=".82"/>
+  <path d="M554 288c0 58-31 104-70 104s-70-46-70-104 31-104 70-104 70 46 70 104z" fill="#1a0c0b" opacity=".82"/>
+  <path d="M670 248c70 152 28 272-124 354" fill="none" stroke="#d35f5f" stroke-opacity=".72" stroke-width="20" stroke-linecap="round"/>
+  <path d="M688 210c34 74 30 134-12 180" fill="none" stroke="#f2eee7" stroke-opacity=".22" stroke-width="8" stroke-linecap="round"/>
+  <path d="M736 506l196-286" stroke="#d09338" stroke-width="12" stroke-linecap="round"/>
+  <path d="M706 478l254-320" stroke="#f2eee7" stroke-opacity=".28" stroke-width="4" stroke-linecap="round"/>
+  <g fill="#0c0a09" opacity=".9">
+    <ellipse cx="780" cy="558" rx="84" ry="34"/>
+    <ellipse cx="864" cy="560" rx="88" ry="36"/>
+  </g>
+</svg>

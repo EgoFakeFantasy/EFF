@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" role="img" aria-label="花园中央的棺材">
+  <defs>
+    <linearGradient id="gardenBg" x1="0" x2="1" y1="0" y2="1">
+      <stop stop-color="#1b2117"/>
+      <stop offset=".62" stop-color="#17120f"/>
+      <stop offset="1" stop-color="#2a1814"/>
+    </linearGradient>
+    <radialGradient id="edge" cx=".5" cy=".5" r=".62">
+      <stop stop-color="#667b4e" stop-opacity=".22"/>
+      <stop offset=".68" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".82"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="760" fill="url(#gardenBg)"/>
+  <rect width="1200" height="760" fill="url(#edge)"/>
+  <ellipse cx="600" cy="552" rx="410" ry="82" fill="#0c0a09" opacity=".5"/>
+  <path d="M438 234h324l82 358H356z" fill="#38261d" stroke="#d09338" stroke-opacity=".5" stroke-width="5"/>
+  <path d="M480 284h240l48 236H432z" fill="#211813" stroke="#f2eee7" stroke-opacity=".12" stroke-width="3"/>
+  <g stroke="#f2eee7" stroke-opacity=".16" stroke-width="2">
+    <path d="M480 342h240M464 412h272M446 486h308"/>
+  </g>
+  <g fill="#d9d0c2" opacity=".5" font-family="serif" font-size="25">
+    <text x="459" y="362">自无中归来的人啊</text>
+    <text x="496" y="430">醒来，醒来</text>
+  </g>
+  <g fill="#667b4e" opacity=".72">
+    <circle cx="236" cy="548" r="8"/>
+    <circle cx="968" cy="518" r="7"/>
+    <circle cx="304" cy="330" r="5"/>
+    <circle cx="862" cy="286" r="6"/>
+    <circle cx="164" cy="250" r="4"/>
+  </g>
+</svg>

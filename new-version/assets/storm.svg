@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-labelledby="title desc">
+  <title id="title">红月下的无尽回廊</title>
+  <desc id="desc">雷暴雨中的回廊向上延伸，红色月亮悬在尽头。</desc>
+  <rect width="1200" height="700" fill="#101516"/>
+  <circle cx="828" cy="156" r="94" fill="#a74345" opacity=".85"/>
+  <circle cx="800" cy="129" r="22" fill="#e1c89d" opacity=".2"/>
+  <path d="M0 700L396 246h410L1200 700z" fill="#17201f" stroke="#7da59b" stroke-opacity=".32" stroke-width="3"/>
+  <path d="M410 700L510 258h182L794 700" fill="#0b0f10" stroke="#d0b789" stroke-opacity=".36" stroke-width="3"/>
+  <path d="M478 622h244M491 548h218M505 472h190M520 393h162M535 326h136" stroke="#d0b789" stroke-opacity=".28" stroke-width="3"/>
+  <path d="M264 30L179 680M364 0L320 680M942 0l68 680M1056 30l106 650" stroke="#98b8ad" stroke-opacity=".26" stroke-width="4"/>
+  <path d="M768 0L685 700M850 0L902 700" stroke="#d8e5df" stroke-opacity=".18" stroke-width="2"/>
+  <path d="M98 94L144 185l-38-12 28 70M1056 204l-34 87 36-15-15 78" fill="none" stroke="#e0d2ae" stroke-opacity=".58" stroke-width="6"/>
+</svg>

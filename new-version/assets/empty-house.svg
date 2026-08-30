@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" role="img" aria-label="没有生活痕迹的家">
+  <defs>
+    <linearGradient id="room" x1="0" x2="1" y1="0" y2="1">
+      <stop stop-color="#211a16"/>
+      <stop offset=".48" stop-color="#14110f"/>
+      <stop offset="1" stop-color="#20221c"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="760" fill="url(#room)"/>
+  <path d="M176 192h850v370H176z" fill="#1b1714" stroke="#f2eee7" stroke-opacity=".13" stroke-width="4"/>
+  <path d="M176 562h850l104 160H72z" fill="#0e0c0b" opacity=".72"/>
+  <rect x="268" y="272" width="230" height="210" fill="#0f0d0b" stroke="#d09338" stroke-opacity=".28"/>
+  <rect x="704" y="238" width="222" height="312" fill="#100e0c" stroke="#7fb4aa" stroke-opacity=".25"/>
+  <path d="M304 456h158M742 518h148M255 574h686" stroke="#f2eee7" stroke-opacity=".15" stroke-width="5"/>
+  <g fill="#f2eee7" opacity=".18">
+    <rect x="542" y="392" width="108" height="72"/>
+    <rect x="538" y="482" width="116" height="14"/>
+  </g>
+  <path d="M594 168c36 110 38 247 3 407" fill="none" stroke="#f2eee7" stroke-opacity=".08" stroke-width="2"/>
+  <g fill="#d35f5f" opacity=".24">
+    <circle cx="930" cy="601" r="5"/>
+    <circle cx="948" cy="616" r="3"/>
+  </g>
+</svg>

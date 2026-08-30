@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-labelledby="title desc">
+  <title id="title">一面被雨水擦过的镜子</title>
+  <desc id="desc">暗色房间中，镜面反射出一个不完整的轮廓。</desc>
+  <rect width="1200" height="700" fill="#111313"/>
+  <rect x="164" y="68" width="872" height="560" rx="4" fill="#1e2424" stroke="#bda878" stroke-opacity=".55" stroke-width="4"/>
+  <rect x="191" y="95" width="818" height="506" fill="#0c1010" stroke="#6b7774" stroke-opacity=".62" stroke-width="2"/>
+  <path d="M260 561C301 427 409 365 514 365c126 0 222 79 273 196" fill="none" stroke="#a6c3b8" stroke-opacity=".3" stroke-width="14"/>
+  <circle cx="538" cy="266" r="84" fill="none" stroke="#d1c2a0" stroke-opacity=".42" stroke-width="14"/>
+  <path d="M480 362L410 502M596 362l84 142M421 508l-44 66M674 508l45 64" stroke="#d1c2a0" stroke-opacity=".34" stroke-width="16" stroke-linecap="round"/>
+  <path d="M253 131L961 550M954 144L242 532" stroke="#d7e5df" stroke-opacity=".12" stroke-width="3"/>
+  <circle cx="274" cy="192" r="4" fill="#d7e5df" opacity=".7"/>
+  <circle cx="932" cy="420" r="5" fill="#d7e5df" opacity=".55"/>
+  <path d="M95 632h1010" stroke="#bda878" stroke-opacity=".32" stroke-width="2"/>
+</svg>
