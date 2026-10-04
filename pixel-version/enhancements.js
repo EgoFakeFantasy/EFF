@@ -101,7 +101,7 @@ const Expedition = {
   },
 
   paused() {
-    return document.hidden || Boolean(this.dom?.journalDialog.open || this.dom?.settingsDialog.open || !ui.codex.hidden);
+    return document.hidden || Boolean(this.dom?.journalDialog.open || this.dom?.settingsDialog.open || document.getElementById("renameDialog")?.open || !ui.codex.hidden);
   },
 
   focusGameplay() {
@@ -126,7 +126,7 @@ const Expedition = {
       case "house_family": return !F.father ? target("father", "向沙发上的父亲打个招呼。") : !F.mother ? target("mother", "走向厨房，见过母亲。") : target("table", "早餐还冒着热气。");
       case "blood": return !F.sister ? target("sister", "先看清那只手，和心脏的主人。") : !F.parents ? target("parents", "穿过庭院尽头的门，走向褐色客房中的残骸。") : target(null, "那些声音在等待你的回答。");
       case "rain": return F.rainDone ? target("exit", "塔顶的裂缝已经开启。") : target("repress", "走向以压抑之名者，听完尚未说完的话。");
-      case "meta": return !F.stele1 ? target("stele1", "从左往右，阅读三座石碑。") : !F.stele2 ? target("stele2", "第一句话留下了位置。阅读第二座石碑。") : !F.stele3 ? target("stele3", "第二句话被覆盖。阅读第三座石碑。") : !F.metaDone ? target("senpai", "听见前传人物的回答。") : F.rainMemory && !F.golden ? target("gold", "水晶花已经醒来。金色的雨会再来，站到光圈里，留住一滴。") : target("flower", "水晶花还在活动。让故事抵达它的结尾。");
+      case "meta": return target(null, FinaleScenes[Finale.node()].echo || "让字句显现，读见这一段故事的改变。");
       default: return target(null, "靠近发光的事物，调查与倾听。");
     }
   },
@@ -157,6 +157,8 @@ const Expedition = {
     this.dom.touchInteract.disabled = unavailable || Boolean(dialogChoices);
     setText(this.dom.touchInteract, G.area === "storm" && !dialogActive ? "伸手" : dialogActive ? "继续" : "调查");
     this.dom.mapButton.disabled = G.area === "storm";
+    this.dom.mapButton.hidden = G.area === "meta";
+    if (G.area === "meta") this.dom.mapPanel.hidden = true;
     if (G.area === "storm") this.dom.mapPanel.hidden = true;
     for (const button of document.querySelectorAll('[data-direction="arrowup"], [data-direction="arrowdown"]')) button.disabled = G.area === "storm";
     setText(this.dom.mapStatus, `${META.shards.includes(MAPS[G.area].shard.name) ? "本区碎片已经拾取" : "本区仍有一枚碎片"} · 总计 ${META.shards.length} / 8`);

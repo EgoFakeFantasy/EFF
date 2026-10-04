@@ -32,6 +32,9 @@
           </div>
 
           <div id="dialog" class="dialog" hidden>
+            <p id="finalePhase" class="finale-phase" hidden></p>
+            <h2 id="finaleHeading" class="finale-heading" hidden></h2>
+            <div id="finaleLedger" class="finale-ledger" hidden></div>
             <p id="dialogSpeaker" class="dialog-speaker"></p>
             <p id="dialogText" class="dialog-text" aria-live="polite" aria-atomic="true"></p>
             <div class="dialog-footer"><span id="dialogProgress"></span><span id="dialogHint" class="dialog-hint">E / 空格 继续</span></div>
@@ -46,6 +49,8 @@
             <p id="endingSummary" class="ending-summary"></p>
             <div id="endingText" class="ending-text"></div>
             <div class="ending-actions">
+              <button id="endingGallery" type="button" hidden>打开记忆图鉴</button>
+              <button id="endingRename" type="button" hidden>修改周防的名字</button>
               <button id="endingRestart" type="button">从镜像阶段重新开始</button>
               <button id="endingStay" type="button" hidden>继续停留</button>
             </div>
@@ -108,9 +113,19 @@
       <p class="utility-note">打开回读、设置或图鉴时暂停探索。记忆与结局图鉴会跨周目保留。</p>
     </dialog>
 
+    <dialog id="renameDialog" class="utility-dialog" aria-labelledby="renameHeading">
+      <div class="utility-head"><h2 id="renameHeading">修改周防的名字</h2><button type="button" data-close="renameDialog">取消</button></div>
+      <form id="renameForm">
+        <label class="setting-row">新的名字<input id="protagonistName" name="protagonistName" maxlength="40" required autocomplete="off" /></label>
+        <button type="submit">保存名字</button>
+      </form>
+    </dialog>
+
     <script src="./enhancements.js"></script>
     <script src="./storm-flight.js"></script>
     <script src="./story-staging.js"></script>
+    <script src="./finale-script.js"></script>
+    <script src="./finale.js"></script>
     <script src="./game.js"></script>
   </body>
 </html>

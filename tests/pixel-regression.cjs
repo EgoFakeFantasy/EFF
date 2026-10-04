@@ -448,8 +448,18 @@ function enterMeta(game, retainRain) {
   interact(game, "repress");
   choose(game, retainRain ? "为什么在流失" : "不回来是什么意思");
   exitTo(game, "meta");
-  for (const id of ["stele1", "stele2", "stele3", "senpai"]) interact(game, id);
-  assert.equal(game.evaluate("!!F.metaDone"), true);
+  finishFinaleToCompensation(game);
+}
+
+function finishFinaleToCompensation(game) {
+  finishDialog(game);
+  for (const label of ["定义", "幻海消息", "故事表面", "下一种写法", "第三种写法", "朴素分层", "观察者", "前传人物的终止操作", "重写者回到终章开头", "阅读回写后的补偿结尾"]) choose(game, label);
+  assert.equal(game.evaluate("Finale.node()"), "meta_compensation");
+  assert.equal(game.evaluate("!!F.finaleRewritten"), true);
+}
+
+function finaleSave(flags = {}, counters = {}, memories = []) {
+  return { [SAVE]: JSON.stringify({ area: "meta", px: 35, py: 258, flags, counters, memories }) };
 }
 
 function assertEnding(game, id) {
@@ -615,10 +625,10 @@ test("touch movement remains held beyond 0.6 seconds and pointer cancellation st
   assert.equal(right.classList.contains("pressed"), false);
 });
 
-test("settings pause typewriter, golden rain, and even stale held movement until closed", () => {
-  const game = harness({ [SAVE]: JSON.stringify({ area: "meta", px: 35, py: 258, flags: { metaDone: true, rainMemory: true }, memories: [], counters: {} }) });
-  game.ids.get("startButton").click();
-  game.evaluate("updateGoldDrop(0.016); playLines(['the typewriter should retain its partial sentence while settings are open'], () => {})");
+test("settings pause typewriter and even stale held movement until closed", () => {
+  const game = harness();
+  game.ids.get("startButton").click(); finishDialog(game);
+  game.evaluate("G.px = 179; G.py = 162; playLines(['the typewriter should retain its partial sentence while settings are open'], () => {})");
   game.frame(16);
   assert.ok(game.evaluate("typeTimer") > 0);
   assert.equal(game.evaluate("typeDone"), false);
@@ -638,7 +648,7 @@ test("settings pause typewriter, golden rain, and even stale held movement until
   assert.equal(game.document.activeElement.id, "screen");
   game.frame(16);
   assert.ok(game.evaluate("G.px") > position[0]);
-  assert.ok(game.evaluate("goldDrop.wait") < drop.wait);
+  assert.equal(game.evaluate("goldDrop"), null);
   game.window.dispatchEvent(new MockEvent("keyup", { key: "d", target: game.document.body }));
 });
 
@@ -776,7 +786,7 @@ test("every exploration-map spawn, interactable, conditional NPC, shard, and exi
   for (const area of areas) {
     // The second act is an automatic flight scene. Its fragment and reach
     // action are verified through scene completion rather than walking tiles.
-    if (area === "storm") continue;
+    if (area === "storm" || area === "meta") continue;
     const { map, points, tile } = reachableField(game, area);
     game.evaluate(`G.area = ${JSON.stringify(area)}; F = Object.fromEntries([...Object.values(MAPS)].flatMap(m => (m.npcs || []).filter(n => n.cond).map(n => [n.cond, true])))`);
     for (const target of [...(map.interact || []), ...(map.npcs || [])]) standNear(game, target.id);
@@ -1121,8 +1131,8 @@ for (const [id, label] of [["bad_accept", "接受它们"], ["bad_escape", "只�
   });
 }
 
-test("normal ending is reached after refusing blame and reading all three steles", () => {
-  const game = harness(); enterMeta(game, false); interact(game, "flower");
+test("normal ending is reached through all original writing operations and compensation", () => {
+  const game = harness(); enterMeta(game, false); choose(game, "接受这份");
   assert.equal(game.evaluate("!!F.rainMemory"), false);
   assertEnding(game, "normal");
   game.ids.get("endingStay").click();
@@ -1133,36 +1143,21 @@ test("normal ending is reached after refusing blame and reading all three steles
   assert.equal(refreshed.evaluate("endingId"), null);
 });
 
-test("reduced motion clears ambient effects while a generated golden drop still leads to the true ending", () => {
+test("reduced motion preserves the original textual answer and full true ending without a golden catch", () => {
   const game = harness(); enterMeta(game, true);
-  assert.equal(game.evaluate("!!F.rainMemory"), true);
   game.evaluate("particles = [{ k: 'spark', x: 10, y: 10, life: 1, max: 1 }]; lightning = 0.22; houseFlicker = 0.1");
   const motion = game.ids.get("motionControl");
   motion.checked = true; motion.dispatchEvent(new MockEvent("change", { bubbles: true }));
-  assert.equal(game.evaluate("Expedition.prefs.motion"), true);
   assert.equal(game.evaluate("particles.length"), 0);
   assert.equal(game.evaluate("lightning + houseFlicker"), 0);
-  for (let i = 0; i < 250 && !game.evaluate("goldDrop"); i++) game.frame(16);
-  assert.ok(game.evaluate("goldDrop"), "golden drop did not spawn after the finale conversation");
-  const drop = game.value("goldDrop");
-  game.evaluate("playLines(['pause while listening'], () => {}); updateGoldDrop(3)");
-  assert.deepEqual(game.value("goldDrop"), drop, "golden drop moves while dialogue pauses exploration");
-  finishDialog(game);
-  if (game.ids.has("settingsDialog")) {
-    game.ids.get("settingsDialog").showModal();
-    game.evaluate("updateGoldDrop(3)");
-    assert.deepEqual(game.value("goldDrop"), drop, "golden drop moves behind an open settings modal");
-    game.ids.get("settingsDialog").close();
-  }
-  const { points } = reachableField(game, "meta");
-  const catchingPoint = points.find(([x, y]) => Math.abs(x + 6 - drop.x) < 8 && Math.abs(y + 8 - (drop.catchY ?? 200)) < 4);
-  assert.ok(catchingPoint, "golden drop lane has no reachable catching position");
-  game.evaluate(`G.px = ${catchingPoint[0]}; G.py = ${catchingPoint[1]}`);
-  for (let i = 0; i < 1000 && !game.evaluate("!!F.golden"); i++) game.frame(16);
-  assert.equal(game.evaluate("!!F.golden"), true, "reachable golden drop was not collected");
-  assert.equal(game.evaluate("particles.length"), 0, "reduced motion still spawns ambient particles");
-  assert.equal(game.evaluate("lightning + houseFlicker"), 0);
-  interact(game, "flower"); assertEnding(game, "true");
+  assert.equal(game.evaluate("!!F.golden"), false);
+  const answer = game.ids.get("dialogText").querySelector(".finale-answer");
+  assert.ok(answer, "the original answer is not an actionable paragraph");
+  answer.click(); game.tick(); finishDialog(game);
+  assertEnding(game, "true");
+  assert.equal(game.ids.get("endingText").textContent, game.value("FinaleScenes.ending.text.map(line => Finale.text(line))").join("\n\n"));
+  assert.equal(game.evaluate("!!F.golden"), false);
+  assert.equal(game.evaluate("goldDrop"), null);
 });
 
 test("background audio suspends and resumes only while the player's audio toggle is enabled", () => {
@@ -1189,6 +1184,170 @@ test("frames and audio toggle execute with shipped scripts", () => {
   game.frame(); game.frame();
   game.ids.get("audioButton").click(); game.tick();
   assert.equal(game.evaluate("AudioEngine.enabled"), false);
+});
+
+
+test("the nine finale nodes preserve every original paragraph, insertion, replacement, and operation", () => {
+  const original = fs.readFileSync(path.resolve(root, "..", "game.js"), "utf8");
+  const originalScenes = vm.runInNewContext(original.slice(original.indexOf("const scenes ="), original.indexOf("const defaultState")) + "\nscenes");
+  const game = harness();
+  for (const key of game.value("Finale.keys")) assert.deepEqual(game.value("FinaleScenes[" + JSON.stringify(key) + "]"), JSON.parse(JSON.stringify(originalScenes[key])), key + ": original finale content changed");
+  assert.equal(game.evaluate("FinaleScenes.meta_prequel.text.length"), 18);
+  assert.equal(game.evaluate("FinaleScenes.ending.text.length"), 11);
+  assert.equal(game.evaluate("!!SCRIPTS.stele1 || !!SCRIPTS.flowerTrue"), false, "compressed finale scripts remain playable");
+});
+
+test("the first two retroactive actions reveal their original anchors while preserving earlier wording", () => {
+  const game = harness(finaleSave()); game.ids.get("startButton").click();
+  assert.equal(game.evaluate("dialogLines.length"), 6);
+  assert.equal(game.ids.get("dialog").dataset.presentation, "finale");
+  assert.equal(game.document.body.classList.contains("finale-active"), true);
+  const start = game.value("[G.px, G.py]");
+  game.evaluate("keys.add('d'); movePlayer(1)");
+  assert.deepEqual(game.value("[G.px, G.py]"), start);
+  finishDialog(game); game.ids.get("dialogChoices").children[0].click(); game.tick();
+  assert.equal(game.evaluate("Finale.step()"), 1);
+  assert.ok(game.evaluate("dialogLines[0].t").includes("真的定义吗"));
+  assert.ok(game.ids.get("finaleLedger").textContent.includes("当且仅当"));
+  assert.equal(game.evaluate("Finale.compose('meta_1').length"), 10);
+  finishDialog(game); game.ids.get("dialogText").scrollTop = 100;
+  game.ids.get("dialogChoices").children[0].click(); game.tick();
+  assert.equal(game.ids.get("dialogText").scrollTop, 0);
+  assert.equal(game.evaluate("Finale.step()"), 2);
+  assert.ok(game.evaluate("dialogLines[0].t").includes("令人感到兴奋的知识"));
+  assert.equal(game.evaluate("Finale.compose('meta_1').length"), 12);
+  assert.ok(game.value("Finale.compose('meta_1').map(line => Finale.text(line))").some(text => text.includes("真的定义吗")));
+});
+
+test("story revisions show the full struck wording and its replacement on the text stage", () => {
+  const game = harness(finaleSave()); game.ids.get("startButton").click(); finishDialog(game);
+  for (const label of ["定义", "幻海消息", "故事表面", "下一种写法"]) choose(game, label);
+  assert.equal(game.evaluate("Finale.node()"), "meta_state_2");
+  assert.equal(game.ids.get("dialogText").querySelector("del").textContent, game.evaluate("FinaleScenes.meta_state_2.text[0].original"));
+  assert.equal(game.ids.get("dialogText").querySelector("ins").textContent, game.evaluate("FinaleScenes.meta_state_2.text[0].replacement"));
+  assert.equal(game.ids.get("dialog").dataset.voice, "rewrite");
+  choose(game, "第三种写法"); choose(game, "朴素分层");
+  assert.equal(game.evaluate("Finale.step()"), 3);
+  assert.ok(game.evaluate("dialogLines[0].t").includes("我并不建议在这样朴素的分层中"));
+  assert.equal(game.evaluate("Finale.compose('meta_state_3').length"), 12);
+});
+
+test("chapter rewriting restores the original first-page insertion and awards the crystal fragment", () => {
+  const game = harness(finaleSave({ rainMemory: true })); game.ids.get("startButton").click();
+  finishDialog(game);
+  for (const label of ["定义", "幻海消息", "故事表面", "下一种写法", "第三种写法", "朴素分层", "观察者", "前传人物的终止操作"]) choose(game, label);
+  assert.equal(game.evaluate("Finale.node()"), "meta_prequel");
+  assert.equal(game.evaluate("dialogLines.length"), 18);
+  const prequel = game.value("FinaleScenes.meta_prequel.text.map(line => Finale.text(line))");
+  assert.ok(prequel.every(text => game.value("Expedition.journal.map(entry => entry.text)").includes(text)), "prequel paragraphs disappeared from the actual route");
+  choose(game, "重写者回到终章开头");
+  assert.equal(game.evaluate("Finale.node()"), "meta_1");
+  assert.equal(game.evaluate("dialogLines[0].t"), game.evaluate("FinaleScenes.meta_1.revealAfterRewrite[0].text"));
+  assert.equal(game.evaluate("dialogLines.length"), 13);
+  assert.ok(game.value("META.shards").includes("水晶碎片"));
+  assert.equal(game.ids.get("dialogChoices").children[0].textContent, "阅读回写后的补偿结尾");
+});
+
+test("former stele and golden-drop saves restart the missing original chapter", () => {
+  const game = harness(finaleSave({ stele1: true, stele2: true, stele3: true, metaDone: true, golden: true, rainMemory: true }));
+  game.ids.get("startButton").click();
+  assert.equal(game.evaluate("Finale.node()"), "meta_1");
+  assert.equal(game.evaluate("Finale.step()"), 0);
+  assert.equal(game.evaluate("currentFullText()"), game.evaluate("FinaleScenes.meta_1.text[0].text"));
+  assert.equal(game.ids.get("endingOverlay").hidden, true);
+  assert.equal(game.evaluate("goldDrop"), null);
+  assert.equal(game.ids.get("mapButton").hidden, true);
+});
+
+test("the rain-memory answer is absent without its original prerequisite and cannot activate in another node", () => {
+  const game = harness(finaleSave()); game.ids.get("startButton").click();
+  game.evaluate("Finale.answer()");
+  assert.equal(game.evaluate("Finale.node()"), "meta_1");
+  finishFinaleToCompensation(game);
+  assert.equal(game.ids.get("dialogText").querySelector(".finale-answer"), null);
+  game.evaluate("Finale.answer()");
+  assert.equal(game.evaluate("Finale.node()"), "meta_compensation");
+  choose(game, "接受这份"); assertEnding(game, "normal");
+  assert.equal(game.ids.get("endingText").textContent, game.value("FinaleScenes.normal_ending.text.map(line => Finale.text(line))").join("\n\n"));
+});
+
+test("refresh commits an insertion before its next page and restarting cancels queued finale work", () => {
+  const game = harness(finaleSave()); game.ids.get("startButton").click(); finishDialog(game);
+  game.ids.get("dialogChoices").children[0].click();
+  const saved = JSON.parse(game.storage.get(SAVE));
+  assert.equal(saved.counters.finaleStep, 1);
+  assert.equal(saved.counters.finaleFrom, 6);
+  const resumed = harness(game.snapshot()); resumed.ids.get("startButton").click();
+  assert.ok(resumed.evaluate("currentFullText()").includes("真的定义吗"));
+  assert.equal(resumed.evaluate("Finale.step()"), 1);
+  game.ids.get("restartButton").click(); game.tick(2000);
+  assert.equal(game.evaluate("G.area"), "mirror");
+  assert.equal(game.evaluate("Finale.timer"), null);
+  assert.equal(game.document.body.classList.contains("finale-active"), false);
+  assert.equal(game.ids.get("finaleHeading").hidden, true);
+  assertOrdinaryDialog(game);
+});
+
+test("settings pause the secret answer and the true ending restores naming and gallery operations", () => {
+  const game = harness(finaleSave({ rainMemory: true })); game.ids.get("startButton").click(); finishFinaleToCompensation(game);
+  const answer = game.ids.get("dialogText").querySelector(".finale-answer");
+  game.ids.get("settingsButton").click(); answer.click(); game.ids.get("dialog").click();
+  assert.equal(game.evaluate("Finale.node()"), "meta_compensation");
+  game.document.querySelector("[data-close='settingsDialog']").click();
+  answer.click(); game.tick(); finishDialog(game); assertEnding(game, "true");
+  game.ids.get("endingRename").click();
+  assert.equal(game.ids.get("renameDialog").open, true);
+  game.ids.get("protagonistName").value = "新的旅伴";
+  game.ids.get("renameForm").dispatchEvent(new MockEvent("submit", { bubbles: true }));
+  assert.equal(game.ids.get("renameDialog").open, false);
+  assert.equal(JSON.parse(game.storage.get(SAVE)).protagonistName, "新的旅伴");
+  assert.equal(game.document.title, "无垠之萍 · 箱庭版");
+  game.ids.get("endingGallery").click();
+  assert.equal(game.ids.get("codex").hidden, false);
+  game.ids.get("endingStay").click(); finishDialog(game);
+  assert.equal(game.ids.get("endingOverlay").hidden, true);
+  assert.equal(game.evaluate("Finale.node()"), "ending");
+  assert.deepEqual(game.ids.get("dialogChoices").children.map(button => button.textContent), ["打开记忆画廊", "修改周防的名字", "从镜像阶段重新开始"]);
+  const restored = harness(game.snapshot()); restored.ids.get("startButton").click();
+  assert.equal(restored.evaluate("G.protagonistName"), "新的旅伴");
+  assert.equal(restored.ids.get("endingOverlay").hidden, true);
+});
+
+
+test("terminal naming pauses the stage, preserves its choice on cancel, and resets without reopening", () => {
+  const game = harness(finaleSave({ finaleStarted: true, finaleTrue: true, finaleRewritten: true }, { finaleNode: 8, finaleStep: 3 }));
+  game.ids.get("startButton").click(); finishDialog(game);
+  game.ids.get("dialogChoices").children[1].click();
+  assert.equal(game.ids.get("renameDialog").open, true);
+  assert.equal(game.evaluate("Expedition.paused()"), true);
+  assert.equal(game.evaluate("dialogActive"), false);
+  game.ids.get("protagonistName").value = "   ";
+  game.ids.get("renameForm").dispatchEvent(new MockEvent("submit"));
+  assert.equal(game.ids.get("renameDialog").open, true);
+  assert.equal(game.evaluate("G.protagonistName"), "周防");
+  game.document.querySelector("[data-close='renameDialog']").click();
+  finishDialog(game);
+  assert.equal(game.evaluate("Finale.node()"), "ending");
+  assert.equal(game.ids.get("endingOverlay").hidden, true);
+  game.ids.get("dialogChoices").children[1].click();
+  game.evaluate("resetRun()"); game.tick(2000);
+  assert.equal(game.ids.get("renameDialog").open, false);
+  assert.equal(game.evaluate("G.area"), "mirror");
+  assert.equal(game.evaluate("dialogActive"), false);
+});
+
+test("an interrupted true ending replays its unread chapter before recording completion", () => {
+  const game = harness(finaleSave({ finaleStarted: true, finaleRewritten: true, rainMemory: true }, { finaleNode: 8, finaleStep: 3 }));
+  game.ids.get("startButton").click();
+  assert.equal(game.evaluate("dialogLines.length"), 11);
+  nextLine(game); game.frame(4000);
+  assert.equal(game.evaluate("!!F.finaleTrue"), false);
+  assert.equal(game.value("META.endings").length, 0);
+  const restored = harness(game.snapshot()); restored.ids.get("startButton").click();
+  assert.equal(restored.evaluate("currentFullText()"), restored.evaluate("FinaleScenes.ending.text[0].text"));
+  finishDialog(restored);
+  assert.equal(restored.evaluate("!!F.finaleTrue"), true);
+  assertEnding(restored, "true");
 });
 
 let failed = 0;

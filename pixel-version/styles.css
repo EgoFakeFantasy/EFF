@@ -1,3 +1,38 @@
+/* Finale: the text itself becomes the stage, retaining the original flower art. */
+#protagonistName { min-width: 0; width: 60%; padding: 8px; background: var(--panel); color: var(--ink); border: 1px solid var(--edge); font: inherit; }
+.finale-active #screen { height: clamp(530px, 72vh, 820px); object-fit: contain; }
+.finale-active .dpad { display: none; }
+.dialog[data-presentation="finale"] {
+  inset: 0; max-height: none; display: flex; flex-direction: column;
+  padding: clamp(18px, 3cqw, 40px); border: 0; overflow: hidden;
+  background: linear-gradient(100deg, #070911f5, #0c1020df), url("../assets/crystal-flower.svg") center / cover;
+  box-shadow: inset 0 0 100px #0008; font-family: "Songti SC", "SimSun", serif;
+}
+.finale-phase { margin: 0 0 8px; color: #8fa8b4; font: 11px/1.6 sans-serif; letter-spacing: .2em; }
+.finale-heading { margin: 0 0 16px; font-size: clamp(22px, 3cqw, 32px); font-weight: 400; line-height: 1.5; }
+.finale-ledger { flex: 0 1 24%; min-height: 0; overflow-y: auto; padding-left: 12px; border-left: 1px solid #4d5361; color: #9299a7; font-size: 13px; line-height: 1.8; }
+.finale-ledger p { margin: 0 0 10px; white-space: pre-wrap; }
+.finale-ledger .recovered { color: #7ab7a9; }
+.dialog[data-presentation="finale"] .dialog-speaker { flex-shrink: 0; margin-top: 18px; margin-bottom: 8px; }
+.dialog[data-presentation="finale"] .dialog-text { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-wrap: anywhere; font-size: clamp(18px, 2.8cqw, 28px); line-height: 1.9; padding-right: 6px; }
+.dialog[data-presentation="finale"][data-voice="intruder"] .dialog-text { color: #e8bdba; font-weight: 600; }
+.dialog[data-presentation="finale"][data-voice="unconscious"] .dialog-text { color: #8ec6b5; }
+.dialog[data-presentation="finale"][data-voice="protagonist"] .dialog-text { color: #ecd6a9; }
+.dialog[data-presentation="finale"] .dialog-text .revealed { color: #8ec6b5; }
+.dialog[data-presentation="finale"] .dialog-text del, .dialog[data-presentation="finale"] .dialog-text ins { display: block; }
+.dialog[data-presentation="finale"] .dialog-text del { color: #a58486; text-decoration-color: #bc6269; margin-bottom: 18px; }
+.dialog[data-presentation="finale"] .dialog-text ins { color: #d0e3bb; }
+.dialog[data-presentation="finale"] .dialog-footer, .dialog[data-presentation="finale"] .dialog-choices { flex-shrink: 0; }
+.finale-answer { display: inline; padding: 0; border: 0; border-bottom: 1px dotted #e5c988; background: transparent; font: inherit; line-height: inherit; color: inherit; text-align: left; white-space: pre-wrap; }
+.finale-answer:hover, .finale-answer:focus-visible { color: #fff1c7; background: #c9a86a12; }
+@media (max-width: 520px) {
+  .finale-active #screen { height: 68svh; min-height: 500px; }
+  .dialog[data-presentation="finale"] { padding: 16px 14px; }
+  .finale-heading { margin-bottom: 10px; font-size: 21px; }
+  .finale-ledger { font-size: 11px; flex-basis: 20%; }
+  .dialog[data-presentation="finale"] .dialog-text { font-size: 17px; line-height: 1.85; }
+}
+
 :root {
   --ink: #e8e4da;
   --ink-dim: #9a958a;

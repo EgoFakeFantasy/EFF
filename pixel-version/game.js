@@ -863,55 +863,7 @@ const SCRIPTS = {
       notify("塔顶的裂缝开启了。");
     },
   },
-  stele1: {
-    lines: [say("故事状态 1", "“于是，侵略者被赶出", "quote")],
-    then() { F.stele1 = true; addMemory("故事状态 1"); },
-  },
-  stele2: {
-    lines: [{ rewrite: { original: "“于是，侵略者被赶出", replacement: "“然而，这是无能为力的谎言。如果只是外部之真的延续，就如同前者所说，只是无聊的秩序互相覆盖的过程罢了。" } }],
-    need: () => F.stele1,
-    locked: "石碑沉默着。从左往右读。",
-    then() { F.stele2 = true; addMemory("故事状态 2"); },
-  },
-  stele3: {
-    lines: [
-      { rewrite: { original: "“然而，这是无能为力的谎言。", replacement: "“然而，并非只是如此，一切才刚刚开始" } },
-      say("无意识", "我需要提醒你，黄昏的海洋任然在高塔的尽头，那月食之处凝视着你。"),
-      say("周防", "[如果真的想帮上忙的话，为什么不一起来阻止这个不断的改写着我们，改写着历史的杂碎呢]", "fracture"),
-      say("无意识", "...如你所愿，我的旅伴。如你所见的，黄昏被避免了。"),
-    ],
-    need: () => F.stele2,
-    locked: "石碑沉默着。从左往右读。",
-    then() { F.stele3 = true; addMemory("故事状态 3"); },
-  },
-  senpai: {
-    lines: [
-      say("前传人物", "哎呀，还是被发现了呢。不过，我本来是想等你自己找到真正的出路的。"),
-      say("前传人物", "总而言之，这就是通往真之生物的道途，你们明白了吗?"),
-      say("前传人物", "我们已经找到了，下一步的契机。去往故事的起点吧，新的不可预思者已然发生了。"),
-      say("周防", "妄念我持吗...", "quote"),
-      say("前传人物", "因而，在超越了这一切后，我们成为了真正的无垠之萍。"),
-    ],
-    need: () => F.stele3,
-    locked: "她做了个噤声的手势：先读完三座石碑。",
-    then() {
-      F.metaDone = true;
-      notify("水晶花开始活动了。有金色的雨在坠落。");
-    },
-  },
-  flowerNormal: {
-    lines: [
-      say("前传人物", "这就是这个无中归来的故事，谁也没能想到的谢幕。"),
-      say("前传人物", "因而，作为补偿，我们赐予这个故事一个完满的结尾。"),
-    ],
-    then() { showEnding("normal"); },
-  },
-  flowerTrue: {
-    lines: [
-      say("周防", "不，我想我已经把握了那个答案。真正的契机，是如同不可能性一般的跨越了礁石吧。", "quote"),
-    ],
-    then() { showEnding("true"); },
-  },
+  // The original chapter is implemented by Finale; these compressed scripts are retired.
 
   /* ---- 同行者的回声位：只回读原版对应场景中的句子，不增加人物对白或事实 ---- */
   echoStorm: {
@@ -973,14 +925,14 @@ const ENDINGS = {
     name: "无中归来者",
     summary: "记忆归位，征途再启。",
     stay: true,
-    text: "周防自此终于把握了自己所有过往的记忆。\n那场事故、那名幸存者、那些被外来者重新拼接的指认，都回到了它们各自的位置。\n这是一个足够完整的结局，也是一个足够像结局的结局。",
+    text: "", // Full original text is supplied by Finale.init().
   },
   true: {
     code: "TRUE ENDING / 无依赖者",
     name: "无垠之萍",
     summary: "手心里仍然留下了一滴。",
     stay: true,
-    text: "那流动而逝去的记忆，也是这一切的证明。我已经不再是那个历史中的存在了。但正因为如此，我是他们共同的超越。\n只有我能够决定，那是我吗?那不是我吗?\n不如，就叫做无垠之萍吧。从此刻开始，我们将再一度重新设定一切。",
+    text: "", // Full original text is supplied by Finale.init().
   },
 };
 
@@ -989,6 +941,7 @@ const ENDINGS = {
 let F = {}; // 周目旗标
 let G = {
   area: "mirror",
+  protagonistName: "周防",
   px: 0,
   py: 0,
   dir: 0, // 0下 1左 2右 3上
@@ -1033,7 +986,7 @@ function saveRun() {
   // 对白、选择执行与区域切换视为一个事务；只保存玩家可继续的检查点。
   if (dialogActive || dialogResolving || (transitionLock && !endingId)) return false;
   try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify({ area: G.area, px: G.px, py: G.py, flags: F, memories: G.memories, counters: G.counters, endingId }));
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ area: G.area, px: G.px, py: G.py, flags: F, memories: G.memories, counters: G.counters, protagonistName: G.protagonistName, endingId }));
     return true;
   } catch (e) { /* file:// 限制时忽略 */ }
   return false;
@@ -1091,6 +1044,7 @@ function loadAll() {
   G.area = "mirror";
   G.memories = [];
   G.counters = {};
+  G.protagonistName = "周防";
   endingId = null;
   let loadedPosition = false;
   try {
@@ -1107,6 +1061,7 @@ function loadAll() {
         F = savedFlags(s.flags);
         G.memories = savedNames(s.memories);
         G.counters = savedCounters(s.counters);
+        if (typeof s.protagonistName === "string" && s.protagonistName.trim()) G.protagonistName = s.protagonistName.trim().slice(0, 40);
         if (typeof s.endingId === "string" && Object.prototype.hasOwnProperty.call(ENDINGS, s.endingId)) endingId = s.endingId;
       }
     }
@@ -1206,7 +1161,7 @@ function renderLine() {
   setDialogPresentation(line);
   ui.dialogSpeaker.textContent = line.s || "";
   typeTimer = 0;
-  typeDone = ui.dialog.dataset.presentation === "takeover" || !line.t || Expedition.prefs.speed === 0;
+  typeDone = ["takeover", "finale"].includes(ui.dialog.dataset.presentation) || !line.t || Expedition.prefs.speed === 0;
   ui.dialogText.replaceChildren();
   if (line.rewrite) {
     const del = document.createElement("del");
@@ -1220,12 +1175,16 @@ function renderLine() {
   }
   updateDialogStatus();
   if (typeof Expedition !== "undefined") Expedition.onLine(line, dialogIndex, dialogLines.length);
+  Finale.onLine(line);
   if (G.area === "storm") StormFlight.onLine(line);
 }
 
 function setDialogPresentation(line) {
   const pressure = line?.stage?.takeover;
-  if (G.area === "blood" && [1, 2, 3].includes(pressure)) {
+  if (line?.stage?.finale) {
+    ui.dialog.dataset.presentation = "finale";
+    delete ui.dialog.dataset.pressure;
+  } else if (G.area === "blood" && [1, 2, 3].includes(pressure)) {
     ui.dialog.dataset.presentation = "takeover";
     ui.dialog.dataset.pressure = String(pressure);
   } else {
@@ -1233,7 +1192,10 @@ function setDialogPresentation(line) {
     delete ui.dialog.dataset.pressure;
   }
   delete ui.dialog.dataset.choosing;
+  delete ui.dialog.dataset.voice;
+  if (!line?.stage?.finale) Finale.dismiss();
   ui.dialog.scrollTop = 0;
+  ui.dialogText.scrollTop = 0;
 }
 
 function currentFullText() {
@@ -1281,6 +1243,16 @@ function advanceDialog() {
 
 function paintText(text, cls) {
   ui.dialogText.replaceChildren();
+  if (dialogLines[dialogIndex]?.secretAction === "trueEnding" && ui.dialog.dataset.presentation === "finale") {
+    const answer = document.createElement("button");
+    answer.type = "button";
+    answer.className = "finale-answer";
+    answer.textContent = text;
+    answer.title = "有些东西仍然留在手心";
+    answer.addEventListener("click", event => { event.stopPropagation(); Finale.answer(); });
+    ui.dialogText.append(answer);
+    return;
+  }
   const span = document.createElement("span");
   if (cls) span.className = cls;
   span.textContent = text;
@@ -1351,6 +1323,11 @@ function showEnding(id) {
   ui.endingStay.hidden = !e.stay;
   ui.ending.classList.toggle("true", id === "true");
   ui.ending.hidden = false;
+  Finale.open = false;
+  document.body.classList.remove("finale-active");
+  Finale.dom.endingRename.hidden = id !== "true";
+  Finale.dom.endingGallery.hidden = !e.stay;
+  document.title = id === "true" ? "无垠之萍 · 箱庭版" : "无中归来者 · 箱庭版";
   AudioEngine.play(SOUND_FOR_ENDING[e.stay ? (id === "true" ? "true" : "normal") : "bad"]);
   saveRun();
 }
@@ -1367,6 +1344,7 @@ function leaveEnding() {
   ui.ending.hidden = true;
   transitionLock = false;
   saveRun();
+  if (G.area === "meta") Finale.enter();
 }
 
 function resetRun() {
@@ -1391,6 +1369,8 @@ function resetRun() {
   stormSequenceStarted = false;
   StormFlight.reset();
   StoryStaging.reset();
+  Finale.reset();
+  G.protagonistName = "周防";
   painFlash = 0;
   lightning = 0;
   houseFlicker = 0;
@@ -1922,6 +1902,7 @@ function blockedAt(px, py) {
 }
 
 function movePlayer(dt) {
+  if (G.area === "meta") return;
   if (G.area === "storm") return; // 逆落的主体运动由镜头推进，不以地面行走表示。
   if (dialogActive || transitionLock || Expedition.paused() || !ui.ending.hidden || !ui.start.hidden) return;
   const held = (key) => keys.has(key) || touchKeys.has(key);
@@ -2039,18 +2020,10 @@ function handleInteraction(id) {
       else playScript("repress");
       break;
     case "stele1":
-      if (F.stele1) playLines(["石碑上的字已经读过了。"], () => {});
-      else playScript("stele1");
-      break;
     case "stele2":
-      if (F.stele2) playLines(["石碑上的字已经读过了。"], () => {});
-      else playScript("stele2");
-      break;
     case "stele3":
-      if (F.stele3) playLines(["石碑上的字已经读过了。"], () => {});
-      else playScript("stele3");
-      break;
-    case "senpai": playScript("senpai"); break;
+    case "senpai":
+    case "flower": Finale.enter(); break;
     case "echoStorm": playScript("echoStorm"); break;
     case "echoGarden": playScript("echoGarden"); break;
     case "echoBlood": playScript("echoBlood"); break;
@@ -2157,6 +2130,7 @@ function applyStoryStage(line) {
 
 function startAreaScene() {
   if (dialogActive || transitionLock || Expedition.paused() || !ui.start.hidden || !ui.ending.hidden) return;
+  if (G.area === "meta") { Finale.enter(); return; }
   if (G.area === "house_empty" && !F.emptyWoke) playScript("bed");
   else if (G.area === "house_family") {
     if (F.familyDone) gotoArea("blood", "第二幕 · 荒诞的转变");
@@ -2171,35 +2145,8 @@ function startAreaScene() {
 
 /* ============================== 金色雨滴（终章） ============================== */
 
-function updateGoldDrop(dt) {
-  if (G.area !== "meta" || !F.metaDone || F.golden || dialogActive || transitionLock || Expedition.paused() || !ui.start.hidden || !ui.ending.hidden) return;
-  goldTimer -= dt;
-  if (!goldDrop && goldTimer <= 0) {
-    // Three clear lanes keep the catch possible at ordinary walking speed.
-    const lanes = [6, 11, 17];
-    goldDrop = { x: lanes[Math.floor(Math.random() * lanes.length)] * TILE + 8, y: -8, vy: 46, wait: 1.2, catchY: 14 * TILE + 8 };
-    notify("有金色的雨在坠落——站到光圈里，留住一滴。");
-  }
-  if (goldDrop) {
-    if (goldDrop.wait > 0) { goldDrop.wait -= dt; return; }
-    goldDrop.y += goldDrop.vy * dt;
-    const ground = 15 * TILE;
-    const d = Math.hypot(G.px + 6 - goldDrop.x, G.py + 8 - goldDrop.y);
-    if (d < 12) {
-      F.golden = true;
-      addMemory("手心里仍然留下了一滴");
-      notify("接住了。手心里仍然留下了一滴。");
-      Expedition.chime(880, 0.3);
-      goldDrop = null;
-      goldTimer = 9;
-      saveRun();
-    } else if (goldDrop.y > ground) {
-      goldDrop = null;
-      goldTimer = 6;
-      notify("金雨落进了石缝。它还会再来。");
-    }
-  }
-}
+// Kept as a no-op for old saves; the true answer is a textual interaction.
+function updateGoldDrop(_dt) {}
 
 /* ============================== 高塔演出：塔层滚动与上升人影 ============================== */
 
@@ -2404,6 +2351,13 @@ function render(now) {
   }
 
   if (StoryStaging.renderSpecial(now, dt)) {
+    Expedition.render(dt, { x: 0, y: 0 }, now);
+    requestAnimationFrame(render);
+    return;
+  }
+
+  if (G.area === "meta") {
+    Finale.render(now, dt);
     Expedition.render(dt, { x: 0, y: 0 }, now);
     requestAnimationFrame(render);
     return;
@@ -2624,4 +2578,5 @@ StoryStaging.reset();
 buildTileCache();
 updateHud();
 Expedition.init();
+Finale.init();
 requestAnimationFrame(render);
