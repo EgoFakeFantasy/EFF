@@ -20,6 +20,8 @@ const ui = {
   dialog: document.getElementById("dialog"),
   dialogSpeaker: document.getElementById("dialogSpeaker"),
   dialogText: document.getElementById("dialogText"),
+  dialogHint: document.getElementById("dialogHint"),
+  dialogProgress: document.getElementById("dialogProgress"),
   dialogChoices: document.getElementById("dialogChoices"),
   fade: document.getElementById("fade"),
   fadeText: document.getElementById("fadeText"),
@@ -55,7 +57,7 @@ const AudioEngine = {
     if (!Ctor) return null;
     this.ctx = new Ctor();
     this.master = this.ctx.createGain();
-    this.master.gain.value = 0.55;
+    this.master.gain.value = Expedition.prefs.volume;
     this.master.connect(this.ctx.destination);
     return this.ctx;
   },
@@ -115,7 +117,7 @@ const AudioEngine = {
 
   play(kind) {
     if (!this.enabled || !this.ensure()) return;
-    if (this.ctx.state === "suspended") this.ctx.resume().catch(() => {});
+    if (!document.hidden && this.ctx.state === "suspended") this.ctx.resume().catch(() => {});
     if (this.current && this.current.kind === kind) return;
     this.stop();
     const output = this.ctx.createGain();
@@ -163,7 +165,7 @@ const AudioEngine = {
   toggle() {
     this.enabled = !this.enabled;
     ui.audioButton.textContent = this.enabled ? "音景：开" : "音景：关";
-    if (this.enabled) this.play(MAPS[G.area].sound);
+    if (this.enabled) this.play(endingId ? SOUND_FOR_ENDING[ENDINGS[endingId].stay ? (endingId === "true" ? "true" : "normal") : "bad"] : MAPS[G.area].sound);
     else this.stop();
   },
 };
@@ -880,58 +882,34 @@ const SCRIPTS = {
     then() { showEnding("true"); },
   },
 
-  /* ---- 同行者的回声位：条件满足后出现在各区域的半透明残影 ---- */
+  /* ---- 同行者的回声位：只回读原版对应场景中的句子，不增加人物对白或事实 ---- */
   echoStorm: {
     lines: [
-      "红月之下的影子停了一瞬，像是回头看了你一眼。",
+      "而在红月下方，有一个浑黑的身影，仿佛违反了物理法则一般，从高塔之中向月亮落去。",
       quote("下一个奇点再见吧，无名的旅伴。"),
-      "它没有等你的回答。它从来不等。只是这一次，你觉得自己听清了。",
     ],
     then() { addMemory("旅伴的回声"); },
   },
   echoGarden: {
     lines: [
-      "棺材的内侧，有一道很浅的指痕。不是你的。",
-      quote("醒来，醒来。回到你的梦里去。"),
-      "铭文之外，有人用更轻的力度补过一句：「别怕，里面比外面安静。」",
+      "周防打开棺木，看向底部。果然，如同棺材表面一样，上面也铭刻着些许字符。",
+      quote("自无中归来的人啊，醒来，醒来\n回到你的梦里去，回到那永恒的拒绝中去"),
     ],
     then() { addMemory("住客的回声"); },
   },
   echoBlood: {
     lines: [
-      "血色的残响里，有什么轻轻拽了一下你的袖口。",
-      quote("……哥。"),
-      "只有这一个字。但这个字穿过了所有被指认的罪，落在了你手心里。",
+      "视线颤抖着上移。那是一个年轻的面孔，一个熟悉但不曾在他前三日梦境中出现的角色。",
+      quote("妹妹？你是……我的妹妹吗？"),
     ],
     then() { addMemory("妹妹的回声"); },
   },
 };
 
-/* NG+ 回读改写：抵达过任一结局后，部分场景的文本出现局部改写。
- * 每个条目接收原 lines 数组，返回注入改写后的新数组。 */
-const NG_EXTRAS = {
-  m2: (ls) =>
-    ls
-      .map((l, i) =>
-        i === 0
-          ? { rewrite: { original: "是了，那是你哦。Ta这样说着。", replacement: "是了，那还是你哦。Ta这样说着，仿佛已经说过一遍。" } }
-          : l
-      )
-      .concat(["回读让某些句子松动了。镜面里，有什么先于你眨了眼。"]),
-  gardenWake: (ls) =>
-    ls.map((l, i) =>
-      i === 0
-        ? { rewrite: { original: "自花园中醒来的，是一头雾水的男人。", replacement: "自花园中醒来的，是还记得雨声的男人。" } }
-        : l
-    ),
-  coffinFirst: (ls) => ls.concat(["棺底字迹的末尾多了一行，是你上次没有见过的：「欢迎回来，无中归来者。」"]),
-};
-
-function ngLines(id, lines) {
-  if (!META.endings.length || !NG_EXTRAS[id]) return lines;
-  return NG_EXTRAS[id](lines);
+/* 重玩保留图鉴并回读相同原文；不以新周目改变角色已遗忘的事实。 */
+function ngLines(_id, lines) {
+  return lines;
 }
-
 /* ============================== 结局 ============================== */
 
 const ENDINGS = {
@@ -996,6 +974,9 @@ let dialogChoices = null;
 let typeTimer = 0;
 let typeDone = false;
 let afterDialog = null;
+let currentDialogScript = null;
+let dialogResolving = false;
+let endingId = null;
 let notifyMsg = null;
 let notifyT = 0;
 
@@ -1010,13 +991,23 @@ let houseFlicker = 0; // 空屋灯光闪烁剩余时长
 const DYNAMIC_TILES = new Set(["~", "O", "I", "*", "x", "W"]);
 
 const keys = new Set();
-const keySeen = new Map(); // 每个键最后一次 keydown（自动重复）的时间戳
+const keySeen = new Map();
+const touchKeys = new Set();
+function clearInput() {
+  keys.clear();
+  keySeen.clear();
+  touchKeys.clear();
+}
 let transitionLock = false;
 
 function saveRun() {
+  // 对白、选择执行与区域切换视为一个事务；只保存玩家可继续的检查点。
+  if (dialogActive || dialogResolving || (transitionLock && !endingId)) return false;
   try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify({ area: G.area, px: G.px, py: G.py, flags: F, memories: G.memories, counters: G.counters }));
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ area: G.area, px: G.px, py: G.py, flags: F, memories: G.memories, counters: G.counters, endingId }));
+    return true;
   } catch (e) { /* file:// 限制时忽略 */ }
+  return false;
 }
 
 function saveMeta() {
@@ -1025,28 +1016,87 @@ function saveMeta() {
   } catch (e) { /* 忽略 */ }
 }
 
+function isSaveRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function savedNames(value, allowed) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter(name => typeof name === "string" && name.length > 0 && (!allowed || allowed.has(name))))];
+}
+
+function savedFlags(value) {
+  const flags = {};
+  if (!isSaveRecord(value)) return flags;
+  for (const [key, enabled] of Object.entries(value)) {
+    if (["__proto__", "constructor", "prototype"].includes(key)) continue;
+    if (typeof enabled === "boolean") flags[key] = enabled;
+  }
+  return flags;
+}
+
+function savedCounters(value) {
+  const counters = {};
+  if (!isSaveRecord(value)) return counters;
+  for (const [key, count] of Object.entries(value)) {
+    if (["__proto__", "constructor", "prototype"].includes(key)) continue;
+    if (Number.isSafeInteger(count) && count >= 0) counters[key] = count;
+  }
+  if (counters.pain !== undefined) counters.pain = Math.min(3, counters.pain);
+  return counters;
+}
+
+function validSavedPosition(map, px, py) {
+  if (!Number.isFinite(px) || !Number.isFinite(py)) return false;
+  if (px < 0 || py < 0 || px + 12 > map.grid[0].length * TILE || py + 14 > map.grid.length * TILE) return false;
+  return [[1, 5], [11, 5], [1, 13], [11, 13]].every(([dx, dy]) => {
+    const row = map.grid[Math.floor((py + dy) / TILE)];
+    const tile = row && row[Math.floor((px + dx) / TILE)];
+    return tile !== undefined && !BLOCKED.has(tile);
+  });
+}
+
 function loadAll() {
+  // 沿用 v1 键；周目存档与跨周目图鉴独立读取，任何一份损坏不影响另一份。
+  F = {};
+  G.area = "mirror";
+  G.memories = [];
+  G.counters = {};
+  endingId = null;
+  let loadedPosition = false;
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (raw) {
       const s = JSON.parse(raw);
-      if (MAPS[s.area]) {
+      if (isSaveRecord(s) && typeof s.area === "string" && Object.prototype.hasOwnProperty.call(MAPS, s.area)) {
         G.area = s.area;
-        G.px = s.px;
-        G.py = s.py;
-        F = s.flags || {};
-        G.memories = Array.isArray(s.memories) ? s.memories : [];
-        G.counters = s.counters || {};
-        return;
+        if (validSavedPosition(MAPS[G.area], s.px, s.py)) {
+          G.px = s.px;
+          G.py = s.py;
+          loadedPosition = true;
+        }
+        F = savedFlags(s.flags);
+        G.memories = savedNames(s.memories);
+        G.counters = savedCounters(s.counters);
+        if (typeof s.endingId === "string" && Object.prototype.hasOwnProperty.call(ENDINGS, s.endingId)) endingId = s.endingId;
       }
     }
   } catch (e) { /* 忽略 */ }
-  const sp = MAPS[G.area].spawn;
-  G.px = sp.x * TILE + 3;
-  G.py = sp.y * TILE + 2;
+  if (!loadedPosition) {
+    const sp = MAPS[G.area].spawn;
+    G.px = sp.x * TILE + 3;
+    G.py = sp.y * TILE + 2;
+  }
+  META = { shards: [], endings: [] };
   try {
     const rawMeta = localStorage.getItem(META_KEY);
-    if (rawMeta) META = { shards: [], endings: [], ...JSON.parse(rawMeta) };
+    if (rawMeta) {
+      const m = JSON.parse(rawMeta);
+      if (isSaveRecord(m)) {
+        META.shards = savedNames(m.shards, new Set(Object.values(MAPS).filter(map => map.shard).map(map => map.shard.name)));
+        META.endings = savedNames(m.endings, new Set(Object.values(ENDINGS).map(ending => ending.name)));
+      }
+    }
   } catch (e) { /* 忽略 */ }
 }
 
@@ -1054,6 +1104,7 @@ function addMemory(name) {
   if (!G.memories.includes(name)) {
     G.memories.push(name);
     updateHud();
+    if (typeof Expedition !== "undefined") Expedition.onMemory(name);
     saveRun();
   }
 }
@@ -1061,6 +1112,7 @@ function addMemory(name) {
 function notify(text) {
   notifyMsg = text;
   notifyT = 3.2;
+  Expedition.status(text);
 }
 
 function recallAgain() {
@@ -1092,15 +1144,7 @@ function playScript(id) {
     playLines([script.locked || "现在还不需要这样做。"], () => {});
     return;
   }
-  playLines(ngLines(id, script.lines), () => {
-    if (script.choices) {
-      showChoices(script.choices);
-    } else {
-      closeDialog();
-      if (script.then) script.then();
-      saveRun();
-    }
-  }, script);
+  playLines(ngLines(id, script.lines), script.then ? () => script.then() : null, script);
 }
 
 function normalizeLine(line) {
@@ -1108,22 +1152,30 @@ function normalizeLine(line) {
   return line;
 }
 
-function playLines(lines, onDone) {
+function playLines(lines, onDone, script = null) {
   dialogActive = true;
   dialogLines = lines.map(normalizeLine);
   dialogIndex = 0;
   dialogChoices = null;
-  afterDialog = onDone;
+  afterDialog = typeof onDone === "function" ? onDone : null;
+  currentDialogScript = script;
+  keys.clear();
+  keySeen.clear();
   ui.dialog.hidden = false;
   ui.dialogChoices.replaceChildren();
+  if (!dialogLines.length) {
+    finishDialog(afterDialog);
+    return;
+  }
   renderLine();
 }
 
 function renderLine() {
   const line = dialogLines[dialogIndex];
+  if (!line) return;
   ui.dialogSpeaker.textContent = line.s || "";
   typeTimer = 0;
-  typeDone = false;
+  typeDone = !line.t;
   ui.dialogText.replaceChildren();
   if (line.rewrite) {
     const del = document.createElement("del");
@@ -1133,11 +1185,32 @@ function renderLine() {
     ui.dialogText.append(del, document.createTextNode(" "), ins);
     typeDone = true;
   }
+  updateDialogStatus();
+  if (typeof Expedition !== "undefined") Expedition.onLine(line, dialogIndex, dialogLines.length);
 }
 
 function currentFullText() {
   const line = dialogLines[dialogIndex];
-  return line.t || "";
+  return line ? line.t || "" : "";
+}
+
+function updateDialogStatus() {
+  if (ui.dialogProgress) ui.dialogProgress.textContent = dialogActive ? `${Math.min(dialogIndex + 1, dialogLines.length)} / ${dialogLines.length}` : "";
+  if (ui.dialogHint) {
+    ui.dialogHint.textContent = !dialogActive ? "" : dialogChoices ? "选择你的回应" : typeDone ? "点击 / E / 空格 / Enter 继续" : "点击 / E / 空格 / Enter 显示全文";
+  }
+}
+
+function finishDialog(done) {
+  closeDialog();
+  const wasResolving = dialogResolving;
+  dialogResolving = true;
+  try {
+    if (done) done();
+  } finally {
+    dialogResolving = wasResolving;
+    if (!dialogResolving) saveRun();
+  }
 }
 
 function advanceDialog() {
@@ -1145,17 +1218,17 @@ function advanceDialog() {
   if (dialogChoices) return; // 等待选择
   if (!typeDone) {
     typeDone = true;
-    paintText(currentFullText(), dialogLines[dialogIndex].c);
+    const line = dialogLines[dialogIndex];
+    paintText(currentFullText(), line && line.c);
+    updateDialogStatus();
+    return;
+  }
+  if (dialogIndex + 1 >= dialogLines.length) {
+    if (currentDialogScript && currentDialogScript.choices) showChoices(currentDialogScript.choices);
+    else finishDialog(afterDialog);
     return;
   }
   dialogIndex += 1;
-  if (dialogIndex >= dialogLines.length) {
-    const done = afterDialog;
-    afterDialog = null;
-    if (done) done();
-    else closeDialog();
-    return;
-  }
   renderLine();
 }
 
@@ -1169,35 +1242,42 @@ function paintText(text, cls) {
 
 function showChoices(choices) {
   dialogChoices = choices;
+  const script = currentDialogScript;
   ui.dialogChoices.replaceChildren();
   for (const ch of choices) {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.textContent = ch.label;
-    btn.addEventListener("click", () => {
-      const script = currentScriptRef;
-      dialogChoices = null;
-      ui.dialogChoices.replaceChildren();
-      closeDialog();
-      if (script && script.then) script.then();
-      ch.run();
-      saveRun();
+    btn.addEventListener("click", (event) => {
+      // 选择可能立刻打开下一段对白，不能把同一次点击冒泡成「继续」。
+      event.stopPropagation();
+      if (!dialogActive || dialogChoices !== choices) return;
+      finishDialog(() => {
+        if (script && script.then) script.then();
+        ch.run();
+      });
     });
     ui.dialogChoices.append(btn);
   }
+  updateDialogStatus();
+  const first = ui.dialogChoices.querySelector("button");
+  if (first) first.focus({ preventScroll: true });
 }
 
-let currentScriptRef = null;
-const origPlayScript = playScript;
-playScript = function (id) {
-  currentScriptRef = SCRIPTS[id] || null;
-  origPlayScript(id);
-};
-
 function closeDialog() {
+  const wasActive = dialogActive;
   dialogActive = false;
+  dialogLines = [];
+  dialogIndex = 0;
+  dialogChoices = null;
+  typeTimer = 0;
+  typeDone = true;
+  afterDialog = null;
+  currentDialogScript = null;
   ui.dialog.hidden = true;
   ui.dialogChoices.replaceChildren();
+  updateDialogStatus();
+  if (wasActive && typeof Expedition !== "undefined") Expedition.onDialogClose();
 }
 
 /* ============================== 结局展示 ============================== */
@@ -1206,7 +1286,10 @@ function showEnding(id) {
   const e = ENDINGS[id];
   if (!e) return;
   closeDialog();
+  endingId = id;
   transitionLock = true;
+  keys.clear();
+  keySeen.clear();
   if (!META.endings.includes(e.name)) {
     META.endings.push(e.name);
     saveMeta();
@@ -1219,9 +1302,27 @@ function showEnding(id) {
   ui.ending.classList.toggle("true", id === "true");
   ui.ending.hidden = false;
   AudioEngine.play(SOUND_FOR_ENDING[e.stay ? (id === "true" ? "true" : "normal") : "bad"]);
+  saveRun();
+}
+
+function restoreEnding() {
+  if (!endingId) return false;
+  showEnding(endingId);
+  return true;
+}
+
+function leaveEnding() {
+  if (!endingId || !ENDINGS[endingId].stay) return;
+  endingId = null;
+  ui.ending.hidden = true;
+  transitionLock = false;
+  saveRun();
 }
 
 function resetRun() {
+  closeDialog();
+  dialogResolving = false;
+  endingId = null;
   try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* 忽略 */ }
   F = {};
   G.memories = [];
@@ -1230,15 +1331,30 @@ function resetRun() {
   const sp = MAPS.mirror.spawn;
   G.px = sp.x * TILE + 3;
   G.py = sp.y * TILE + 2;
+  G.dir = 0;
+  G.walk = 0;
+  keys.clear();
+  keySeen.clear();
+  particles = [];
   goldDrop = null;
+  goldTimer = 0;
   stormScroll = 0;
   faller = null;
+  fallerTimer = 4;
   painFlash = 0;
+  lightning = 0;
+  houseFlicker = 0;
+  notifyMsg = null;
+  notifyT = 0;
+  ui.fade.classList.remove("on");
+  ui.codex.hidden = true;
   ui.ending.hidden = true;
   transitionLock = false;
+  if (typeof Expedition !== "undefined") Expedition.reset();
   buildTileCache();
   updateHud();
   AudioEngine.play(MAPS[G.area].sound);
+  saveRun();
 }
 
 /* ============================== 地图渲染 ============================== */
@@ -1452,6 +1568,7 @@ function buildTileCache() {
   tileCtx.clearRect(0, 0, tileCache.width, tileCache.height);
   map._moon = null;
   map._water = [];
+  map._dynamic = [];
   for (let y = 0; y < map.grid.length; y++) {
     const row = map.grid[y].padEnd(map.grid[0].length, "#");
     for (let x = 0; x < row.length; x++) {
@@ -1459,6 +1576,7 @@ function buildTileCache() {
       if (ch === "v") continue; // 镂空：透出背后的塔层视差
       if (ch === "O") map._moon = { x: x * TILE + 8, y: y * TILE + 8 };
       if (ch === "~") map._water.push([x, y]);
+      if (DYNAMIC_TILES.has(ch)) map._dynamic.push({ x, y, ch });
       drawTile(tileCtx, ch, x, y, map, 0);
     }
   }
@@ -1510,7 +1628,7 @@ function drawPerson(c, x, y, opt = {}) {
   }
   if (opt.glow) {
     c.fillStyle = opt.glow;
-    c.globalAlpha = 0.25 + Math.sin(performance.now() / 300) * 0.1;
+    c.globalAlpha = Expedition.prefs.motion ? 0.25 : 0.25 + Math.sin(performance.now() / 300) * 0.1;
     c.fillRect(px, py - 2, 12, 17);
     c.globalAlpha = 1;
   }
@@ -1617,17 +1735,19 @@ function drawParticles(c, cam) {
 
 window.addEventListener("keydown", (e) => {
   const k = e.key.toLowerCase();
-  if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(k)) e.preventDefault();
-  if (dialogActive) {
-    if (k === "e" || k === " " || k === "enter") advanceDialog();
+  if (Expedition.paused()) return;
+  // Native buttons and controls retain their keyboard behavior.
+  if (e.target?.closest?.("input, select, textarea, a")) return;
+  if ([" ", "enter"].includes(k) && e.target?.closest?.("button")) return;
+  const movement = ["arrowup", "arrowdown", "arrowleft", "arrowright", "w", "a", "s", "d", "shift"];
+  const interact = ["e", " ", "enter"].includes(k);
+  if (movement.includes(k) || interact) e.preventDefault();
+  if (interact) {
+    if (e.repeat) return;
+    if (dialogActive) advanceDialog(); else tryInteract();
     return;
   }
-  if (k === "e" || k === " " || k === "enter") {
-    tryInteract();
-    return;
-  }
-  keys.add(k);
-  keySeen.set(k, performance.now());
+  if (movement.includes(k) && !dialogActive) keys.add(k);
 });
 
 window.addEventListener("keyup", (e) => {
@@ -1637,16 +1757,24 @@ window.addEventListener("keyup", (e) => {
 });
 // 焦点丢失（切换标签页/点击页面外）时立即清空按键，避免「松手后仍在移动」
 window.addEventListener("blur", () => {
-  keys.clear();
-  keySeen.clear();
+  clearInput();
+  if (!ui.start.hidden) return;
+  saveRun();
 });
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
-    keys.clear();
-    keySeen.clear();
+    clearInput();
+    saveRun();
+    AudioEngine.ctx?.suspend().catch(() => {});
+  } else {
+    lastT = performance.now();
+    if (AudioEngine.enabled) AudioEngine.ctx?.resume().catch(() => {});
   }
 });
-ui.dialog.addEventListener("click", () => advanceDialog());
+window.addEventListener("pagehide", () => saveRun());
+ui.dialog.addEventListener("click", (event) => {
+  if (!event.target?.closest?.("button") && !Expedition.paused()) advanceDialog();
+});
 
 function tileAt(tx, ty) {
   const map = MAPS[G.area];
@@ -1661,25 +1789,17 @@ function blockedAt(px, py) {
 }
 
 function movePlayer(dt) {
-  if (dialogActive || transitionLock || !ui.ending.hidden || !ui.start.hidden) return;
-  // 兜底：若 keyup 因任何原因丢失（iframe/焦点切换），按住状态最多残留 0.6 秒。
-  // 正常按住时浏览器会以约 30ms 间隔重复触发 keydown 刷新时间戳，不受影响。
-  const nowMs = performance.now();
-  for (const k of [...keys]) {
-    if (nowMs - (keySeen.get(k) || 0) > 600) {
-      keys.delete(k);
-      keySeen.delete(k);
-    }
-  }
+  if (dialogActive || transitionLock || Expedition.paused() || !ui.ending.hidden || !ui.start.hidden) return;
+  const held = (key) => keys.has(key) || touchKeys.has(key);
   let dx = 0;
   let dy = 0;
-  if (keys.has("arrowup") || keys.has("w")) dy -= 1;
-  if (keys.has("arrowdown") || keys.has("s")) dy += 1;
-  if (keys.has("arrowleft") || keys.has("a")) dx -= 1;
-  if (keys.has("arrowright") || keys.has("d")) dx += 1;
+  if (held("arrowup") || held("w")) dy -= 1;
+  if (held("arrowdown") || held("s")) dy += 1;
+  if (held("arrowleft") || held("a")) dx -= 1;
+  if (held("arrowright") || held("d")) dx += 1;
   if (dx || dy) {
     const len = Math.hypot(dx, dy);
-    const speed = 52;
+    const speed = keys.has("shift") || touchKeys.size ? 78 : 52;
     const nx = G.px + (dx / len) * speed * dt;
     const ny = G.py + (dy / len) * speed * dt;
     // AABB 12x14 碰撞，分轴滑动
@@ -1702,12 +1822,12 @@ function nearestInteractable() {
   const cx = G.px + 6;
   const cy = G.py + 8;
   let best = null;
-  let bestD = 18;
+  let bestD = 26;
   const consider = (tx, ty, ref) => {
     const ix = tx * TILE + 8;
     const iy = ty * TILE + 8;
     const d = Math.hypot(cx - ix, cy - iy);
-    if (d < bestD + 8) {
+    if (d < bestD) {
       best = ref;
       bestD = d;
     }
@@ -1721,9 +1841,10 @@ function nearestInteractable() {
 }
 
 function tryInteract() {
-  if (transitionLock || !ui.ending.hidden || !ui.start.hidden) return;
+  if (dialogActive || transitionLock || Expedition.paused() || !ui.ending.hidden || !ui.start.hidden) return;
   const near = nearestInteractable();
   if (!near) return;
+  Expedition.chime(260);
   handleInteraction(near.it.id);
 }
 
@@ -1827,50 +1948,59 @@ function checkExitsAndShards() {
     META.shards.push(map.shard.name);
     saveMeta();
     notify(`拾取记忆碎片：${map.shard.name}（跨周目保留）`);
+    Expedition.chime(660, 0.2);
+    if (!ui.codex.hidden) renderCodex();
     updateHud();
   }
 }
 
 function gotoArea(area, fadeText) {
-  if (transitionLock) return;
+  if (transitionLock || !MAPS[area]) return;
+  Expedition.cancelTransition();
+  clearInput();
   transitionLock = true;
   closeDialog();
   ui.fadeText.textContent = fadeText || MAPS[area].name;
   ui.fade.classList.add("on");
-  setTimeout(() => {
+  Expedition.transitionTimers.push(setTimeout(() => {
     G.area = area;
     const sp = MAPS[area].spawn;
     G.px = sp.x * TILE + 3;
     G.py = sp.y * TILE + 2;
     particles = [];
     goldDrop = null;
+    goldTimer = 2;
     buildTileCache();
     updateHud();
-    saveRun();
     AudioEngine.play(MAPS[area].sound);
     let pendingScript = null;
     if (area === "garden" && !F.gardenWoke) {
       F.gardenWoke = true;
       pendingScript = "gardenWake";
     }
-    setTimeout(() => {
+    Expedition.transitionTimers.push(setTimeout(() => {
       ui.fade.classList.remove("on");
       transitionLock = false;
+      Expedition.onAreaChange();
       if (pendingScript) playScript(pendingScript);
-    }, 650);
-  }, 550);
+      saveRun();
+    }, 650));
+  }, 550));
 }
 
 /* ============================== 金色雨滴（终章） ============================== */
 
 function updateGoldDrop(dt) {
-  if (G.area !== "meta" || !F.metaDone || F.golden) return;
+  if (G.area !== "meta" || !F.metaDone || F.golden || dialogActive || transitionLock || Expedition.paused() || !ui.start.hidden || !ui.ending.hidden) return;
   goldTimer -= dt;
   if (!goldDrop && goldTimer <= 0) {
-    goldDrop = { x: 3 * TILE + Math.random() * 17 * TILE, y: -8, vy: 46 };
-    notify("有金色的雨在坠落——站到它下面去。");
+    // Three clear lanes keep the catch possible at ordinary walking speed.
+    const lanes = [6, 11, 17];
+    goldDrop = { x: lanes[Math.floor(Math.random() * lanes.length)] * TILE + 8, y: -8, vy: 46, wait: 1.2, catchY: 14 * TILE + 8 };
+    notify("有金色的雨在坠落——站到光圈里，留住一滴。");
   }
   if (goldDrop) {
+    if (goldDrop.wait > 0) { goldDrop.wait -= dt; return; }
     goldDrop.y += goldDrop.vy * dt;
     const ground = 15 * TILE;
     const d = Math.hypot(G.px + 6 - goldDrop.x, G.py + 8 - goldDrop.y);
@@ -1878,6 +2008,7 @@ function updateGoldDrop(dt) {
       F.golden = true;
       addMemory("手心里仍然留下了一滴");
       notify("接住了。手心里仍然留下了一滴。");
+      Expedition.chime(880, 0.3);
       goldDrop = null;
       goldTimer = 9;
       saveRun();
@@ -1897,7 +2028,7 @@ function updateStorm(dt) {
   const dir = F.storm2 ? 1 : -1;
   stormScroll += dt * 34 * dir;
   // 浑黑的身影，违反物理法则一般向红月落去
-  if (F.storm1) {
+  if (F.storm2) {
     fallerTimer -= dt;
     if (!faller && fallerTimer <= 0) {
       faller = { x: 6 * TILE + Math.random() * 12 * TILE, y: MAPS.storm.grid.length * TILE + 16 };
@@ -1989,6 +2120,15 @@ function renderAreaFx(map, cam, t) {
     ctx.fillStyle = `rgba(160,190,230,${a})`;
     ctx.fillRect(9 * TILE - cam.x, 1 * TILE - cam.y, 44, 28);
   } else if (id === "blood") {
+    // The hand and heart, then two charred remains: the objects described in the scene.
+    const sx = 13 * TILE + 8 - cam.x, sy = 7 * TILE + 8 - cam.y;
+    ctx.save(); ctx.translate(sx, sy); ctx.rotate(Math.PI / 2);
+    drawPerson(ctx, -6, -8, { coat: "#603345", hair: "#211318", skin: "#aa8278", dir: 0 });
+    ctx.restore();
+    ctx.fillStyle = "#a92d38"; ctx.fillRect(sx - 5, sy - 5, 4, 4); ctx.fillRect(sx - 6, sy - 4, 6, 2);
+    const px = 13 * TILE - cam.x, py = 15 * TILE - cam.y;
+    ctx.fillStyle = "#09080a"; ctx.fillRect(px - 3, py + 1, 8, 13); ctx.fillRect(px + 5, py + 2, 8, 12);
+    ctx.strokeStyle = "#bc6739"; ctx.beginPath(); ctx.moveTo(px - 1, py - 3); ctx.lineTo(px + 12, py + 12); ctx.stroke();
     // 看清她之后，视野边缘随心跳收缩
     if (F.sister) {
       const beat = Math.pow(Math.max(0, Math.sin(t * 3.6)), 10) + Math.pow(Math.max(0, Math.sin(t * 3.6 + 0.5)), 18) * 0.6;
@@ -2026,20 +2166,21 @@ function render(now) {
   const dt = Math.min(0.05, (now - lastT) / 1000);
   lastT = now;
 
-  movePlayer(dt);
-  spawnAmbient(dt);
-  updateParticles(dt);
-  updateGoldDrop(dt);
-  updateStorm(dt);
+  if (!Expedition.paused()) {
+    movePlayer(dt);
+    if (!Expedition.prefs.motion) { spawnAmbient(dt); updateParticles(dt); }
+    updateGoldDrop(dt);
+    if (!Expedition.prefs.motion) updateStorm(dt);
+  }
   if (painFlash > 0) painFlash -= dt * 0.7;
 
   // 打字机
-  if (dialogActive && !typeDone && dialogLines[dialogIndex] && dialogLines[dialogIndex].t) {
+  if (!Expedition.paused() && dialogActive && !typeDone && dialogLines[dialogIndex] && dialogLines[dialogIndex].t) {
     typeTimer += dt;
     const full = currentFullText();
-    const n = Math.min(full.length, Math.floor(typeTimer / 0.016));
-    paintText(full.slice(0, n), dialogLines[dialogIndex].c);
-    if (n >= full.length) typeDone = true;
+    const n = Expedition.prefs.speed === 0 ? full.length : Math.min(full.length, Math.floor(typeTimer / Expedition.prefs.speed));
+    if (ui.dialogText.textContent !== full.slice(0, n)) paintText(full.slice(0, n), dialogLines[dialogIndex].c);
+    if (n >= full.length) { typeDone = true; updateDialogStatus(); }
   }
   if (notifyT > 0) notifyT -= dt;
 
@@ -2080,7 +2221,7 @@ function render(now) {
   if (map._moon) {
     const mx = map._moon.x - cam.x;
     const my = map._moon.y - cam.y;
-    const pulse = 1 + Math.sin(now / 600) * 0.12;
+    const pulse = Expedition.prefs.motion ? 1 : 1 + Math.sin(now / 600) * 0.12;
     for (const [r, a] of [[34, 0.1], [22, 0.14], [13, 0.2]]) {
       ctx.fillStyle = `rgba(208,74,58,${a})`;
       ctx.beginPath();
@@ -2089,22 +2230,16 @@ function render(now) {
     }
   }
 
-  const t = now / 1000;
+  const t = Expedition.prefs.motion ? 0 : now / 1000;
   // 动态瓦片（水、红月、水晶花、花、残骸余火、洗衣机）
-  for (let y = 0; y < map.grid.length; y++) {
-    const row = map.grid[y].padEnd(map.grid[0].length, "#");
-    for (let x = 0; x < row.length; x++) {
-      const ch = row[x];
-      if (DYNAMIC_TILES.has(ch)) {
-        const sx = x * TILE - cam.x;
-        const sy = y * TILE - cam.y;
-        if (sx > -TILE && sx < VIEW_W && sy > -TILE && sy < VIEW_H) {
-          ctx.save();
-          ctx.translate(sx - x * TILE, sy - y * TILE);
-          drawTile(ctx, ch, x, y, map, t);
-          ctx.restore();
-        }
-      }
+  for (const { x, y, ch } of map._dynamic) {
+    const sx = x * TILE - cam.x;
+    const sy = y * TILE - cam.y;
+    if (sx > -TILE && sx < VIEW_W && sy > -TILE && sy < VIEW_H) {
+      ctx.save();
+      ctx.translate(sx - x * TILE, sy - y * TILE);
+      drawTile(ctx, ch, x, y, map, t);
+      ctx.restore();
     }
   }
 
@@ -2172,7 +2307,14 @@ function render(now) {
     ctx.fillRect(gx, gy - 1, 1, 2);
     // 地面落点提示
     ctx.fillStyle = "rgba(240,208,96,0.4)";
-    ctx.fillRect(gx - 5, 15 * TILE - cam.y, 10, 2);
+    const catchY = goldDrop.catchY - cam.y;
+    ctx.strokeStyle = "#f0d060";
+    ctx.beginPath(); ctx.ellipse(gx, catchY, 11, 4, 0, 0, Math.PI * 2); ctx.stroke();
+    // A visible overhead glint announces rain even outside the camera.
+    ctx.fillStyle = "#f0d060";
+    if (gy < 22) ctx.fillRect(gx - 2, 24, 4, 6);
+    ctx.strokeStyle = "rgba(240,208,96,0.2)";
+    ctx.beginPath(); ctx.moveTo(gx, Math.max(24, gy)); ctx.lineTo(gx, catchY); ctx.stroke();
   }
 
   // 玩家
@@ -2181,13 +2323,13 @@ function render(now) {
   drawParticles(ctx, cam);
 
   // 偏头痛红闪
-  if (painFlash > 0) {
+  if (painFlash > 0 && !Expedition.prefs.motion) {
     ctx.fillStyle = `rgba(150,30,30,${Math.min(0.32, painFlash * 0.3)})`;
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   }
 
   // 闪电（高塔与心象的雨夜）
-  if ((G.area === "storm" || G.area === "rain") && Math.random() < dt * 0.06) lightning = 0.22;
+  if (!Expedition.prefs.motion && (G.area === "storm" || G.area === "rain") && Math.random() < dt * 0.06) lightning = 0.22;
   if (lightning > 0) {
     lightning -= dt;
     ctx.fillStyle = `rgba(215,228,250,${Math.min(0.26, lightning)})`;
@@ -2195,7 +2337,7 @@ function render(now) {
   }
 
   // 空屋灯光偶发闪烁
-  if (G.area === "house_empty" && Math.random() < dt * 0.15) houseFlicker = 0.1;
+  if (!Expedition.prefs.motion && G.area === "house_empty" && Math.random() < dt * 0.15) houseFlicker = 0.1;
   if (houseFlicker > 0) {
     houseFlicker -= dt;
     ctx.fillStyle = `rgba(0,0,0,${Math.min(0.4, houseFlicker * 4)})`;
@@ -2211,6 +2353,7 @@ function render(now) {
     ctx.fillText(notifyMsg, 14, VIEW_H - 10);
   }
 
+  Expedition.render(dt, cam, now);
   requestAnimationFrame(render);
 }
 
@@ -2245,20 +2388,23 @@ function renderCodex() {
 }
 
 ui.codexButton.addEventListener("click", () => {
+  clearInput();
   ui.codex.hidden = !ui.codex.hidden;
+  ui.codexButton.setAttribute("aria-expanded", String(!ui.codex.hidden));
   if (!ui.codex.hidden) renderCodex();
+  else Expedition.focusGameplay();
 });
 ui.audioButton.addEventListener("click", () => AudioEngine.toggle());
 ui.restartButton.addEventListener("click", () => {
   if (window.confirm("要清除本周目进度，从镜像阶段重新开始吗？（碎片与结局图鉴保留）")) resetRun();
 });
 ui.endingRestart.addEventListener("click", resetRun);
-ui.endingStay.addEventListener("click", () => {
-  ui.ending.hidden = true;
-  transitionLock = false;
-});
+ui.endingStay.addEventListener("click", () => { leaveEnding(); canvas.focus({ preventScroll: true }); });
 ui.startButton.addEventListener("click", () => {
   ui.start.hidden = true;
+  canvas.focus({ preventScroll: true });
+  Expedition.onAreaChange();
+  if (restoreEnding()) return;
   if (G.area === "mirror" && !F.m1 && !F.m2 && !F.m3) {
     playLines([
       "……睁开眼睛的时候，首先看到的是自己的手。",
@@ -2272,4 +2418,5 @@ ui.startButton.addEventListener("click", () => {
 loadAll();
 buildTileCache();
 updateHud();
+Expedition.init();
 requestAnimationFrame(render);

@@ -1,0 +1,28 @@
+name: Check pixel game
+
+on:
+  pull_request:
+    paths:
+      - 'pixel-version/**'
+      - 'tests/**'
+      - '.github/workflows/pixel-check.yml'
+  push:
+    paths:
+      - 'pixel-version/**'
+      - 'tests/**'
+      - '.github/workflows/pixel-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --check pixel-version/game.js
+      - run: node --check pixel-version/enhancements.js
+      - run: node tests/pixel-regression.cjs
