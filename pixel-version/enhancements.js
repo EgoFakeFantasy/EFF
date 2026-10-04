@@ -122,9 +122,9 @@ const Expedition = {
       case "mirror": return !F.m1 ? target("m1", "调查第一面镜。") : !F.m2 ? target("m2", "倾听第二面镜。") : !F.m3 ? target("m3", "走向第三面镜。") : target("exit", "回廊的尽头已经打开。走进雨幕。");
       case "storm": return target(null, !F.storm1 ? "你正向天空中的红月逆落。倾听雨中的声音。" : !F.storm2 ? "按 E / 空格或「伸手」留住雨滴；左右可略微偏移，触及雨中的碎片。" : "下一个奇点再见吧，无名的旅伴。");
       case "garden": return target("coffin", F.photoReturned ? "带着照片残片，回到苏醒的容器。" : "调查棺底的铭文。世界边界与记忆的暗处，也可以探索。");
-      case "house_empty": return target(F.hasPhoto ? "toilet" : "washer", F.hasPhoto ? "照片残片已经握在手里。继续调查房间。" : "调查这间没有声音的家。洗衣机仍在震动。");
+      case "house_empty": return !F.emptyLiving ? target("emptyLiving", "推开房门，看看没有声音的客厅。") : target(F.hasPhoto ? "toilet" : "washer", F.hasPhoto ? "照片残片已经握在手里。继续调查房间。" : "调查这间没有声音的家。洗衣机仍在震动。");
       case "house_family": return !F.father ? target("father", "向沙发上的父亲打个招呼。") : !F.mother ? target("mother", "走向厨房，见过母亲。") : target("table", "早餐还冒着热气。");
-      case "blood": return !F.sister ? target("sister", "先看清那只手，和心脏的主人。") : !F.parents ? target("parents", "庭院里还有什么没有看清。") : target("accuse", "那些声音在等待你的回答。");
+      case "blood": return !F.sister ? target("sister", "先看清那只手，和心脏的主人。") : !F.parents ? target("parents", "穿过庭院尽头的门，走向褐色客房中的残骸。") : target(null, "那些声音在等待你的回答。");
       case "rain": return F.rainDone ? target("exit", "塔顶的裂缝已经开启。") : target("repress", "走向以压抑之名者，听完尚未说完的话。");
       case "meta": return !F.stele1 ? target("stele1", "从左往右，阅读三座石碑。") : !F.stele2 ? target("stele2", "第一句话留下了位置。阅读第二座石碑。") : !F.stele3 ? target("stele3", "第二句话被覆盖。阅读第三座石碑。") : !F.metaDone ? target("senpai", "听见前传人物的回答。") : F.rainMemory && !F.golden ? target("gold", "水晶花已经醒来。金色的雨会再来，站到光圈里，留住一滴。") : target("flower", "水晶花还在活动。让故事抵达它的结尾。");
       default: return target(null, "靠近发光的事物，调查与倾听。");
@@ -136,7 +136,12 @@ const Expedition = {
     const map = MAPS[G.area];
     if (id === "gold") return goldDrop ? { x: (goldDrop.x - 8) / TILE, y: (goldDrop.catchY - 8) / TILE } : null;
     if (id === "exit") return map.exits[0];
-    return [...(map.interact || []), ...(map.npcs || [])].find(it => it.id === id);
+    const point = [...(map.interact || []), ...(map.npcs || [])].find(it => it.id === id);
+    if (point && (map.npcs || []).includes(point)) {
+      const actor = StoryStaging.npc(point);
+      return actor.hidden ? null : actor;
+    }
+    return point;
   },
 
   sync() {
@@ -263,7 +268,10 @@ const Expedition = {
     }
     const dot = (x, y, color, size = 3) => { c.fillStyle = color; c.fillRect(ox + (x + 0.5) * scale - size / 2, oy + (y + 0.5) * scale - size / 2, size, size); };
     for (const it of map.interact || []) dot(it.x, it.y, "#c9a86a");
-    for (const n of map.npcs || []) if (!n.cond || F[n.cond]) dot(n.x, n.y, "#7fb3d5");
+    for (const n of map.npcs || []) if (!n.cond || F[n.cond]) {
+      const actor = StoryStaging.npc(n);
+      if (!actor.hidden) dot(actor.x, actor.y, "#7fb3d5");
+    }
     for (const exit of map.exits || []) { c.strokeStyle = "#c9a86a"; c.strokeRect(ox + exit.x * scale, oy + exit.y * scale, scale, scale); }
     if (!META.shards.includes(map.shard.name)) {
       const x = ox + (map.shard.x + 0.5) * scale, y = oy + (map.shard.y + 0.5) * scale;

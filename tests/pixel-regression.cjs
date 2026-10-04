@@ -279,6 +279,19 @@ function finishDialog(game) {
   assert.fail("dialogue did not finish within 400 advances");
 }
 
+function nextLine(game) {
+  assert.equal(game.evaluate("dialogActive"), true, "cannot advance an inactive staged scene");
+  game.evaluate("if (!typeDone) advanceDialog(); advanceDialog()");
+}
+
+function advanceToText(game, fragment) {
+  for (let i = 0; i < 120; i++) {
+    if (game.evaluate("currentFullText()").includes(fragment)) return;
+    nextLine(game);
+  }
+  assert.fail(`staged scene never reaches: ${fragment}`);
+}
+
 function choose(game, text) {
   assert.ok(game.evaluate("!!dialogChoices"), `no choices while selecting ${text}`);
   const button = game.ids.get("dialogChoices").children.find((item) => item.textContent.includes(text));
@@ -336,10 +349,14 @@ function standNear(game, id) {
   assert.fail(`${area}: ${id} cannot be selected from a reachable player position`);
 }
 
-function interact(game, id) {
+function beginInteraction(game, id) {
   assert.equal(game.evaluate("dialogActive"), false, `previous dialogue still active before ${id}`);
   standNear(game, id);
   game.evaluate("tryInteract()");
+}
+
+function interact(game, id) {
+  beginInteraction(game, id);
   finishDialog(game);
   game.tick();
   finishDialog(game);
@@ -387,17 +404,25 @@ function enterEmptyHouse(game) {
   enterGarden(game);
   interact(game, "coffin"); choose(game, "再次躺入棺材");
   assert.equal(game.evaluate("G.area"), "house_empty");
+  assert.equal(game.evaluate("!!F.emptyWoke"), true);
 }
 
-function enterBlood(game) {
+function enterFamily(game) {
   enterEmptyHouse(game);
-  for (const id of ["bed", "bathMirror", "washer", "toilet"]) interact(game, id);
+  for (const id of ["bathMirror", "washer", "toilet"]) interact(game, id);
   assert.equal(game.evaluate("G.area"), "garden");
   interact(game, "coffin");
   assert.equal(game.evaluate("G.area"), "house_family");
-  for (const id of ["famBed", "father", "mother", "table"]) interact(game, id);
+  assert.equal(game.evaluate("!!F.familyWoke"), true);
+}
+
+function enterBlood(game) {
+  enterFamily(game);
+  for (const id of ["father", "mother", "table"]) interact(game, id);
   assert.equal(game.evaluate("G.area"), "blood");
-  for (const id of ["sister", "parents", "accuse"]) interact(game, id);
+  assert.equal(game.evaluate("!!F.sister"), true, "the bound awakening must precede free exploration");
+  interact(game, "parents");
+  assert.equal(game.evaluate("!!dialogChoices"), true, "seeing the remains must lead directly to the accusation");
 }
 
 function enterMeta(game, retainRain) {
@@ -741,6 +766,187 @@ test("every exploration-map spawn, interactable, conditional NPC, shard, and exi
     for (const target of [...(map.exits || []), ...(map.shard ? [map.shard] : [])]) {
       assert.ok(points.some(([x, y]) => Math.floor((x + 6) / tile) === target.x && Math.floor((y + 8) / tile) === target.y), `${area}: tile ${target.x},${target.y} is not reachable`);
     }
+  }
+});
+
+test("house arrivals wake in bed automatically and old explored saves preserve their progress", () => {
+  const game = harness(); enterGarden(game); interact(game, "coffin");
+  game.ids.get("dialogChoices").children.find((item) => item.textContent.includes("再次躺入")).click();
+  finishDialog(game); game.tick(1200);
+  assert.equal(game.evaluate("G.area"), "house_empty");
+  assert.equal(game.evaluate("currentFullText()"), "在这个清晨，头发凌乱的少年猛然从床上弹起。");
+  assert.equal(game.evaluate("dialogActive"), true);
+  assert.equal(game.evaluate("!!F.emptyWoke"), false, "the awakening checkpoint is committed before its text is read");
+  assert.equal(game.evaluate("StoryStaging.playerOptions().pose"), "wake");
+  assert.equal(game.evaluate("G.px < 7 * TILE && G.py < 7 * TILE"), true, "the awakening is staged outside the bedroom");
+  finishDialog(game);
+  assert.equal(game.evaluate("!!F.emptyWoke"), true);
+  assert.equal(JSON.parse(game.storage.get(SAVE)).flags.emptyWoke, true);
+  for (const [area, flag, opening] of [["house_empty", "emptyWoke", "在这个清晨"], ["house_family", "familyWoke", "猛然的"]]) {
+    const resumed = harness({ [SAVE]: JSON.stringify({ area, px: 51, py: 50, flags: { hasPhoto: true, father: true, mother: true }, memories: ["已有的记忆"], counters: { pain: 1 } }) });
+    resumed.ids.get("startButton").click();
+    assert.ok(resumed.evaluate("currentFullText()").startsWith(opening));
+    assert.equal(resumed.evaluate("StoryStaging.playerOptions().pose"), "wake");
+    finishDialog(resumed);
+    assert.equal(resumed.evaluate(`!!F.${flag}`), true);
+    assert.equal(resumed.evaluate("F.hasPhoto && F.father && F.mother"), true);
+    assert.ok(resumed.value("G.memories").includes("已有的记忆"));
+    assert.equal(resumed.evaluate("G.counters.pain"), 1);
+  }
+});
+
+test("the tank's second line switches to the garden while its dialogue remains an unsaved transaction", () => {
+  const game = harness(); enterEmptyHouse(game); interact(game, "washer");
+  const checkpoint = game.storage.get(SAVE);
+  beginInteraction(game, "toilet");
+  assert.equal(game.evaluate("G.area"), "house_empty");
+  game.evaluate("Expedition.chapterTime = 10; Expedition.dom.chapterCard.classList.add('visible')");
+  nextLine(game);
+  assert.ok(game.evaluate("currentFullText()").includes("在棺材里难受地打滚"));
+  assert.equal(game.evaluate("G.area"), "garden", "the scene waits until all toilet dialogue is over before returning to the coffin");
+  assert.equal(game.evaluate("dialogActive"), true);
+  assert.equal(game.evaluate("StoryStaging.playerOptions().reclined"), true);
+  assert.equal(game.evaluate("Expedition.chapterTime"), 0);
+  assert.equal(game.ids.get("chapterCard").classList.contains("visible"), false);
+  assert.equal(game.evaluate("saveRun()"), false);
+  assert.equal(game.storage.get(SAVE), checkpoint, "a staged area switch persists a half-finished photo-return checkpoint");
+  advanceToText(game, "从裤兜里掏出的");
+  assert.equal(game.evaluate("G.area"), "garden");
+  assert.equal(game.evaluate("StoryStaging.playerOptions().pose"), "photo");
+  assert.equal(game.evaluate("saveRun()"), false);
+  assert.equal(game.storage.get(SAVE), checkpoint);
+  const interrupted = harness(game.snapshot());
+  assert.equal(interrupted.evaluate("G.area"), "house_empty");
+  assert.equal(interrupted.evaluate("!!F.hasPhoto"), true);
+  assert.equal(interrupted.evaluate("!!F.photoReturned"), false);
+  finishDialog(game); game.tick(); finishDialog(game);
+  assert.equal(game.evaluate("G.area"), "garden");
+  assert.equal(game.evaluate("!!F.photoReturned"), true);
+  const resumed = harness(game.snapshot());
+  assert.equal(resumed.evaluate("G.area"), "garden");
+  assert.equal(resumed.evaluate("!!F.photoReturned"), true);
+});
+
+test("the tower interlude, family breakfast, absent parents, and curtain follow the spoken scene", () => {
+  const game = harness(); enterEmptyHouse(game);
+  for (const id of ["washer", "toilet"]) interact(game, id);
+  beginInteraction(game, "coffin");
+  game.evaluate("Expedition.chapterTime = 10; Expedition.dom.chapterCard.classList.add('visible')");
+  advanceToText(game, "无限螺旋的高塔");
+  assert.equal(game.evaluate("StoryStaging.scene"), "tower");
+  assert.equal(game.evaluate("Expedition.chapterTime"), 0);
+  assert.equal(game.ids.get("chapterCard").classList.contains("visible"), false);
+  game.evaluate("globalThis.tileDraws = 0; ctx.drawImage = (image) => { if (image === tileCache) tileDraws += 1; }");
+  game.frame(16);
+  assert.equal(game.evaluate("tileDraws"), 0, "the tower interlude still paints the garden map behind its text");
+  finishDialog(game); game.tick(1200);
+  assert.equal(game.evaluate("G.area"), "house_family");
+  assert.ok(game.evaluate("currentFullText()").startsWith("猛然的"));
+  assert.equal(game.evaluate("StoryStaging.playerOptions().pose"), "wake");
+  finishDialog(game);
+  assert.equal(game.evaluate("!!F.familyWoke"), true);
+  interact(game, "father"); beginInteraction(game, "mother");
+  assert.equal(game.evaluate("StoryStaging.mother"), "carry");
+  nextLine(game);
+  const mother = game.value("StoryStaging.npc(MAPS.house_family.npcs.find(n => n.id === 'mother'))");
+  assert.ok(mother.x > 7 && mother.x < 16 && mother.y < 7, "the mother's reply remains at the distant kitchen marker");
+  assert.equal(game.evaluate("SCRIPTS.mother.lines.some(l => (typeof l === 'string' ? l : l.t || '').includes('慢慢喝'))"), false);
+  finishDialog(game); beginInteraction(game, "table"); advanceToText(game, "桌上摆着");
+  assert.equal(game.evaluate("StoryStaging.family"), "table");
+  assert.equal(game.evaluate("StoryStaging.playerOptions().pose"), "eat");
+  for (const id of ["father", "mother"]) {
+    const actor = game.value(`StoryStaging.npc(MAPS.house_family.npcs.find(n => n.id === ${JSON.stringify(id)}))`);
+    assert.equal(actor.hidden, false);
+    assert.equal(actor.pose, "eat");
+    assert.ok(actor.x > 7 && actor.x < 16 && actor.y < 7);
+  }
+  advanceToText(game, "慢慢喝");
+  assert.equal(game.evaluate("StoryStaging.family"), "table");
+  advanceToText(game, "父母不急不忙地去上班了");
+  assert.equal(game.evaluate("StoryStaging.family"), "gone");
+  assert.equal(game.evaluate("MAPS.house_family.npcs.filter(n => ['father','mother'].includes(n.id)).every(n => StoryStaging.npc(n).hidden)"), true);
+  game.evaluate("Expedition.chapterTime = 10; Expedition.dom.chapterCard.classList.add('visible')");
+  advanceToText(game, "要开始了吗");
+  assert.equal(game.evaluate("StoryStaging.scene"), "curtain");
+  assert.equal(game.evaluate("Expedition.chapterTime"), 0);
+  assert.equal(game.ids.get("chapterCard").classList.contains("visible"), false);
+  game.evaluate("tileDraws = 0"); game.frame(16);
+  assert.equal(game.evaluate("tileDraws"), 0, "the curtain still shows the living room backdrop");
+  finishDialog(game); game.tick(1200); game.frame(16);
+  assert.equal(game.evaluate("G.area"), "blood");
+  assert.ok(game.evaluate("tileDraws") > 0, "the special backdrop does not release for the next courtyard scene");
+});
+
+test("the blood scene binds the protagonist holding the heart and leads from the guestroom directly to accusation", () => {
+  const game = harness(); enterFamily(game);
+  for (const id of ["father", "mother"]) interact(game, id);
+  beginInteraction(game, "table"); finishDialog(game); game.tick(1200);
+  assert.equal(game.evaluate("G.area"), "blood");
+  assert.ok(game.evaluate("currentFullText()").startsWith("被束缚了。有什么东西在撕扯着我的身体，阻碍了我对身体的控制权。"));
+  assert.equal(game.evaluate("!!F.sister"), false);
+  assert.equal(game.evaluate("StoryStaging.playerOptions().pose"), "bound");
+  advanceToText(game, "握着还在鼓动的心脏的手");
+  assert.ok(game.evaluate("currentFullText()").includes("握着还在鼓动的心脏的手"));
+  assert.equal(game.evaluate("StoryStaging.playerOptions().blood"), true);
+  assert.equal(game.evaluate("StoryStaging.playerOptions().reclined"), false);
+  assert.equal(game.evaluate("StoryStaging.playerOptions().heldHeart"), true);
+  const sibling = game.value("StoryStaging.npc({ id: 'sister', x: 13, y: 7, kind: 'sister' })");
+  assert.notEqual(sibling.blood, true);
+  assert.notEqual(sibling.heldHeart, true, "the heart is assigned to the sister instead of the protagonist");
+  assert.equal(game.evaluate("(() => { const area = G.area; const ok = Object.keys(MAPS).filter(a => a !== 'blood').every(a => { G.area = a; const options = StoryStaging.playerOptions(); return !options.blood && !options.heldHeart; }); G.area = area; return ok; })()"), true);
+  advanceToText(game, "洒在已经变得褐色的地板上");
+  advanceToText(game, "心脏的主人");
+  finishDialog(game);
+  assert.equal(game.evaluate("!!F.sister"), true);
+  assert.equal(game.evaluate("StoryStaging.playerOptions().pose"), "stand");
+  assert.equal(game.evaluate("MAPS.blood.interact.some(it => it.id === 'accuse')"), false);
+  beginInteraction(game, "parents"); advanceToText(game, "穿过褐色的客房");
+  assert.equal(game.evaluate("G.py + 8 > 12 * TILE"), true, "the guestroom passage is still staged in the open courtyard");
+  advanceToText(game, "但他不能再移动了");
+  assert.equal(game.evaluate("StoryStaging.playerOptions().pose"), "bound");
+  finishDialog(game);
+  assert.equal(game.evaluate("!!F.parents"), true);
+  assert.equal(game.evaluate("!!dialogChoices"), true, "seeing the remains still requires walking back to an accusation marker");
+  assert.equal(game.evaluate("StoryStaging.playerOptions().pose"), "bound");
+});
+
+test("the mother carries food through open floor, pauses with settings, and stays in the living room after refresh", () => {
+  const game = harness({ [SAVE]: JSON.stringify({ area: "house_family", px: 227, py: 82, flags: { familyWoke: true, father: true }, memories: [], counters: {} }) });
+  game.ids.get("startButton").click(); beginInteraction(game, "mother");
+  game.evaluate("StoryStaging.renderSpecial(performance.now(), 0.4)");
+  const moving = game.value("StoryStaging.npc(MAPS.house_family.npcs.find(n => n.id === 'mother'))");
+  game.ids.get("settingsDialog").showModal();
+  game.evaluate("StoryStaging.renderSpecial(performance.now(), 2)");
+  assert.deepEqual(game.value("StoryStaging.npc(MAPS.house_family.npcs.find(n => n.id === 'mother'))"), moving);
+  game.ids.get("settingsDialog").close();
+  game.evaluate("StoryStaging.carryElapsed = 0");
+  for (let frame = 0; frame <= 150; frame++) {
+    assert.equal(game.evaluate("(() => { const n = StoryStaging.npc(MAPS.house_family.npcs.find(n => n.id === 'mother')); return validSavedPosition(MAPS.house_family, n.x * TILE + 2, n.y * TILE); })()"), true, `mother crosses furniture or a wall at frame ${frame}`);
+    game.evaluate("StoryStaging.renderSpecial(performance.now(), 1 / 60)");
+  }
+  finishDialog(game);
+  const resumed = harness(game.snapshot()); resumed.ids.get("startButton").click();
+  const settled = resumed.value("StoryStaging.npc(MAPS.house_family.npcs.find(n => n.id === 'mother'))");
+  assert.equal(settled.x, 12); assert.equal(settled.y, 5);
+  resumed.evaluate("G.px = 13 * TILE + 3; G.py = 5 * TILE + 2");
+  assert.equal(resumed.evaluate("nearestInteractable()?.it.id"), "mother");
+  resumed.evaluate("tryInteract()");
+  assert.equal(resumed.evaluate("dialogActive"), true);
+  assert.ok(resumed.evaluate("currentFullText()").includes("吃饭了"));
+});
+
+test("old family and blood checkpoints resume the next scene with the protagonist inside its camera", () => {
+  const game = harness({ [SAVE]: JSON.stringify({ area: "blood", px: 35, py: 18, flags: { sister: true, parents: true }, memories: [], counters: {} }) });
+  game.ids.get("startButton").click();
+  assert.equal(game.evaluate("StoryStaging.playerOptions().pose"), "bound");
+  assert.equal(game.evaluate("G.px"), 12 * 16 + 3);
+  assert.equal(game.evaluate("G.py"), 14 * 16 + 2);
+  finishDialog(game);
+  assert.equal(game.evaluate("!!dialogChoices"), true);
+  for (const [area, flags, expected] of [["house_family", { familyDone: true }, "blood"], ["blood", { sister: true, parents: true, refused: true }, "rain"]]) {
+    const resumed = harness({ [SAVE]: JSON.stringify({ area, px: 51, py: 50, flags, memories: [], counters: {} }) });
+    resumed.ids.get("startButton").click(); resumed.tick(1200);
+    assert.equal(resumed.evaluate("G.area"), expected);
   }
 });
 

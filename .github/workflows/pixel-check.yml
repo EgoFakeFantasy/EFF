@@ -26,4 +26,5 @@ jobs:
       - run: node --check pixel-version/game.js
       - run: node --check pixel-version/enhancements.js
       - run: node --check pixel-version/storm-flight.js
+      - run: node --check pixel-version/story-staging.js
       - run: node tests/pixel-regression.cjs

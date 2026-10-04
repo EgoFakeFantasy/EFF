@@ -309,7 +309,7 @@ const MAPS = {
       "#......#........#..............#",
       "#......#........#..............#",
       "########.#############.#########",
-      "#..............#...............#",
+      "#....BB........#...............#",
       "#..............#.......W.......#",
       "#..............#...............#",
       "#..............D...............#",
@@ -329,6 +329,7 @@ const MAPS = {
       { x: 24, y: 9, id: "washer", label: "洗衣机" },
       { x: 24, y: 13, id: "toilet", label: "马桶水箱" },
       { x: 2, y: 2, id: "bed", label: "自己的床" },
+      { x: 10, y: 5, id: "emptyLiving", label: "空荡的客厅" },
     ],
   },
 
@@ -340,9 +341,9 @@ const MAPS = {
     palette: { floor: "#241f18", wall: "#14110c", trim: "#4a3d2c", glow: "#c9a86a" },
     grid: [
       "################################",
-      "#......#....ff...#.............#",
-      "#.B....#...fF....#....KK.......#",
-      "#......#....ff...#....K........#",
+      "#......#........#..............#",
+      "#.B....#..f..F..#....KK........#",
+      "#......#........#....K.........#",
       "#......D........D..............#",
       "#......#........#..............#",
       "#......#........#..............#",
@@ -364,9 +365,9 @@ const MAPS = {
     exits: [],
     interact: [{ x: 2, y: 2, id: "famBed", label: "自己的床" }],
     npcs: [
-      { x: 10, y: 3, kind: "father", id: "father", label: "沙发上的父亲" },
-      { x: 24, y: 9, kind: "mother", id: "mother", label: "厨房里的母亲" },
-      { x: 9, y: 2, kind: "table", id: "table", label: "早餐桌" },
+      { x: 13, y: 2, kind: "father", id: "father", label: "父亲" },
+      { x: 24, y: 9, kind: "mother", id: "mother", label: "母亲" },
+      { x: 10, y: 2, kind: "table", id: "table", label: "早餐桌" },
     ],
   },
 
@@ -374,7 +375,7 @@ const MAPS = {
     name: "血色庭院",
     sound: "horror",
     ambient: "embers",
-    spawn: { x: 2, y: 18 },
+    spawn: { x: 12, y: 8 },
     palette: { floor: "#221312", wall: "#130a0a", trim: "#4a2220", glow: "#d05a3a" },
     grid: [
       "############################",
@@ -387,12 +388,12 @@ const MAPS = {
       "#..........bbb.........x...#",
       "#...........b..............#",
       "#..........................#",
-      "#....x.................x...#",
+      "#############D##############",
       "#..................x.......#",
-      "#......x...................#",
-      "#..............x...........#",
-      "#..x.......................#",
-      "#............C.............#",
+      "#.......#...bb.............#",
+      "#.......#...b..............#",
+      "#.......D..................#",
+      "#...CC..#..................#",
       "#..........................#",
       "#..........................#",
       "#..........................#",
@@ -403,7 +404,6 @@ const MAPS = {
     interact: [
       { x: 13, y: 7, id: "sister", label: "倒在地上的她" },
       { x: 13, y: 15, id: "parents", label: "相拥的焦炭" },
-      { x: 2, y: 1, id: "accuse", label: "那些声音" },
     ],
     npcs: [{ x: 13, y: 5, kind: "echo", id: "echoBlood", label: "拽住袖口的残响", cond: "sister" }],
   },
@@ -493,6 +493,7 @@ const SOUND_FOR_ENDING = { bad: "horror", twilight: "horror", normal: "meta", tr
 function quote(t) { return { c: "quote", t }; }
 function fracture(t) { return { c: "fracture", t }; }
 function say(speaker, t, c) { return { s: speaker, c, t }; }
+function staged(line, stage) { return { ...normalizeLine(line), stage }; }
 
 const SCRIPTS = {
   m1: {
@@ -614,8 +615,8 @@ const SCRIPTS = {
   },
   coffinSleep: {
     lines: [
-      "周防再一度迈入棺材，躺下，将自己刚刚推开的棺材板重新覆盖在头顶，然后再一度陷入沉眠。",
-      "在一切尚未发生之时，万千的表象被撕扯开联系，撕扯开因果，化为无数片。",
+      staged("周防再一度迈入棺材，躺下，将自己刚刚推开的棺材板重新覆盖在头顶，然后再一度陷入沉眠。", { at: [12, 9], focus: { x: 12, y: 8 }, pose: "sleep", coffin: true }),
+      staged("在一切尚未发生之时，万千的表象被撕扯开联系，撕扯开因果，化为无数片。", { scene: "curtain" }),
       "虚空中，无数张眼睛被张开。看来新的倒霉蛋出现了呢。这次，我们又可以增添多少乐趣了呢？",
     ],
     then() {
@@ -625,16 +626,25 @@ const SCRIPTS = {
   },
   bed: {
     lines: [
-      "在这个清晨，头发凌乱的少年猛然从床上弹起。",
+      staged("在这个清晨，头发凌乱的少年猛然从床上弹起。", { scene: "map", at: [3, 3], focus: { x: 3, y: 3 }, pose: "wake", coffin: false }),
       quote("我是……是了，我是周防。"),
       "这具身体似乎和花园时的状态很不一样，好像回到了十八岁。",
       "可是，如果是十八岁的躯体，这个时候应该是住在父母家里吧。为什么一点声音都没有听到？",
     ],
-    then() { addMemory("十八岁的身体"); },
+    then() { F.emptyWoke = true; addMemory("十八岁的身体"); },
+  },
+  emptyLiving: {
+    lines: [
+      staged("客厅里面只是空荡荡的。", { at: [10, 5], focus: { x: 11, y: 3 }, pose: "stand" }),
+      "没有已经做好的早餐，没有正在呼啸的油烟机响声，没有正在播放的新闻联播，也没有披在椅子上等待被穿上的旧校服。",
+      "没有人坐在餐桌上，没有人躺在沙发上，没有人在厨房里炒菜。就只是这样空荡荡地展示在周防面前。",
+      staged("另一个卧室里有一张平平无奇的双人大床。可衣橱空空，储物柜毫无一物，床铺没有任何压痕。这里不像独居，却也没有人住过。", { at: [5, 9], focus: { x: 5, y: 8 } }),
+    ],
+    then() { F.emptyLiving = true; addMemory("空荡的家"); },
   },
   bathMirror: {
     lines: [
-      "周防缓缓推开卫生间的门。不出意外，他在镜子里面看到了自己新躯体的容颜。",
+      staged("周防缓缓推开卫生间的门。不出意外，他在镜子里面看到了自己新躯体的容颜。", { at: [23, 3], focus: { x: 23, y: 3 }, pose: "mirror", dir: 3 }),
       quote("不赖。"),
       "他尝试了诸多模拟难度颇高的动作，随后给出判断：这里不是普通梦境。要么本体是一台超级计算机中的智能，要么这里本身是另一个现实。",
     ],
@@ -642,8 +652,8 @@ const SCRIPTS = {
   },
   washer: {
     lines: [
-      "洗衣机或许是一个值得调查的空间。果不其然，周防在里面发现了一条裤子，而裤兜中有一角残破的照片。",
-      "看着十分年轻的周防，在这角残片的中央站着。背后似乎有两个人一起站着，但因为照片的断裂，无法从四条腿辨认这两个人是谁。",
+      staged("洗衣机或许是一个值得调查的空间。果不其然，周防在里面发现了一条裤子，而裤兜中有一角残破的照片。", { at: [24, 10], focus: { x: 24, y: 9 }, pose: "search", dir: 3 }),
+      staged("看着十分年轻的周防，在这角残片的中央站着。背后似乎有两个人一起站着，但因为照片的断裂，无法从四条腿辨认这两个人是谁。", { pose: "photo" }),
       "或许是我的父母？周防这样想着。",
     ],
     then() {
@@ -655,10 +665,10 @@ const SCRIPTS = {
   },
   toiletPain: {
     lines: [
-      "当周防刚刚试图打开这坐便器的盖子时，右侧头部剧烈的痛苦吞噬了一切。",
-      "他从睡眠中醒来，在棺材里难受地打滚。痛，好痛，好痛。",
+      staged("当周防刚刚试图打开这坐便器的盖子时，右侧头部剧烈的痛苦吞噬了一切。", { at: [24, 14], focus: { x: 24, y: 13 }, pose: "pain" }),
+      staged("他从睡眠中醒来，在棺材里难受地打滚。痛，好痛，好痛。", { area: "garden", scene: "map", at: [12, 9], focus: { x: 12, y: 8 }, pose: "pain", coffin: true }),
       "许久之后，周防下意识摸向裤兜。那片照片残片本应只是那个世界的产物。",
-      "可是，从裤兜里掏出的，是已经变干的那片照片残片。而站在里面的，正是那个不知为何的世界中，年轻的周防。",
+      staged("可是，从裤兜里掏出的，是已经变干的那片照片残片。而站在里面的，正是那个不知为何的世界中，年轻的周防。", { pose: "photo" }),
       "我真的脱离梦境了吗？不，那不是梦境，那是另一个世界。不然，这片照片是怎么来到此处的？",
       "至少现在首先的目标确立了。要把之前的记忆先完整地找回，这一点确实是真实的目的。",
     ],
@@ -667,16 +677,16 @@ const SCRIPTS = {
       G.counters.pain = Math.min(3, (G.counters.pain || 0) + 2);
       painFlash = 1.2;
       updateHud();
-      gotoArea("garden", "雨水的织机开始在时间上运转");
+      addMemory("归来的照片残片");
     },
   },
   coffinAgain: {
     lines: [
-      "看来想要获得进一步的线索，得再一次入梦了。",
-      "周防打开棺材板，躺入其中。",
+      staged("看来想要获得进一步的线索，得再一次入梦了。", { at: [12, 9], focus: { x: 12, y: 8 }, pose: "stand" }),
+      staged("周防打开棺材板，躺入其中。", { pose: "sleep", coffin: true }),
       "此刻正在闭目入眠的周防怎么也不会想到，背后刻下的字迹上，竟然自发地开始续写。",
       quote("雨水的织机开始在时间上运转"),
-      "噔。噔。噔。无限螺旋的高塔上，逆时而落的男人与那始终在攀登的无名者再一度错过。",
+      staged("噔。噔。噔。无限螺旋的高塔上，逆时而落的男人与那始终在攀登的无名者再一度错过。", { scene: "tower" }),
       quote("你又一次踏上旅途了吗……愿你能找到你想要的答案。"),
     ],
     then() {
@@ -685,13 +695,14 @@ const SCRIPTS = {
   },
   famBed: {
     lines: [
-      "猛然的，周防再一度从那张熟悉的床上醒来。只不过这次，他异常地感到了安心。",
+      staged("猛然的，周防再一度从那张熟悉的床上醒来。只不过这次，他异常地感到了安心。", { scene: "map", at: [3, 3], focus: { x: 3, y: 3 }, pose: "wake", coffin: false }),
       "咸香味，是厨房里面飘出来的。果然，我这次找对梦或世界了。",
     ],
+    then() { F.familyWoke = true; },
   },
   father: {
     lines: [
-      "出现在眼前的，是一个窝在沙发上正在享用新闻联播的男人。",
+      staged("周防打开房门。出现在眼前的，是一个窝在沙发上正在享用新闻联播的男人。", { at: [14, 3], focus: { x: 13, y: 2 }, pose: "stand", dir: 1 }),
       "看着这如同正态分布般生长的胡须，周防很快就知道了他是谁。",
       quote("爸，早安。"),
       "男人只是应了一声，然后继续聚精会神地看新闻。",
@@ -703,10 +714,9 @@ const SCRIPTS = {
   },
   mother: {
     lines: [
-      "厨房门被打开，端着雪菜炒毛豆的女人走入客厅。",
+      staged("厨房门被打开，端着雪菜炒毛豆的女人走入客厅。", { at: [14, 5], focus: { x: 15, y: 5 }, pose: "stand", mother: "carry" }),
       quote("吃饭了，小防，还有老公……咦，儿子你今天怎么了？"),
       "周防赶忙应付过去：没事，妈，我就是发现你好像又长了一根白头发。",
-      quote("慢慢喝，没人抢你的吃。"),
     ],
     need: () => F.father,
     locked: "先和客厅里看新闻的父亲打个招呼吧。",
@@ -718,10 +728,21 @@ const SCRIPTS = {
   },
   table: {
     lines: [
+      staged("母亲果然很快被转移了注意力。随着电视机被关掉，白头发的寻找又以眼花为由不了了之，一家人坐在餐桌上准备享用早饭。", { at: [10, 3], focus: { x: 11, y: 3 }, pose: "eat", family: "table", dir: 3 }),
       "桌上摆着三大碗白粥和榨菜，咸鸭蛋和包子也摆在一旁。好久没吃饭的周防决定大快朵颐。",
-      "于是平平淡淡的三日过去。周防知道了自己已经接到大学录取通知书，也知道自己似乎还有一个妹妹，现在应该在外婆家暂住着玩。",
+      "果然还是吃饭最令人享受啊，这可不比在那个硬的要死的地方睡觉爽多了。",
+      quote("慢慢喝，没人抢你的吃。"),
+      staged("家中又很快恢复寂静。父母不急不忙地去上班了。", { at: [11, 5], pose: "stand", family: "gone" }),
+      "相比上一个梦或世界，唯一的变化就是原本应该在这里的生活痕迹全部回来了。",
+      staged("最后，是厕所的马桶。上一次把他直接遣返的地方。", { at: [24, 14], focus: { x: 24, y: 13 } }),
+      "或许我应该再等等几天再去看看，说不定有新的变化。",
+      "或许是贪恋于饮食，或许是贪恋于日常的生活，又或许是因为之前那次剧痛的顾虑，周防停止了下一步的计划。",
+      staged("于是平平淡淡的三日过去。周防知道了自己已经接到大学录取通知书，也知道自己似乎还有一个妹妹，现在应该在外婆家暂住着玩。", { at: [3, 3], focus: { x: 3, y: 3 } }),
       quote("草，我怎么没想到这一点。"),
-      "要开始了吗？新的一幕落下，演员也该正式入场了。",
+      staged(quote("要开始了吗？新的一幕落下，演员也该正式入场了。"), { scene: "curtain" }),
+      "嘻嘻，我很期待他看到那个场景该是什么样的神情，会不会后悔自己没有早点去打开那个……",
+      "好了，言尽于此。别忘了我们这次演出也是要给那一侧的[朋友]们看的，提前剧透那么多信息可不是好文明。",
+      "说的是。那么接下来，就逐个入场吧。",
       "第二幕，荒诞的转变。",
     ],
     need: () => F.mother,
@@ -733,12 +754,17 @@ const SCRIPTS = {
   },
   sister: {
     lines: [
-      "被束缚了。有什么东西在撕扯着我的身体，阻碍了我对身体的控制权。",
+      staged("被束缚了。有什么东西在撕扯着我的身体，阻碍了我对身体的控制权。有什么不知何处而来的力量，将我挤压在某一条狭隘到不存在的间隙中。", { scene: "map", at: [12, 8], focus: { x: 13, y: 7 }, pose: "bound" }),
+      "好像有什么东西在燃烧，发出了难闻的气味。有谁在呼嚎，ta很痛苦吗？",
+      "啊，好像能看到了。有红黑色的光在照耀。",
       "展露在勉强苏醒的周防眼前的，是一只手。一只握着还在鼓动的心脏的手。一只暗红色的手。",
+      "血液被残余的迸发鼓出撕裂的血管，洒在已经变得褐色的地板上。",
+      "倒在周防眼前的，那个心脏的主人，此时此刻已然失去了她最后的脏器。",
       "视线颤抖着上移。那是一个年轻的面孔，一个熟悉但不曾在他前三日梦境中出现的角色。",
       quote("妹妹？你是……我的妹妹吗？"),
       "自我防护机制意外地工作起来。这一切只不过是一场刻意为之的戏剧。",
       "可是，不是这样的。不是这样的，这已经被我所发生了。",
+      staged("只预留直感的周防缓缓站起，而后走出那个血色的庭院。", { at: [13, 11], focus: { x: 13, y: 10 }, pose: "stand" }),
     ],
     then() {
       F.sister = true;
@@ -747,21 +773,23 @@ const SCRIPTS = {
   },
   parents: {
     lines: [
-      "只预留直感的周防缓缓站起，而后走出那个血色的庭院。",
+      staged("穿过褐色的客房，抬脚踏过不知为何被堆积的脏器。", { at: [12, 14], focus: { x: 13, y: 15 }, pose: "stand" }),
       "最后留在他面前的，是两具紧紧相拥，同时被一柄仍然在燃烧的利剑穿过的二人。",
       "它们已经不能被称之为人，甚至不再具备尸体的形态，而只是两具焦炭。",
       "然而就算如此，他也已经知道那是谁了，也知晓犯下这样罪行的那个人是谁。",
+      staged("但他不能再移动了。撕扯的感觉再一度袭来。感官工作的尽头，他好像看到那口停在偏房中的棺材动了动。", { pose: "bound" }),
     ],
     need: () => F.sister,
     locked: "先看清那只手，和心脏的主人。",
     then() {
       F.parents = true;
       addMemory("被焚毁的家");
+      playScript("accuse");
     },
   },
   accuse: {
     lines: [
-      fracture("看看这样的你吧，犯下了如此滔天大罪的感觉如何？"),
+      staged(fracture("看看这样的你吧，犯下了如此滔天大罪的感觉如何？"), { at: [12, 14], pose: "bound", focus: { x: 13, y: 15 } }),
       "是你亲手杀死了你的妹妹，挖出了她的心脏。是你亲自把利剑刺向你父亲的胸膛，将两个人一同在绝望中贯穿。",
       "如今造下此等恶孽，你该如何是好呢？",
     ],
@@ -776,7 +804,7 @@ const SCRIPTS = {
   refusal: {
     lines: [
       quote("不，我拒绝这一切。"),
-      "撕扯的力道突然消失了一点。造下这一切的不是我。我否定这样的事情。",
+      staged("撕扯的力道突然消失了一点。造下这一切的不是我。我否定这样的事情。", { pose: "stand" }),
       quote("我否定这样的结局。而后，我要亲自把你们这群操控棋局，真正造就恶孽而脱身于他者的家伙拽入深渊！"),
       "伴随着强烈的意志，世界开始崩坏，画面如同老旧电视机屏幕般闪过雪花纹。",
       "两个光团，一红一灰，猛烈地一次又一次碰撞着。怪异的是，那两团光居然在碰撞中交换着彼此的色彩。",
@@ -1170,6 +1198,7 @@ function playLines(lines, onDone, script = null) {
 function renderLine() {
   const line = dialogLines[dialogIndex];
   if (!line) return;
+  applyStoryStage(line);
   ui.dialogSpeaker.textContent = line.s || "";
   typeTimer = 0;
   typeDone = !line.t || Expedition.prefs.speed === 0;
@@ -1276,6 +1305,7 @@ function closeDialog() {
   currentDialogScript = null;
   ui.dialog.hidden = true;
   ui.dialogChoices.replaceChildren();
+  StoryStaging.finish();
   updateDialogStatus();
   if (wasActive && typeof Expedition !== "undefined") Expedition.onDialogClose();
 }
@@ -1340,6 +1370,7 @@ function resetRun() {
   goldTimer = 0;
   stormSequenceStarted = false;
   StormFlight.reset();
+  StoryStaging.reset();
   painFlash = 0;
   lightning = 0;
   houseFlicker = 0;
@@ -1380,7 +1411,7 @@ function drawTile(c, ch, x, y, map, t) {
   let px = x * TILE;
   let py = y * TILE;
   // 基底地板
-  c.fillStyle = P.floor;
+  c.fillStyle = map === MAPS.blood && y > 10 ? "#30231d" : P.floor;
   c.fillRect(px, py, TILE, TILE);
   // 地板噪点
   for (let i = 0; i < 3; i++) {
@@ -1584,53 +1615,141 @@ function buildTileCache() {
 /* ============================== 角色绘制 ============================== */
 
 function drawPerson(c, x, y, opt = {}) {
-  const bob = opt.walk ? Math.sin(opt.walk * 8) * 1 : 0;
-  const px = Math.round(x);
-  const py = Math.round(y + bob);
+  const pose = opt.pose || "stand";
+  const bob = opt.walk && pose === "stand" ? Math.sin(opt.walk * 8) : 0;
   const coat = opt.coat || "#3a4a6a";
   const hair = opt.hair || "#222";
   const skin = opt.skin || "#e8c8a8";
+  c.save();
+  c.translate(Math.round(x) + 6, Math.round(y + bob) + 8);
+  if (pose === "sleep" || opt.reclined) c.rotate(-Math.PI / 2 + (pose === "pain" && !Expedition.prefs.motion ? Math.sin(StoryStaging.time * 8) * 0.12 : 0));
+  else if (pose === "pain") c.rotate(-0.15);
+  else if (pose === "search") c.rotate(0.2);
+  const px = -6, py = -8;
+  const lowered = pose === "kneel" ? 4 : 0;
+  const arm = (x1, y1, x2, y2, color = coat) => {
+    c.fillStyle = color;
+    const steps = Math.max(1, Math.ceil(Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1))));
+    for (let i = 0; i <= steps; i++) c.fillRect(Math.round(x1 + (x2 - x1) * i / steps), Math.round(y1 + (y2 - y1) * i / steps), 2, 2);
+  };
   // 影
   c.fillStyle = "rgba(0,0,0,0.35)";
   c.fillRect(px + 1, py + 13, 10, 3);
+  let leftHand = { x: px, y: py + 9 + lowered };
+  let rightHand = { x: px + 10, y: py + 9 + lowered };
+  if (pose === "bound") {
+    leftHand = { x: px - 4, y: py + 7 };
+    rightHand = { x: px + 14, y: py + 7 };
+  } else if (pose === "pain") rightHand = { x: px + 9, y: py + 2 };
+  else if (pose === "wake") {
+    leftHand = { x: px - 2, y: py + 1 };
+    rightHand = { x: px + 12, y: py + 1 };
+  } else if (pose === "search") rightHand = { x: px + 15, y: py + 10 };
+  else if (pose === "photo") {
+    leftHand = { x: px + 2, y: py + 8 };
+    rightHand = { x: px + 9, y: py + 8 };
+  } else if (pose === "eat") rightHand = { x: px + 8, y: py + 4 };
+  else if (pose === "carry") {
+    leftHand = { x: px + 1, y: py + 8 };
+    rightHand = { x: px + 10, y: py + 8 };
+  } else if (pose === "kneel") rightHand = { x: px + 13, y: py + 10 };
+  if (opt.blood && opt.heldHeart !== false && ["stand", "bound", "kneel"].includes(pose)) {
+    rightHand = { x: px + (pose === "bound" ? 14 : 12), y: py + (pose === "kneel" ? 10 : 7) };
+  }
+  const stagedArms = opt.blood || pose !== "stand";
+  if (stagedArms) {
+    arm(px + 2, py + 7 + lowered, leftHand.x, leftHand.y);
+    arm(px + 8, py + 7 + lowered, rightHand.x, rightHand.y);
+  }
   // 身体
   c.fillStyle = coat;
-  c.fillRect(px + 2, py + 6, 8, 8);
+  c.fillRect(px + 2, py + 6 + lowered, 8, pose === "kneel" ? 5 : 8);
   c.fillStyle = shade(coat, 0.7);
-  c.fillRect(px + 2, py + 11, 3, 3);
-  c.fillRect(px + 7, py + 11, 3, 3);
+  if (pose === "kneel" || pose === "eat" || pose === "sit") {
+    c.fillRect(px + 1, py + 13, 5, 2);
+    c.fillRect(px + 7, py + 13, 5, 2);
+  } else {
+    c.fillRect(px + 2, py + 11, 3, 3);
+    c.fillRect(px + 7, py + 11, 3, 3);
+  }
   // 头
   c.fillStyle = skin;
-  c.fillRect(px + 3, py + 1, 6, 5);
+  c.fillRect(px + 3, py + 1 + lowered, 6, 5);
+  if (stagedArms) {
+    c.fillRect(leftHand.x, leftHand.y, 2, 2);
+    c.fillRect(rightHand.x, rightHand.y, 2, 2);
+  }
   c.fillStyle = hair;
-  c.fillRect(px + 2, py, 8, 3);
-  c.fillRect(px + 2, py + 1, 2, 4);
+  c.fillRect(px + 2, py + lowered, 8, 3);
+  c.fillRect(px + 2, py + 1 + lowered, 2, 4);
   // 眼（按朝向偏移）
   const eyeOff = opt.dir === 1 ? -1 : opt.dir === 2 ? 1 : 0;
-  if (opt.dir !== 3) {
+  if (opt.dir !== 3 && pose !== "mirror") {
     c.fillStyle = "#1a1a1a";
-    c.fillRect(px + 4 + eyeOff, py + 3, 1, 1);
-    c.fillRect(px + 7 + eyeOff, py + 3, 1, 1);
+    c.fillRect(px + 4 + eyeOff, py + 3 + lowered, pose === "sleep" ? 2 : 1, 1);
+    c.fillRect(px + 7 + eyeOff, py + 3 + lowered, pose === "sleep" ? 2 : 1, 1);
   }
   if (opt.beard) {
     c.fillStyle = "#b8b0a0";
-    c.fillRect(px + 3, py + 5, 6, 2);
+    c.fillRect(px + 3, py + 5 + lowered, 6, 2);
   }
   if (opt.bun) {
     c.fillStyle = hair;
-    c.fillRect(px + 8, py - 1, 3, 3);
+    c.fillRect(px + 8, py - 1 + lowered, 3, 3);
   }
   if (opt.hood) {
     c.fillStyle = "#555560";
-    c.fillRect(px + 2, py - 1, 8, 4);
-    c.fillRect(px + 1, py + 1, 3, 5);
+    c.fillRect(px + 2, py - 1 + lowered, 8, 4);
+    c.fillRect(px + 1, py + 1 + lowered, 3, 5);
+  }
+  if (pose === "bound") {
+    c.fillStyle = "#514052";
+    c.fillRect(leftHand.x + 1, leftHand.y, 2, 2); c.fillRect(rightHand.x - 1, rightHand.y, 2, 2);
+    c.fillRect(px + 2, py + 8, 8, 1);
+  } else if (pose === "photo") {
+    c.fillStyle = "#d8d0b9"; c.fillRect(px + 3, py + 7, 6, 4);
+    c.fillStyle = "#7d8583"; c.fillRect(px + 4, py + 8, 4, 2);
+  } else if (pose === "eat") {
+    c.fillStyle = "#c6c1ae"; c.fillRect(px - 1, py + 9, 6, 3);
+    c.fillStyle = "#eee8d3"; c.fillRect(px, py + 8, 4, 2);
+    arm(px + 8, py + 6, px + 7, py + 4, "#b9a681");
+  } else if (pose === "carry") {
+    c.fillStyle = "#c2baa6"; c.fillRect(px, py + 8, 12, 3);
+    c.fillStyle = "#748547"; c.fillRect(px + 1, py + 7, 10, 2);
+    c.fillStyle = "#b4b072"; c.fillRect(px + 3, py + 7, 2, 1); c.fillRect(px + 7, py + 8, 2, 1);
+  }
+  if (opt.blood) {
+    // Fixed splashes cover face, bare hands, shirt and both trouser legs.
+    c.fillStyle = "#751d2a";
+    c.fillRect(px + 7, py + 2 + lowered, 2, 2);
+    c.fillRect(px + 4, py + 4 + lowered, 1, 2);
+    c.fillRect(leftHand.x, leftHand.y, 2, 2);
+    c.fillRect(rightHand.x, rightHand.y, 2, 2);
+    c.fillRect(px + 3, py + 7 + lowered, 3, 2);
+    c.fillRect(px + 7, py + 9 + lowered, 2, 3);
+    c.fillRect(px + 2, py + 12, 2, 2);
+    c.fillRect(px + 8, py + 12, 2, 2);
+    c.fillStyle = "#b53a40";
+    c.fillRect(px + 8, py + 3 + lowered, 1, 1);
+    c.fillRect(px + 4, py + 8 + lowered, 1, 1);
+    c.fillRect(rightHand.x, rightHand.y, 1, 1);
+    if (opt.heldHeart !== false && ["stand", "bound", "kneel"].includes(pose)) {
+      // The heart is held by this actor's hand; it is not a prop on the corpse.
+      const hx = rightHand.x + 2, hy = rightHand.y - 3;
+      const beat = Expedition.prefs.motion ? 0 : Math.sin(performance.now() / 140) > 0.86 ? 1 : 0;
+      c.fillStyle = "#541020"; c.fillRect(hx - 1, hy + 1, 6, 5);
+      c.fillStyle = "#a62c3d"; c.fillRect(hx, hy, 2, 4 + beat); c.fillRect(hx + 2, hy - 1, 2, 5 + beat); c.fillRect(hx + 1, hy + 4, 2, 2);
+      c.fillStyle = "#d26867"; c.fillRect(hx + 2, hy, 1, 2);
+    }
   }
   if (opt.glow) {
+    const alpha = c.globalAlpha;
     c.fillStyle = opt.glow;
-    c.globalAlpha = Expedition.prefs.motion ? 0.25 : 0.25 + Math.sin(performance.now() / 300) * 0.1;
+    c.globalAlpha = alpha * (Expedition.prefs.motion ? 0.25 : 0.25 + Math.sin(performance.now() / 300) * 0.1);
     c.fillRect(px, py - 2, 12, 17);
-    c.globalAlpha = 1;
+    c.globalAlpha = alpha;
   }
+  c.restore();
 }
 
 /* ============================== 粒子 ============================== */
@@ -1831,7 +1950,8 @@ function nearestInteractable() {
   for (const it of map.interact || []) consider(it.x, it.y, { type: "interact", it });
   for (const n of map.npcs || []) {
     if (n.cond && !F[n.cond]) continue;
-    consider(n.x, n.y, { type: "npc", it: n });
+    const actor = StoryStaging.npc(n);
+    if (!actor.hidden) consider(actor.x, actor.y, { type: "npc", it: n });
   }
   return best;
 }
@@ -1868,6 +1988,7 @@ function handleInteraction(id) {
     case "recall": playScript("recall"); break;
     case "edge": playScript("edge"); break;
     case "bed": playScript("bed"); break;
+    case "emptyLiving": playScript("emptyLiving"); break;
     case "bathMirror": playScript("bathMirror"); break;
     case "washer":
       if (F.hasPhoto) playLines(["洗衣机里已经空了。照片残片在你手里。"], () => {});
@@ -1882,7 +2003,10 @@ function handleInteraction(id) {
       break;
     case "famBed": playScript("famBed"); break;
     case "father": playScript("father"); break;
-    case "mother": playScript("mother"); break;
+    case "mother":
+      if (F.mother) playLines([quote("吃饭了，小防，还有老公……")], () => {});
+      else playScript("mother");
+      break;
     case "table": playScript("table"); break;
     case "sister":
       if (F.sister) playLines(["血色已经干涸。名字留在了记忆里。"], () => {});
@@ -1960,6 +2084,7 @@ function gotoArea(area, fadeText) {
     G.area = area;
     stormSequenceStarted = false;
     StormFlight.reset();
+    StoryStaging.reset();
     const sp = MAPS[area].spawn;
     G.px = sp.x * TILE + 3;
     G.py = sp.y * TILE + 2;
@@ -1980,9 +2105,48 @@ function gotoArea(area, fadeText) {
       Expedition.onAreaChange();
       if (pendingScript) playScript(pendingScript);
       if (area === "storm") startStormSequence();
+      startAreaScene();
       saveRun();
     }, 650));
   }, 550));
+}
+
+function applyStoryStage(line) {
+  const cue = line.stage;
+  if ((cue?.area && MAPS[cue.area] && G.area !== cue.area) || cue?.scene === "tower" || cue?.scene === "curtain") {
+    Expedition.chapterTime = 0;
+    Expedition.dom.chapterCard.classList.remove("visible");
+  }
+  if (cue?.area && MAPS[cue.area] && G.area !== cue.area) {
+    G.area = cue.area;
+    particles = [];
+    goldDrop = null;
+    buildTileCache();
+    AudioEngine.play(MAPS[G.area].sound);
+  }
+  if (cue?.at) {
+    G.px = cue.at[0] * TILE + 3;
+    G.py = cue.at[1] * TILE + 2;
+    G.walk = 0;
+  }
+  if (cue?.dir !== undefined) G.dir = cue.dir;
+  if (cue?.pose === "pain") painFlash = 0.8;
+  StoryStaging.onLine(line);
+  if (cue) { updateHud(); Expedition.sync(); }
+}
+
+function startAreaScene() {
+  if (dialogActive || transitionLock || Expedition.paused() || !ui.start.hidden || !ui.ending.hidden) return;
+  if (G.area === "house_empty" && !F.emptyWoke) playScript("bed");
+  else if (G.area === "house_family") {
+    if (F.familyDone) gotoArea("blood", "第二幕 · 荒诞的转变");
+    else if (!F.familyWoke) playScript("famBed");
+  }
+  else if (G.area === "blood") {
+    if (F.refused) gotoArea("rain", "显意识的边缘");
+    else if (!F.sister) playScript("sister");
+    else if (F.parents) playScript("accuse");
+  }
 }
 
 /* ============================== 金色雨滴（终章） ============================== */
@@ -2140,16 +2304,20 @@ function renderAreaFx(map, cam, t) {
     }
   } else if (id === "house_family") {
     // 新闻联播的蓝白闪光，落在沙发一带
-    const a = 0.05 + hash(Math.floor(t * 8), 1, 1) * 0.08;
+    const a = StoryStaging.family === "table" || StoryStaging.family === "gone" ? 0 : 0.05 + hash(Math.floor(t * 8), 1, 1) * 0.08;
     ctx.fillStyle = `rgba(160,190,230,${a})`;
-    ctx.fillRect(9 * TILE - cam.x, 1 * TILE - cam.y, 44, 28);
+    ctx.fillRect(12 * TILE - cam.x, 1 * TILE - cam.y, 44, 28);
+    const tvX = 14 * TILE - cam.x, tvY = TILE - cam.y;
+    ctx.fillStyle = "#101018"; ctx.fillRect(tvX, tvY, 17, 12);
+    ctx.fillStyle = a ? "#617f9a" : "#171c24"; ctx.fillRect(tvX + 2, tvY + 2, 13, 7);
+    if (a) { ctx.fillStyle = "#abbac4"; ctx.fillRect(tvX + 4, tvY + 6, 8, 1); }
+    ctx.fillStyle = "#18161a"; ctx.fillRect(tvX + 7, tvY + 12, 3, 2);
   } else if (id === "blood") {
     // The hand and heart, then two charred remains: the objects described in the scene.
     const sx = 13 * TILE + 8 - cam.x, sy = 7 * TILE + 8 - cam.y;
     ctx.save(); ctx.translate(sx, sy); ctx.rotate(Math.PI / 2);
     drawPerson(ctx, -6, -8, { coat: "#603345", hair: "#211318", skin: "#aa8278", dir: 0 });
     ctx.restore();
-    ctx.fillStyle = "#a92d38"; ctx.fillRect(sx - 5, sy - 5, 4, 4); ctx.fillRect(sx - 6, sy - 4, 6, 2);
     const px = 13 * TILE - cam.x, py = 15 * TILE - cam.y;
     ctx.fillStyle = "#09080a"; ctx.fillRect(px - 3, py + 1, 8, 13); ctx.fillRect(px + 5, py + 2, 8, 12);
     ctx.strokeStyle = "#bc6739"; ctx.beginPath(); ctx.moveTo(px - 1, py - 3); ctx.lineTo(px + 12, py + 12); ctx.stroke();
@@ -2215,14 +2383,20 @@ function render(now) {
     return;
   }
 
+  if (StoryStaging.renderSpecial(now, dt)) {
+    Expedition.render(dt, { x: 0, y: 0 }, now);
+    requestAnimationFrame(render);
+    return;
+  }
+
   // 相机
   const map = MAPS[G.area];
   const mw = map.grid[0].length * TILE;
   const mh = map.grid.length * TILE;
-  const cam = {
+  const cam = StoryStaging.camera(map, {
     x: Math.max(0, Math.min(mw - VIEW_W, G.px + 6 - VIEW_W / 2)),
     y: Math.max(0, Math.min(mh - VIEW_H, G.py + 8 - VIEW_H / 2)),
-  };
+  });
 
   ctx.clearRect(0, 0, VIEW_W, VIEW_H);
 
@@ -2269,6 +2443,7 @@ function render(now) {
   // 交互点标记
   const near = nearestInteractable();
   const drawMarker = (tx, ty, active) => {
+    if (dialogActive) return;
     const sx = tx * TILE + 8 - cam.x;
     const sy = ty * TILE - 4 - cam.y + Math.sin(t * 4) * 2;
     ctx.fillStyle = active ? "#f0d88a" : "rgba(240,216,138,0.55)";
@@ -2278,16 +2453,21 @@ function render(now) {
   for (const it of map.interact || []) drawMarker(it.x, it.y, near && near.it === it);
   for (const n of map.npcs || []) {
     if (n.cond && !F[n.cond]) continue;
-    drawMarker(n.x, n.y, near && near.it === n);
+    const actor = StoryStaging.npc(n);
+    if (!actor.hidden) drawMarker(actor.x, actor.y, near && near.it === n);
   }
+
+  StoryStaging.renderProps(cam, t);
 
   // NPC
   for (const n of map.npcs || []) {
     if (n.cond && !F[n.cond]) continue;
-    const sx = n.x * TILE + 2 - cam.x;
-    const sy = n.y * TILE - cam.y;
-    if (n.kind === "father") drawPerson(ctx, sx, sy, { coat: "#5a5248", hair: "#3a342c", beard: true, dir: 0 });
-    else if (n.kind === "mother") drawPerson(ctx, sx, sy, { coat: "#7a5a5a", hair: "#4a342c", bun: true, dir: 1 });
+    const actor = StoryStaging.npc(n);
+    if (actor.hidden) continue;
+    const sx = actor.x * TILE + 2 - cam.x;
+    const sy = actor.y * TILE - cam.y;
+    if (n.kind === "father") drawPerson(ctx, sx, sy, { coat: "#5a5248", hair: "#3a342c", beard: true, dir: actor.dir, pose: actor.pose });
+    else if (n.kind === "mother") drawPerson(ctx, sx, sy, { coat: "#7a5a5a", hair: "#4a342c", bun: true, dir: actor.dir, pose: actor.pose });
     else if (n.kind === "repress") drawPerson(ctx, sx, sy, { coat: "#4a4a55", hood: true, skin: "#b8b8c0", glow: "#7fb3d5", dir: 0 });
     else if (n.kind === "senpai") drawPerson(ctx, sx, sy, { coat: "#c8b890", hair: "#e8dcc0", glow: "#f0e0a8", dir: 3 });
     else if (n.kind === "echo") {
@@ -2318,7 +2498,9 @@ function render(now) {
   }
 
   // 玩家
-  drawPerson(ctx, G.px - cam.x, G.py - cam.y, { dir: G.dir, walk: G.walk, coat: "#3a4a6a" });
+  const playerX = StoryStaging.coffin ? 12 * TILE : G.px;
+  const playerY = StoryStaging.coffin ? 7.5 * TILE : G.py;
+  drawPerson(ctx, playerX - cam.x, playerY - cam.y, { dir: G.dir, walk: G.walk, coat: "#3a4a6a", ...StoryStaging.playerOptions() });
 
   drawParticles(ctx, cam);
 
@@ -2406,6 +2588,7 @@ ui.startButton.addEventListener("click", () => {
   Expedition.onAreaChange();
   if (restoreEnding()) return;
   if (G.area === "storm") startStormSequence();
+  startAreaScene();
   if (G.area === "mirror" && !F.m1 && !F.m2 && !F.m3) {
     playLines([
       "……睁开眼睛的时候，首先看到的是自己的手。",
@@ -2417,6 +2600,7 @@ ui.startButton.addEventListener("click", () => {
 /* ============================== 启动 ============================== */
 
 loadAll();
+StoryStaging.reset();
 buildTileCache();
 updateHud();
 Expedition.init();
