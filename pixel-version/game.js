@@ -789,9 +789,13 @@ const SCRIPTS = {
   },
   accuse: {
     lines: [
-      staged(fracture("看看这样的你吧，犯下了如此滔天大罪的感觉如何？"), { at: [12, 14], pose: "bound", focus: { x: 13, y: 15 } }),
-      "是你亲手杀死了你的妹妹，挖出了她的心脏。是你亲自把利剑刺向你父亲的胸膛，将两个人一同在绝望中贯穿。",
-      "如今造下此等恶孽，你该如何是好呢？",
+      staged(fracture("看看这样的你吧，犯下了如此滔天大罪的感觉如何？"), { at: [12, 14], pose: "bound", focus: { x: 13, y: 15 }, takeover: 1 }),
+      staged(fracture("是你亲手杀死了你的妹妹，挖出了她的心脏。"), { takeover: 2 }),
+      staged(fracture("是你亲自把利剑刺向你父亲的胸膛，而对特别巧合的等待到你的母亲扑了上去试图挡开这一击时再动手，将两个人一同再绝望中贯穿。"), { takeover: 2 }),
+      staged(fracture("是你亲自杀害了家中的所有人，然后一把火点燃了一切。"), { takeover: 2 }),
+      staged(fracture("如今造下此等恶孽，你该如何是好呢？"), { takeover: 3 }),
+      staged(fracture("是接受这一切然后就此堕入魔渊，还是因为接受不了这一切而自刎归天？"), { takeover: 3 }),
+      staged(fracture("又或者，只是这样恍恍惚惚茫茫然然，疯疯癫癫的度过余生？"), { takeover: 3 }),
     ],
     need: () => F.parents,
     locked: "庭院里还有什么没有看清。",
@@ -1199,9 +1203,10 @@ function renderLine() {
   const line = dialogLines[dialogIndex];
   if (!line) return;
   applyStoryStage(line);
+  setDialogPresentation(line);
   ui.dialogSpeaker.textContent = line.s || "";
   typeTimer = 0;
-  typeDone = !line.t || Expedition.prefs.speed === 0;
+  typeDone = ui.dialog.dataset.presentation === "takeover" || !line.t || Expedition.prefs.speed === 0;
   ui.dialogText.replaceChildren();
   if (line.rewrite) {
     const del = document.createElement("del");
@@ -1216,6 +1221,19 @@ function renderLine() {
   updateDialogStatus();
   if (typeof Expedition !== "undefined") Expedition.onLine(line, dialogIndex, dialogLines.length);
   if (G.area === "storm") StormFlight.onLine(line);
+}
+
+function setDialogPresentation(line) {
+  const pressure = line?.stage?.takeover;
+  if (G.area === "blood" && [1, 2, 3].includes(pressure)) {
+    ui.dialog.dataset.presentation = "takeover";
+    ui.dialog.dataset.pressure = String(pressure);
+  } else {
+    delete ui.dialog.dataset.presentation;
+    delete ui.dialog.dataset.pressure;
+  }
+  delete ui.dialog.dataset.choosing;
+  ui.dialog.scrollTop = 0;
 }
 
 function currentFullText() {
@@ -1271,6 +1289,7 @@ function paintText(text, cls) {
 
 function showChoices(choices) {
   dialogChoices = choices;
+  ui.dialog.dataset.choosing = "true";
   const script = currentDialogScript;
   ui.dialogChoices.replaceChildren();
   for (const ch of choices) {
@@ -1280,7 +1299,7 @@ function showChoices(choices) {
     btn.addEventListener("click", (event) => {
       // 选择可能立刻打开下一段对白，不能把同一次点击冒泡成「继续」。
       event.stopPropagation();
-      if (!dialogActive || dialogChoices !== choices) return;
+      if (!dialogActive || dialogChoices !== choices || Expedition.paused()) return;
       finishDialog(() => {
         if (script && script.then) script.then();
         ch.run();
@@ -1305,6 +1324,7 @@ function closeDialog() {
   currentDialogScript = null;
   ui.dialog.hidden = true;
   ui.dialogChoices.replaceChildren();
+  setDialogPresentation();
   StoryStaging.finish();
   updateDialogStatus();
   if (wasActive && typeof Expedition !== "undefined") Expedition.onDialogClose();
@@ -2113,7 +2133,7 @@ function gotoArea(area, fadeText) {
 
 function applyStoryStage(line) {
   const cue = line.stage;
-  if ((cue?.area && MAPS[cue.area] && G.area !== cue.area) || cue?.scene === "tower" || cue?.scene === "curtain") {
+  if ((cue?.area && MAPS[cue.area] && G.area !== cue.area) || cue?.scene === "tower" || cue?.scene === "curtain" || cue?.takeover) {
     Expedition.chapterTime = 0;
     Expedition.dom.chapterCard.classList.remove("visible");
   }

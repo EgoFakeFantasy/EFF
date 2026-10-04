@@ -425,6 +425,23 @@ function enterBlood(game) {
   assert.equal(game.evaluate("!!dialogChoices"), true, "seeing the remains must lead directly to the accusation");
 }
 
+function beginAccusation(game) {
+  enterFamily(game);
+  for (const id of ["father", "mother", "table"]) interact(game, id);
+  beginInteraction(game, "parents");
+  advanceToText(game, "但他不能再移动了");
+  nextLine(game);
+  assert.equal(game.evaluate("currentDialogScript === SCRIPTS.accuse"), true);
+  assert.equal(game.evaluate("dialogIndex"), 0);
+}
+
+function assertOrdinaryDialog(game) {
+  const dialog = game.ids.get("dialog");
+  for (const key of ["presentation", "pressure", "choosing"]) {
+    assert.equal(dialog.dataset[key], undefined, `${key} survives after the outsider releases the screen`);
+  }
+}
+
 function enterMeta(game, retainRain) {
   enterBlood(game); choose(game, "不，我拒绝");
   assert.equal(game.evaluate("G.area"), "rain");
@@ -908,6 +925,120 @@ test("the blood scene binds the protagonist holding the heart and leads from the
   assert.equal(game.evaluate("!!F.parents"), true);
   assert.equal(game.evaluate("!!dialogChoices"), true, "seeing the remains still requires walking back to an accusation marker");
   assert.equal(game.evaluate("StoryStaging.playerOptions().pose"), "bound");
+});
+
+test("the outsider takes over seven complete screens, escalates pressure, and preserves the original accusation in the journal", () => {
+  const game = harness(); beginAccusation(game);
+  const original = "看看这样的你吧，犯下了如此滔天大罪的感觉如何？是你亲手杀死了你的妹妹，挖出了她的心脏。是你亲自把利剑刺向你父亲的胸膛，而对特别巧合的等待到你的母亲扑了上去试图挡开这一击时再动手，将两个人一同再绝望中贯穿。是你亲自杀害了家中的所有人，然后一把火点燃了一切。如今造下此等恶孽，你该如何是好呢？是接受这一切然后就此堕入魔渊，还是因为接受不了这一切而自刎归天？又或者，只是这样恍恍惚惚茫茫然然，疯疯癫癫的度过余生？";
+  const offered = [];
+  const pressure = [];
+  const dialog = game.ids.get("dialog");
+  assert.equal(game.evaluate("dialogLines.length"), 7);
+  for (let screen = 0; screen < 7; screen++) {
+    const text = game.evaluate("currentFullText()");
+    offered.push(text);
+    pressure.push(Number(dialog.dataset.pressure));
+    assert.equal(game.evaluate("dialogIndex"), screen);
+    assert.equal(dialog.dataset.presentation, "takeover");
+    assert.equal(dialog.dataset.choosing, undefined);
+    assert.equal(game.evaluate("typeDone"), true, `outsider screen ${screen + 1} uses the ordinary typewriter`);
+    assert.equal(game.ids.get("dialogText").textContent, text, `outsider screen ${screen + 1} is not fully visible immediately`);
+    assert.equal(game.evaluate("StoryStaging.playerOptions().pose"), "bound");
+    // Each real input advances once, without an initial reveal-only press.
+    if (screen % 2) {
+      game.window.dispatchEvent(new MockEvent("keydown", { key: "e", repeat: false, target: game.ids.get("screen") }));
+      game.window.dispatchEvent(new MockEvent("keyup", { key: "e", target: game.ids.get("screen") }));
+    } else dialog.click();
+  }
+  assert.equal(offered.join(""), original, "screen breaks change or omit the supplied accusation");
+  assert.deepEqual(pressure, [1, 2, 2, 2, 3, 3, 3]);
+  assert.equal(game.evaluate("!!dialogChoices"), true);
+  assert.equal(dialog.dataset.presentation, "takeover");
+  assert.equal(dialog.dataset.pressure, "3");
+  assert.equal(dialog.dataset.choosing, "true");
+  assert.equal(game.ids.get("dialogText").textContent, offered.at(-1), "offering responses erases the outsider's final sentence");
+  assert.deepEqual(game.value("Expedition.journal.slice(-7).map(entry => entry.text)"), offered);
+  game.ids.get("journalButton").click();
+  assert.equal(game.ids.get("journalDialog").open, true);
+  assert.deepEqual(game.ids.get("journalEntries").children.slice(-7).map(entry => entry.querySelector("p").textContent), offered);
+  game.document.querySelector("[data-close='journalDialog']").click();
+  assert.equal(game.document.activeElement, game.ids.get("dialogChoices").children[0]);
+  assert.equal(game.ids.get("dialogText").textContent, offered.at(-1));
+});
+
+test("settings freeze takeover inputs and refusal restores ordinary dialogue and releases the bound protagonist", () => {
+  const game = harness(); beginAccusation(game);
+  const dialog = game.ids.get("dialog");
+  const frozen = game.value("[dialogIndex, currentFullText(), typeDone, typeTimer, StoryStaging.playerOptions().pose]");
+  game.ids.get("settingsButton").click();
+  assert.equal(game.ids.get("settingsDialog").open, true);
+  dialog.click();
+  game.ids.get("interactButton").click();
+  game.ids.get("touchInteract").click();
+  game.window.dispatchEvent(new MockEvent("keydown", { key: "e", repeat: false, target: game.ids.get("screen") }));
+  game.window.dispatchEvent(new MockEvent("keyup", { key: "e", target: game.ids.get("screen") }));
+  for (let i = 0; i < 40; i++) game.frame(16);
+  assert.deepEqual(game.value("[dialogIndex, currentFullText(), typeDone, typeTimer, StoryStaging.playerOptions().pose]"), frozen);
+  assert.equal(game.ids.get("dialogText").textContent, frozen[1]);
+  assert.equal(dialog.dataset.presentation, "takeover");
+  assert.equal(dialog.dataset.pressure, "1");
+  game.document.querySelector("[data-close='settingsDialog']").click();
+  dialog.click();
+  assert.equal(game.evaluate("dialogIndex"), 1, "closing settings leaves the subtitle input paused");
+  finishDialog(game);
+  const refusal = game.ids.get("dialogChoices").children.find(button => button.textContent.includes("不，我拒绝"));
+  game.ids.get("settingsButton").click();
+  dialog.click();
+  refusal.click();
+  game.window.dispatchEvent(new MockEvent("keydown", { key: "Enter", repeat: false, target: game.ids.get("screen") }));
+  game.window.dispatchEvent(new MockEvent("keyup", { key: "Enter", target: game.ids.get("screen") }));
+  assert.equal(game.evaluate("currentDialogScript === SCRIPTS.accuse && !!dialogChoices"), true);
+  assert.equal(dialog.dataset.choosing, "true");
+  game.document.querySelector("[data-close='settingsDialog']").click();
+  assert.equal(game.document.activeElement, game.ids.get("dialogChoices").children[0]);
+  refusal.click();
+  assert.equal(game.evaluate("currentFullText()"), "不，我拒绝这一切。");
+  assertOrdinaryDialog(game);
+  assert.equal(game.evaluate("typeDone"), false, "the protagonist inherits the outsider's instant text presentation");
+  assert.equal(game.evaluate("StoryStaging.playerOptions().pose"), "stand");
+  nextLine(game);
+  assert.equal(game.evaluate("StoryStaging.playerOptions().pose"), "stand");
+  assertOrdinaryDialog(game);
+  finishDialog(game); game.tick(); finishDialog(game);
+  assert.equal(game.evaluate("G.area"), "rain");
+  assert.equal(game.evaluate("!!F.refused"), true);
+  assertOrdinaryDialog(game);
+});
+
+test("restarting and both accusation endings clear takeover presentation from subsequent screens", () => {
+  for (const awaitingChoice of [false, true]) {
+    const game = harness(); beginAccusation(game);
+    if (awaitingChoice) finishDialog(game);
+    assert.equal(game.ids.get("dialog").dataset.presentation, "takeover");
+    game.ids.get("restartButton").click(); game.tick(2500); game.frame(16);
+    assert.equal(game.evaluate("G.area"), "mirror");
+    assert.equal(game.evaluate("dialogActive"), false);
+    assert.equal(game.ids.get("dialog").hidden, true);
+    assertOrdinaryDialog(game);
+    beginInteraction(game, "m1");
+    assertOrdinaryDialog(game);
+    assert.equal(game.evaluate("typeDone"), false);
+  }
+  for (const [id, label] of [["bad_accept", "接受它们"], ["bad_escape", "只想从这里"]]) {
+    const game = harness(); enterBlood(game);
+    assert.equal(game.ids.get("dialog").dataset.choosing, "true");
+    choose(game, label); assertEnding(game, id);
+    assert.equal(game.evaluate("dialogActive"), false);
+    assert.equal(game.ids.get("dialog").hidden, true);
+    assertOrdinaryDialog(game);
+    game.ids.get("endingRestart").click();
+    assert.equal(game.evaluate("G.area"), "mirror");
+    assertOrdinaryDialog(game);
+    finishDialog(game);
+    beginInteraction(game, "m1");
+    assertOrdinaryDialog(game);
+    assert.equal(game.evaluate("typeDone"), false);
+  }
 });
 
 test("the mother carries food through open floor, pauses with settings, and stays in the living room after refresh", () => {

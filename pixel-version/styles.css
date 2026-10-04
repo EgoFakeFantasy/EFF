@@ -82,6 +82,7 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 
 .screen-frame {
   position: relative;
+  container-type: inline-size;
   flex: 1 1 auto;
   border: 1px solid var(--edge);
   background: #000;
@@ -169,6 +170,157 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 .dialog-choices button {
   text-align: left;
   border-left: 3px solid var(--accent);
+}
+
+/* The intruder's words occupy the scene itself, with the same reading controls. */
+.dialog[data-presentation="takeover"] {
+  --takeover-ink: #f2ded3;
+  --takeover-glow: #8d1f26;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  padding: clamp(14px, 3cqw, 34px);
+  max-height: none;
+  border: 0;
+  background:
+    radial-gradient(ellipse at 50% 58%, #19070b28 12%, #21050885 70%, #020104d9 100%),
+    linear-gradient(180deg, #040106b5, #31090f5e 50%, #030105d9);
+  box-shadow: inset 0 0 80px #030105a8;
+  color: var(--takeover-ink);
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-color: #7b3439 #0a0407;
+  scrollbar-width: thin;
+  isolation: isolate;
+}
+.dialog[data-presentation="takeover"] .dialog-speaker {
+  flex: 0 0 auto;
+  margin-bottom: 10px;
+  color: #d68b87;
+}
+.dialog[data-presentation="takeover"] .dialog-text {
+  flex: 0 0 auto;
+  margin: auto 0;
+  min-height: 0;
+  font-size: clamp(24px, 4.6vw, 48px);
+  font-size: clamp(24px, 5.3cqw, 48px);
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: -0.025em;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+  text-align: center;
+  color: var(--takeover-ink);
+  text-shadow:
+    0 2px 1px #000,
+    2px 0 0 #190206,
+    -2px 0 0 #190206,
+    0 0 14px var(--takeover-glow),
+    0 8px 28px #000;
+}
+.dialog[data-presentation="takeover"] .dialog-text .fracture {
+  color: inherit;
+}
+.dialog[data-presentation="takeover"][data-pressure="2"] {
+  --takeover-ink: #ffcbc1;
+  --takeover-glow: #bc242b;
+  background:
+    radial-gradient(ellipse at 50% 58%, #35070e38 5%, #2f050a9e 65%, #020104e8 100%),
+    linear-gradient(180deg, #0c0105bd, #420a125e 48%, #020104e0);
+  box-shadow: inset 0 0 110px #090104c4;
+}
+.dialog[data-presentation="takeover"][data-pressure="2"] .dialog-text {
+  font-size: clamp(25px, 5vw, 52px);
+  font-size: clamp(25px, 5.8cqw, 52px);
+  line-height: 1.25;
+  letter-spacing: -0.04em;
+}
+.dialog[data-presentation="takeover"][data-pressure="3"] {
+  --takeover-ink: #ffe1d9;
+  --takeover-glow: #dc3035;
+  background:
+    radial-gradient(ellipse at 50% 58%, #48091045 0%, #33040ba8 57%, #010003ef 100%),
+    linear-gradient(180deg, #160006c9, #540b1666 48%, #020003ed);
+  box-shadow: inset 0 0 140px #0b0003db;
+}
+.dialog[data-presentation="takeover"][data-pressure="3"] .dialog-text {
+  font-size: clamp(28px, 6vw, 64px);
+  font-size: clamp(28px, 7cqw, 64px);
+  font-weight: 900;
+  line-height: 1.22;
+  letter-spacing: -0.055em;
+  text-shadow:
+    0 3px 1px #000,
+    3px 0 0 #350108,
+    -3px 0 0 #350108,
+    0 0 18px var(--takeover-glow),
+    0 10px 34px #000;
+}
+.dialog[data-presentation="takeover"] .dialog-footer {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 12px;
+  color: #b98d8b;
+  font-size: 11px;
+  line-height: 1.5;
+  text-shadow: 0 1px 3px #000;
+}
+.dialog[data-presentation="takeover"] .dialog-hint { color: #dbb6af; }
+.dialog[data-presentation="takeover"] #dialogProgress { display: none; }
+.dialog[data-presentation="takeover"] .dialog-choices {
+  flex: 0 0 auto;
+  gap: 7px;
+  margin-top: 10px;
+}
+.dialog[data-presentation="takeover"] .dialog-choices:empty { display: none; }
+.dialog[data-presentation="takeover"] .dialog-choices button {
+  min-height: 40px;
+  padding: 9px 12px;
+  border: 1px solid #96514f;
+  border-left: 3px solid #df8e83;
+  background: #100409e8;
+  color: #f8e1d8;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-shadow: 0 1px 2px #000;
+}
+.dialog[data-presentation="takeover"] .dialog-choices button:hover {
+  border-color: #f2bbb0;
+  background: #391018;
+  color: #fff4eb;
+}
+.dialog[data-presentation="takeover"] .dialog-choices button:focus-visible {
+  outline: 2px solid #ffe0c4;
+  outline-offset: -4px;
+  border-color: #f2bbb0;
+  background: #391018;
+}
+.dialog[data-presentation="takeover"][data-choosing="true"] .dialog-text {
+  font-size: clamp(22px, 4.5vw, 42px);
+  font-size: clamp(22px, 4.8cqw, 42px);
+  line-height: 1.25;
+}
+
+@media (max-width: 520px) {
+  .dialog[data-presentation="takeover"] { padding: 12px; }
+  .dialog[data-presentation="takeover"] .dialog-footer {
+    margin-top: 6px;
+    font-size: 10px;
+  }
+  .dialog[data-presentation="takeover"] .dialog-choices {
+    gap: 5px;
+    margin-top: 6px;
+  }
+  .dialog[data-presentation="takeover"] .dialog-choices button {
+    min-height: 36px;
+    padding: 7px 10px;
+    font-size: 13px;
+  }
 }
 
 .fade {
