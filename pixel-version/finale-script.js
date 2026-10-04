@@ -543,4 +543,3 @@ const FinaleScenes = {
     ]
   }
 };
-
