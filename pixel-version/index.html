@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>无中归来者 · 箱庭版</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">箱庭探索 / 记忆碎片</p>
+          <h1>无中归来者 <span class="edition">箱庭版</span></h1>
+        </div>
+        <nav class="top-actions" aria-label="游戏操作">
+          <button id="audioButton" type="button">音景：关</button>
+          <button id="codexButton" type="button">图鉴</button>
+          <button id="restartButton" type="button">重启</button>
+        </nav>
+      </header>
+
+      <main class="game-wrap">
+        <div class="screen-frame">
+          <canvas id="screen" width="320" height="192"></canvas>
+          <div id="hud" class="hud">
+            <span id="areaName">镜像回廊</span>
+            <span id="hudRight">记忆 0 · 碎片 0/8</span>
+          </div>
+
+          <div id="dialog" class="dialog" hidden>
+            <p id="dialogSpeaker" class="dialog-speaker"></p>
+            <p id="dialogText" class="dialog-text"></p>
+            <span class="dialog-hint">E / 空格 继续</span>
+            <div id="dialogChoices" class="dialog-choices"></div>
+          </div>
+
+          <div id="fade" class="fade"><p id="fadeText"></p></div>
+
+          <div id="endingOverlay" class="ending-overlay" hidden>
+            <p id="endingCode" class="ending-code"></p>
+            <h2 id="endingName"></h2>
+            <p id="endingSummary" class="ending-summary"></p>
+            <div id="endingText" class="ending-text"></div>
+            <div class="ending-actions">
+              <button id="endingRestart" type="button">从镜像阶段重新开始</button>
+              <button id="endingStay" type="button" hidden>继续停留</button>
+            </div>
+          </div>
+
+          <div id="startOverlay" class="start-overlay">
+            <h2>无中归来者 · 箱庭版</h2>
+            <p>方向键 / WASD 移动 · E / 空格 互动与推进对话</p>
+            <p>靠近发光的事物，按 E 调查。有些顺序，本身就是结局。</p>
+            <button id="startButton" type="button">进入回廊</button>
+          </div>
+        </div>
+
+        <aside id="codex" class="codex" hidden>
+          <h2>记忆图鉴</h2>
+          <h3>记忆锚点</h3>
+          <ul id="codexMemories" class="codex-list"></ul>
+          <h3>记忆碎片（跨周目保留）</h3>
+          <ul id="codexShards" class="codex-list"></ul>
+          <h3>已抵达的结局</h3>
+          <ul id="codexEndings" class="codex-list"></ul>
+        </aside>
+      </main>
+
+      <footer class="footnote">
+        本版本为独立演出的新原型：剧情文本沿用原版《无中归来者》，原版与 new-version 均未改动。
+      </footer>
+    </div>
+
+    <script src="./game.js"></script>
+  </body>
+</html>
