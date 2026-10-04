@@ -120,7 +120,7 @@ const Expedition = {
     const target = (id, text) => ({ id, text });
     switch (G.area) {
       case "mirror": return !F.m1 ? target("m1", "调查第一面镜。") : !F.m2 ? target("m2", "倾听第二面镜。") : !F.m3 ? target("m3", "走向第三面镜。") : target("exit", "回廊的尽头已经打开。走进雨幕。");
-      case "storm": return !F.storm1 ? target("storm1", "靠近向上抓去的雨滴。") : !F.storm2 ? target("storm2", "沿着镂空带之间的回廊，走向红月下的人影。") : target("exit", "红月下方的道路已经开启。");
+      case "storm": return target(null, !F.storm1 ? "你正向天空中的红月逆落。倾听雨中的声音。" : !F.storm2 ? "按 E / 空格或「伸手」留住雨滴；左右可略微偏移，触及雨中的碎片。" : "下一个奇点再见吧，无名的旅伴。");
       case "garden": return target("coffin", F.photoReturned ? "带着照片残片，回到苏醒的容器。" : "调查棺底的铭文。世界边界与记忆的暗处，也可以探索。");
       case "house_empty": return target(F.hasPhoto ? "toilet" : "washer", F.hasPhoto ? "照片残片已经握在手里。继续调查房间。" : "调查这间没有声音的家。洗衣机仍在震动。");
       case "house_family": return !F.father ? target("father", "向沙发上的父亲打个招呼。") : !F.mother ? target("mother", "走向厨房，见过母亲。") : target("table", "早餐还冒着热气。");
@@ -144,12 +144,16 @@ const Expedition = {
     const chapter = this.chapters[G.area];
     const setText = (element, text) => { if (element.textContent !== text) element.textContent = text; };
     setText(this.dom.chapterLabel, `${chapter[0]} / ${chapter[1]}`);
-    setText(this.dom.objectiveText, this.prefs.hints ? this.goal().text : "靠近发光的事物，调查与倾听。");
+    setText(this.dom.objectiveText, this.prefs.hints || G.area === "storm" ? this.goal().text : "靠近发光的事物，调查与倾听。");
     const unavailable = transitionLock || this.paused() || !ui.start.hidden || !ui.ending.hidden;
     const near = !dialogActive && !unavailable ? nearestInteractable() : null;
     this.dom.interactButton.disabled = unavailable || (dialogActive ? Boolean(dialogChoices) : !near);
-    setText(this.dom.interactButton, dialogActive ? (dialogChoices ? "选择你的回答" : typeDone ? "继续倾听" : "显示全文") : near ? `调查 · ${near.it.label}` : "靠近事物 · 调查");
+    setText(this.dom.interactButton, dialogActive ? (dialogChoices ? "选择你的回答" : typeDone ? "继续倾听" : "显示全文") : near ? (G.area === "storm" ? near.it.label : `调查 · ${near.it.label}`) : G.area === "storm" ? "向红月逆落" : "靠近事物 · 调查");
     this.dom.touchInteract.disabled = unavailable || Boolean(dialogChoices);
+    setText(this.dom.touchInteract, G.area === "storm" && !dialogActive ? "伸手" : dialogActive ? "继续" : "调查");
+    this.dom.mapButton.disabled = G.area === "storm";
+    if (G.area === "storm") this.dom.mapPanel.hidden = true;
+    for (const button of document.querySelectorAll('[data-direction="arrowup"], [data-direction="arrowdown"]')) button.disabled = G.area === "storm";
     setText(this.dom.mapStatus, `${META.shards.includes(MAPS[G.area].shard.name) ? "本区碎片已经拾取" : "本区仍有一枚碎片"} · 总计 ${META.shards.length} / 8`);
     setText(this.dom.mapTitle, MAPS[G.area].name);
   },

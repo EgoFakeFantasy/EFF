@@ -361,12 +361,26 @@ function exitTo(game, destination) {
   assert.equal(game.evaluate("G.area"), destination);
 }
 
-function enterGarden(game) {
+function enterStorm(game) {
   game.ids.get("startButton").click(); finishDialog(game);
   for (const id of ["m1", "m2", "m3"]) interact(game, id);
   exitTo(game, "storm");
-  for (const id of ["storm1", "storm2"]) interact(game, id);
-  exitTo(game, "garden");
+  game.evaluate("startStormSequence()"); finishDialog(game);
+  assert.equal(game.evaluate("!!F.storm1"), true);
+  assert.equal(game.evaluate("!!F.storm2"), false);
+  assert.equal(game.evaluate("nearestInteractable()?.it.id"), "stormReach");
+}
+
+function finishStorm(game) {
+  // This is a scene-wide reach action, not a teleport to a map marker.
+  game.evaluate("tryInteract()"); finishDialog(game);
+  game.tick(); finishDialog(game);
+  assert.equal(game.evaluate("G.area"), "garden");
+  assert.equal(game.evaluate("!!F.storm2"), true);
+}
+
+function enterGarden(game) {
+  enterStorm(game); finishStorm(game);
 }
 
 function enterEmptyHouse(game) {
@@ -586,24 +600,120 @@ test("settings pause typewriter, golden rain, and even stale held movement until
   game.window.dispatchEvent(new MockEvent("keyup", { key: "d", target: game.document.body }));
 });
 
-test("reduced motion suppresses storm particles, lightning, and moving scenery", () => {
-  const game = harness({ [SAVE]: JSON.stringify({ area: "storm", px: 51, py: 418, flags: { storm1: true, storm2: true }, memories: [], counters: {} }) });
+test("the second act offers a global reach action and stages one body falling toward the red moon", () => {
+  const game = harness(); enterStorm(game);
+  assert.equal(game.evaluate("SCRIPTS.storm1.lines.at(-1)"), "在偶尔闪过的白光与暗影的怀抱中掉出无尽螺旋的回廊，这也许就是我的命运吧。");
+  assert.equal(game.evaluate("MAPS.storm.interact.length + MAPS.storm.exits.length + MAPS.storm.npcs.length"), 0, "the flight scene still requires walking to a story marker");
+  const position = game.value("[G.px, G.py]");
+  game.window.dispatchEvent(new MockEvent("keydown", { key: "arrowup", target: game.ids.get("screen") }));
+  game.window.dispatchEvent(new MockEvent("keydown", { key: "arrowright", target: game.ids.get("screen") }));
+  for (let i = 0; i < 200 && !game.evaluate("META.shards.includes('雨之碎片')"); i++) game.frame(16);
+  assert.ok(game.evaluate("META.shards.includes('雨之碎片')"), "slight horizontal drift cannot collect the optional rain fragment");
+  assert.deepEqual(game.value("[G.px, G.py]"), position, "arrow-up turns the flight into ground movement");
+  game.window.dispatchEvent(new MockEvent("keyup", { key: "arrowup", target: game.ids.get("screen") }));
+  game.window.dispatchEvent(new MockEvent("keyup", { key: "arrowright", target: game.ids.get("screen") }));
+  assert.ok(game.evaluate("StormFlight.x >= 185 && StormFlight.x <= 203"));
+  assert.ok(game.evaluate("StormFlight.scroll > 0"), "tower layers do not flow down past the falling body");
+  assert.ok(game.evaluate("StormFlight.time > 0"), "downward rain never advances");
+  // Legacy coordinates used to gate the chapter. They must be irrelevant to
+  // the reach action even when the saved player is far below the old moon.
+  game.evaluate("G.px = 3 * TILE + 3; G.py = 26 * TILE + 2");
+  assert.equal(game.evaluate("nearestInteractable()?.it.id"), "stormReach");
+  game.evaluate("tryInteract()");
+  assert.equal(game.evaluate("dialogIndex"), 0);
+  assert.equal(game.evaluate("StormFlight.stage"), 1);
+  game.evaluate("if (!typeDone) advanceDialog(); advanceDialog()");
+  assert.equal(game.evaluate("dialogIndex"), 1);
+  assert.equal(game.evaluate("StormFlight.stage"), 2);
+  game.evaluate("if (!typeDone) advanceDialog(); advanceDialog(); if (!typeDone) advanceDialog(); advanceDialog()");
+  assert.equal(game.evaluate("dialogIndex"), 3);
+  assert.equal(game.evaluate("StormFlight.stage"), 3);
+  game.evaluate("if (!typeDone) advanceDialog(); advanceDialog()");
+  assert.equal(game.evaluate("StormFlight.stage"), 4);
+  assert.equal(game.evaluate("currentFullText()"), "下一个奇点再见吧，无名的旅伴。");
+  const bodyBefore = game.evaluate("StormFlight.y");
+  const towerBefore = game.evaluate("StormFlight.scroll");
+  for (let i = 0; i < 40; i++) game.frame(16);
+  assert.ok(game.evaluate("StormFlight.y") < bodyBefore, "the body does not approach the sky's red moon");
+  assert.ok(game.evaluate("StormFlight.scroll") > towerBefore);
+  finishDialog(game); game.tick(); finishDialog(game);
+  assert.equal(game.evaluate("G.area"), "garden");
+  assert.equal(game.evaluate("!!F.storm2"), true);
+});
+
+test("refresh at the reach checkpoint resumes the second act without replaying its opening", () => {
+  const game = harness(); enterStorm(game);
+  const checkpoint = JSON.parse(game.storage.get(SAVE));
+  assert.equal(checkpoint.area, "storm");
+  assert.equal(checkpoint.flags.storm1, true);
+  assert.equal(Boolean(checkpoint.flags.storm2), false);
+  const resumed = harness(game.snapshot());
+  resumed.ids.get("startButton").click();
+  assert.equal(resumed.evaluate("dialogActive"), false, "the completed opening is replayed after refresh");
+  assert.equal(resumed.evaluate("nearestInteractable()?.it.id"), "stormReach");
+  finishStorm(resumed);
+});
+
+test("an old completed second-act save resumes its farewell and automatically returns to the garden", () => {
+  const game = harness({ [SAVE]: JSON.stringify({ area: "storm", px: 179, py: 34, flags: { storm1: true, storm2: true }, memories: ["被呼喊的名字", "红月", "螺旋之塔"], counters: {} }) });
   game.ids.get("startButton").click();
-  game.evaluate("Math.random = () => 0; stormScroll = 123; faller = { x: 120, y: 180 }; particles = [{ k: 'rain', x: 80, y: 80, vy: 100 }]; lightning = 0.22; houseFlicker = 0.1");
+  if (game.evaluate("dialogActive")) assert.equal(game.evaluate("currentFullText()"), "下一个奇点再见吧，无名的旅伴。");
+  finishDialog(game); game.tick(); finishDialog(game);
+  assert.equal(game.evaluate("G.area"), "garden", "old completed saves are left in a chapter with no ground exit");
+});
+
+test("utility pauses freeze the second act and restarting clears its pending story and motion", () => {
+  const game = harness(); enterStorm(game); game.frame(32);
+  game.ids.get("settingsButton").click();
+  const frozen = game.value("[StormFlight.time, StormFlight.scroll, StormFlight.x, StormFlight.y, StormFlight.stage, StormFlight.pose, StormFlight.shadow, StormFlight.approach]");
+  for (let i = 0; i < 40; i++) game.frame(16);
+  assert.deepEqual(game.value("[StormFlight.time, StormFlight.scroll, StormFlight.x, StormFlight.y, StormFlight.stage, StormFlight.pose, StormFlight.shadow, StormFlight.approach]"), frozen);
+  game.document.querySelector("[data-close='settingsDialog']").click(); game.frame(16);
+  assert.ok(game.evaluate("StormFlight.time") > frozen[0]);
+  game.evaluate("tryInteract()");
+  assert.equal(game.evaluate("dialogActive"), true);
+  game.ids.get("restartButton").click();
+  game.tick(2500);
+  for (let i = 0; i < 20; i++) game.frame(16);
+  assert.equal(game.evaluate("G.area"), "mirror");
+  assert.equal(game.evaluate("dialogActive"), false);
+  assert.equal(game.evaluate("transitionLock"), false);
+  assert.equal(game.evaluate("!!F.storm1 || !!F.storm2"), false);
+  assert.deepEqual(game.value("[StormFlight.time, StormFlight.scroll, StormFlight.stage]"), [0, 0, 0]);
+});
+
+test("second-act lightning flashes normally, freezes during settings, and stays off under reduced motion", () => {
+  const game = harness(); enterStorm(game);
+  game.evaluate("Math.random = () => 0; updateStorm(0.016)");
+  const flash = game.evaluate("lightning");
+  assert.ok(flash > 0, "the dedicated second-act path no longer produces lightning");
+  game.ids.get("settingsButton").click();
+  game.evaluate("updateStorm(1)");
+  for (let i = 0; i < 40; i++) game.frame(16);
+  assert.equal(game.evaluate("lightning"), flash, "an open settings modal still consumes the flash timer");
+  game.document.querySelector("[data-close='settingsDialog']").click();
+  game.evaluate("Math.random = () => 1; updateStorm(0.016)");
+  assert.ok(game.evaluate("lightning") > 0 && game.evaluate("lightning") < flash, "lightning does not decay after exploration resumes");
   const motion = game.ids.get("motionControl");
   motion.checked = true; motion.dispatchEvent(new MockEvent("change", { bubbles: true }));
+  assert.equal(game.evaluate("lightning"), 0, "applying reduced motion retains a pending white flash");
+  game.evaluate("Math.random = () => 0; updateStorm(0.016)");
+  for (let i = 0; i < 40; i++) game.frame(16);
+  assert.equal(game.evaluate("lightning"), 0, "reduced motion can still generate second-act lightning");
+});
+
+test("reduced motion freezes automatic scenery without blocking the second-act reach or farewell", () => {
+  const game = harness(); enterStorm(game); game.frame(16);
+  game.evaluate("particles = [{ k: 'rain', x: 80, y: 80, vy: 100 }]; lightning = 0.22; houseFlicker = 0.1");
+  const motion = game.ids.get("motionControl");
+  motion.checked = true; motion.dispatchEvent(new MockEvent("change", { bubbles: true }));
+  const frozen = game.value("[StormFlight.time, StormFlight.scroll]");
   for (let i = 0; i < 40; i++) game.frame(16);
   assert.equal(game.evaluate("particles.length"), 0);
   assert.equal(game.evaluate("lightning + houseFlicker"), 0);
-  assert.equal(game.evaluate("stormScroll"), 123);
-  assert.equal(game.evaluate("faller.y"), 180);
-  // A deterministic positive control confirms this frame would otherwise
-  // produce rain and lightning; the preference gates the actual render path.
-  motion.checked = false; motion.dispatchEvent(new MockEvent("change", { bubbles: true }));
-  game.frame(16);
-  assert.ok(game.evaluate("particles.length") > 0);
-  assert.ok(game.evaluate("lightning") > 0);
-  assert.ok(game.evaluate("stormScroll") > 123);
+  assert.deepEqual(game.value("[StormFlight.time, StormFlight.scroll]"), frozen);
+  finishStorm(game);
+  assert.equal(game.evaluate("Expedition.prefs.motion"), true);
 });
 
 test("nearest interaction selects the closest candidate within a fixed radius", () => {
@@ -618,10 +728,13 @@ test("nearest interaction selects the closest candidate within a fixed radius", 
   assert.equal(game.evaluate("nearestInteractable()"), null);
 });
 
-test("every map spawn, interactable, conditional NPC, shard, and exit is reachable", () => {
+test("every exploration-map spawn, interactable, conditional NPC, shard, and exit is reachable", () => {
   const game = harness();
   const areas = game.value("Object.keys(MAPS)");
   for (const area of areas) {
+    // The second act is an automatic flight scene. Its fragment and reach
+    // action are verified through scene completion rather than walking tiles.
+    if (area === "storm") continue;
     const { map, points, tile } = reachableField(game, area);
     game.evaluate(`G.area = ${JSON.stringify(area)}; F = Object.fromEntries([...Object.values(MAPS)].flatMap(m => (m.npcs || []).filter(n => n.cond).map(n => [n.cond, true])))`);
     for (const target of [...(map.interact || []), ...(map.npcs || [])]) standNear(game, target.id);
@@ -746,5 +859,5 @@ for (const [name, callback] of tests) {
   try { callback(); console.log(`PASS ${name}`); }
   catch (error) { failed += 1; console.error(`FAIL ${name}\n${error.stack}`); }
 }
-console.log(`\n${tests.length - failed}/${tests.length} passed (${enhancements ? "game.js + enhancements.js" : "game.js"}).`);
+console.log(`\n${tests.length - failed}/${tests.length} passed (${scriptOrder.join(" + ")}).`);
 if (failed) process.exitCode = 1;

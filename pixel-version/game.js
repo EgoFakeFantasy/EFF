@@ -213,48 +213,45 @@ const MAPS = {
     name: "无尽圆塔 · 暴雨",
     sound: "storm",
     ambient: "rain",
-    parallax: true, // 镂空带（v）之外是不断流过的无穷塔层
-    spawn: { x: 3, y: 26 },
+    cinematic: true,
+    spawn: { x: 10, y: 8 },
     palette: { floor: "#141821", wall: "#0a0d13", trim: "#26334a", glow: "#b04a4a" },
     grid: [
       "########################",
-      "#..........O...........#",
-      "#..........D...........#",
       "#......................#",
       "#......................#",
-      "#vvvvvvvvv..vvvvvvvvvvv#",
-      "#vvvvvvvvv..vvvvvvvvvvv#",
-      "#..|.................|.#",
       "#......................#",
       "#......................#",
-      "#..........|...........#",
-      "#......................#",
-      "#..|.................|.#",
-      "#......................#",
-      "#vvvvvvvvv..vvvvvvvvvvv#",
-      "#vvvvvvvvv..vvvvvvvvvvv#",
-      "#......................#",
-      "#..|.................|.#",
       "#......................#",
       "#......................#",
-      "#..........|...........#",
-      "#vvvvvvvvv..vvvvvvvvvvv#",
-      "#vvvvvvvvv..vvvvvvvvvvv#",
       "#......................#",
       "#......................#",
-      "#....~~........~~......#",
-      "#....~~....~~..~~......#",
-      "#.........~~...........#",
+      "#......................#",
+      "#......................#",
+      "#......................#",
+      "#......................#",
+      "#......................#",
+      "#......................#",
+      "#......................#",
+      "#......................#",
+      "#......................#",
+      "#......................#",
+      "#......................#",
+      "#......................#",
+      "#......................#",
+      "#......................#",
+      "#......................#",
+      "#......................#",
+      "#......................#",
+      "#......................#",
+      "#......................#",
       "#......................#",
       "########################",
     ],
-    shard: { x: 21, y: 8, name: "雨之碎片" },
-    exits: [{ x: 11, y: 2, to: "garden", need: () => F.storm2, locked: "雨幕还没有让开道路。先听完红月之下的那句话。" }],
-    interact: [
-      { x: 6, y: 26, id: "storm1", label: "向上抓去的雨滴" },
-      { x: 11, y: 3, id: "storm2", label: "红月下的人影" },
-    ],
-    npcs: [{ x: 18, y: 24, kind: "echo", id: "echoStorm", label: "熟悉的影子", cond: "storm2" }],
+    shard: { x: 12, y: 8, name: "雨之碎片" },
+    exits: [],
+    interact: [],
+    npcs: [],
   },
 
   garden: {
@@ -541,6 +538,7 @@ const SCRIPTS = {
       "混乱的画面交叉着流过，声音好似擦过耳边的箭矢，自远方袭来，却又在你听清前离去。",
       "有什么在呼喊着一个名字？那是我的名字吗？但，那真的是我的名字吗，还是别乎于我的他物？",
       "这是一场雷暴雨。唯一能被确定的事实就是如此。",
+      "在偶尔闪过的白光与暗影的怀抱中掉出无尽螺旋的回廊，这也许就是我的命运吧。",
     ],
     then() {
       F.storm1 = true;
@@ -559,6 +557,7 @@ const SCRIPTS = {
       F.storm2 = true;
       addMemory("红月");
       addMemory("螺旋之塔");
+      gotoArea("garden");
     },
   },
   gardenWake: {
@@ -983,9 +982,7 @@ let notifyT = 0;
 let goldDrop = null; // {x, y, vy}
 let goldTimer = 0;
 let painFlash = 0; // 偏头痛红闪剩余时长
-let stormScroll = 0; // 高塔视差层的滚动偏移
-let faller = null; // 向红月「落去」的人影 {x, y}
-let fallerTimer = 4;
+let stormSequenceStarted = false;
 let lightning = 0; // 闪电白闪剩余时长
 let houseFlicker = 0; // 空屋灯光闪烁剩余时长
 const DYNAMIC_TILES = new Set(["~", "O", "I", "*", "x", "W"]);
@@ -1175,7 +1172,7 @@ function renderLine() {
   if (!line) return;
   ui.dialogSpeaker.textContent = line.s || "";
   typeTimer = 0;
-  typeDone = !line.t;
+  typeDone = !line.t || Expedition.prefs.speed === 0;
   ui.dialogText.replaceChildren();
   if (line.rewrite) {
     const del = document.createElement("del");
@@ -1184,9 +1181,12 @@ function renderLine() {
     ins.textContent = line.rewrite.replacement;
     ui.dialogText.append(del, document.createTextNode(" "), ins);
     typeDone = true;
+  } else if (typeDone && line.t) {
+    paintText(line.t, line.c);
   }
   updateDialogStatus();
   if (typeof Expedition !== "undefined") Expedition.onLine(line, dialogIndex, dialogLines.length);
+  if (G.area === "storm") StormFlight.onLine(line);
 }
 
 function currentFullText() {
@@ -1338,9 +1338,8 @@ function resetRun() {
   particles = [];
   goldDrop = null;
   goldTimer = 0;
-  stormScroll = 0;
-  faller = null;
-  fallerTimer = 4;
+  stormSequenceStarted = false;
+  StormFlight.reset();
   painFlash = 0;
   lightning = 0;
   houseFlicker = 0;
@@ -1639,19 +1638,14 @@ function drawPerson(c, x, y, opt = {}) {
 let particles = [];
 
 function spawnAmbient(dt) {
+  if (G.area === "storm") return; // 暴雨在逆落镜头中绘制，不再由地图边缘漂进视野。
   const kind = MAPS[G.area].ambient;
   if (!kind) return;
   const map = MAPS[G.area];
   const w = map.grid[0].length * TILE;
   if (particles.length > 90) return;
   if (kind === "rain" && Math.random() < dt * 40) {
-    // 高塔揭示「塔是倒过来的」之后，雨改从地面向红月落去
-    const inverted = G.area === "storm" && F.storm2;
-    if (inverted) {
-      particles.push({ k: "rain", x: Math.random() * w, y: map.grid.length * TILE + 6, vy: -(130 + Math.random() * 60), vx: 18 });
-    } else {
-      particles.push({ k: "rain", x: Math.random() * w, y: -6, vy: 130 + Math.random() * 60, vx: -18 });
-    }
+    particles.push({ k: "rain", x: Math.random() * w, y: -6, vy: 130 + Math.random() * 60, vx: -18 });
   } else if (kind === "petals" && Math.random() < dt * 3) {
     particles.push({ k: "petal", x: Math.random() * w, y: -4, vy: 10 + Math.random() * 8, vx: 6 + Math.random() * 8, ph: Math.random() * 6 });
   } else if (kind === "petals" && Math.random() < dt * 2.5) {
@@ -1789,6 +1783,7 @@ function blockedAt(px, py) {
 }
 
 function movePlayer(dt) {
+  if (G.area === "storm") return; // 逆落的主体运动由镜头推进，不以地面行走表示。
   if (dialogActive || transitionLock || Expedition.paused() || !ui.ending.hidden || !ui.start.hidden) return;
   const held = (key) => keys.has(key) || touchKeys.has(key);
   let dx = 0;
@@ -1818,6 +1813,7 @@ function movePlayer(dt) {
 }
 
 function nearestInteractable() {
+  if (G.area === "storm") return F.storm1 && !F.storm2 ? { type: "interact", it: { id: "stormReach", label: "伸手留住雨滴" } } : null;
   const map = MAPS[G.area];
   const cx = G.px + 6;
   const cy = G.py + 8;
@@ -1859,13 +1855,10 @@ function handleInteraction(id) {
       if (!F.m2) playLines(["镜面模糊着。还有没被承认的碎片。"], () => {});
       else playScript("m3");
       break;
-    case "storm1":
-      if (F.storm1) playLines(["雨还在落。名字擦过耳边，又离去。"], () => {});
-      else playScript("storm1");
-      break;
-    case "storm2":
-      if (!F.storm1) playLines(["雨声太大，什么也听不清。先抓住那滴雨。"], () => {});
-      else playScript("storm2");
+    case "stormReach":
+      if (G.area !== "storm" || !F.storm1 || F.storm2) return;
+      StormFlight.reach();
+      playScript("storm2");
       break;
     case "coffin":
       if (!F.sleptOnce) playScript("coffinFirst");
@@ -1926,6 +1919,7 @@ function handleInteraction(id) {
 }
 
 function checkExitsAndShards() {
+  if (G.area === "storm") return;
   const map = MAPS[G.area];
   const tx = Math.floor((G.px + 6) / TILE);
   const ty = Math.floor((G.py + 8) / TILE);
@@ -1964,6 +1958,8 @@ function gotoArea(area, fadeText) {
   ui.fade.classList.add("on");
   Expedition.transitionTimers.push(setTimeout(() => {
     G.area = area;
+    stormSequenceStarted = false;
+    StormFlight.reset();
     const sp = MAPS[area].spawn;
     G.px = sp.x * TILE + 3;
     G.py = sp.y * TILE + 2;
@@ -1983,6 +1979,7 @@ function gotoArea(area, fadeText) {
       transitionLock = false;
       Expedition.onAreaChange();
       if (pendingScript) playScript(pendingScript);
+      if (area === "storm") startStormSequence();
       saveRun();
     }, 650));
   }, 550));
@@ -2022,25 +2019,52 @@ function updateGoldDrop(dt) {
 
 /* ============================== 高塔演出：塔层滚动与上升人影 ============================== */
 
-function updateStorm(dt) {
-  if (G.area !== "storm") return;
-  // 揭示前：塔层向上流过（人在下坠的错觉）；揭示后：反向——塔是倒过来的
-  const dir = F.storm2 ? 1 : -1;
-  stormScroll += dt * 34 * dir;
-  // 浑黑的身影，违反物理法则一般向红月落去
+function startStormSequence() {
+  if (G.area !== "storm" || stormSequenceStarted || dialogActive || transitionLock || Expedition.paused() || !ui.start.hidden) return;
+  stormSequenceStarted = true;
+  StormFlight.reset();
   if (F.storm2) {
-    fallerTimer -= dt;
-    if (!faller && fallerTimer <= 0) {
-      faller = { x: 6 * TILE + Math.random() * 12 * TILE, y: MAPS.storm.grid.length * TILE + 16 };
-    }
+    // 旧版已听完红月对白的存档，无需再寻找旧出口。
+    playLines([SCRIPTS.storm2.lines.at(-1)], () => gotoArea("garden"));
+  } else if (!F.storm1) {
+    playScript("storm1");
   }
-  if (faller) {
-    faller.y -= 26 * dt;
-    if (faller.y < -24) {
-      faller = null;
-      fallerTimer = 5 + Math.random() * 4;
-    }
+}
+
+function updateStorm(dt) {
+  if (G.area !== "storm" || transitionLock || Expedition.paused() || !ui.start.hidden || !ui.ending.hidden) return;
+  startStormSequence();
+  StormFlight.update(dt);
+  if (!Expedition.prefs.motion && Math.random() < dt * 0.06) lightning = 0.22;
+  if (lightning > 0) lightning = Math.max(0, lightning - dt);
+  if (F.storm1 && !F.storm2 && !dialogActive && Math.abs(StormFlight.x - 194) < 9 && !META.shards.includes(MAPS.storm.shard.name)) {
+    META.shards.push(MAPS.storm.shard.name);
+    saveMeta();
+    notify("拾取记忆碎片：雨之碎片（跨周目保留）");
+    Expedition.chime(660, 0.2);
+    updateHud();
   }
+}
+
+function renderStorm(now, dt) {
+  ctx.clearRect(0, 0, VIEW_W, VIEW_H);
+  StormFlight.render(now);
+  if (!Expedition.prefs.motion && lightning > 0) {
+    ctx.fillStyle = `rgba(215,228,250,${Math.min(0.26, lightning)})`;
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  }
+  if (F.storm1 && !F.storm2 && !dialogActive && !META.shards.includes(MAPS.storm.shard.name)) {
+    const y = StormFlight.y;
+    ctx.fillStyle = "#f0e8c8";
+    ctx.beginPath(); ctx.moveTo(194, y - 5); ctx.lineTo(198, y); ctx.lineTo(194, y + 5); ctx.lineTo(190, y); ctx.closePath(); ctx.fill();
+  }
+  if (notifyT > 0 && notifyMsg) {
+    ctx.fillStyle = "rgba(10,10,16,0.85)";
+    ctx.fillRect(8, VIEW_H - 20, VIEW_W - 16, 14);
+    ctx.fillStyle = "#e8d8a8"; ctx.font = "9px sans-serif";
+    ctx.fillText(notifyMsg, 14, VIEW_H - 10);
+  }
+  Expedition.render(dt, { x: 0, y: 0 }, now);
 }
 
 /* ============================== 区域专属演出 ============================== */
@@ -2157,6 +2181,7 @@ let lastT = performance.now();
 
 function updateHud() {
   ui.areaName.textContent = MAPS[G.area].name;
+  canvas.setAttribute("aria-label", G.area === "storm" ? "向天空红月逆落的画面。左右略微偏移，E 或空格伸手、推进对白。" : "箱庭探索画面。方向键或 WASD 移动，E 互动，Shift 快走。");
   const p = Math.min(3, G.counters.pain || 0);
   const pain = p > 0 ? ` · 头痛 ${"▮".repeat(p)}${"▯".repeat(3 - p)}` : "";
   ui.hudRight.textContent = `记忆 ${G.memories.length} · 碎片 ${META.shards.length}/8${pain}`;
@@ -2170,7 +2195,7 @@ function render(now) {
     movePlayer(dt);
     if (!Expedition.prefs.motion) { spawnAmbient(dt); updateParticles(dt); }
     updateGoldDrop(dt);
-    if (!Expedition.prefs.motion) updateStorm(dt);
+    updateStorm(dt);
   }
   if (painFlash > 0) painFlash -= dt * 0.7;
 
@@ -2184,6 +2209,12 @@ function render(now) {
   }
   if (notifyT > 0) notifyT -= dt;
 
+  if (G.area === "storm") {
+    renderStorm(now, dt);
+    requestAnimationFrame(render);
+    return;
+  }
+
   // 相机
   const map = MAPS[G.area];
   const mw = map.grid[0].length * TILE;
@@ -2195,26 +2226,6 @@ function render(now) {
 
   ctx.clearRect(0, 0, VIEW_W, VIEW_H);
 
-  // 高塔视差：镂空带之外，无穷塔层不断流过
-  if (map.parallax) {
-    ctx.fillStyle = "#060a12";
-    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-    const bands = [
-      { color: "#0e1626", h: 9, w: 44, gap: 62, period: 56, speed: 0.55 },
-      { color: "#1a2a44", h: 6, w: 30, gap: 46, period: 42, speed: 1.15 },
-    ];
-    for (const b of bands) {
-      ctx.fillStyle = b.color;
-      const off = stormScroll * b.speed;
-      const start = (((off % b.period) + b.period) % b.period) - b.period;
-      for (let y = start; y < VIEW_H + b.period; y += b.period) {
-        for (let x = -b.gap; x < VIEW_W + b.gap; x += b.gap) {
-          const bx = x + (Math.floor((y - off) / b.period) % 2) * 18;
-          ctx.fillRect(bx, y, b.w, b.h);
-        }
-      }
-    }
-  }
   ctx.drawImage(tileCache, cam.x, cam.y, VIEW_W, VIEW_H, 0, 0, VIEW_W, VIEW_H);
 
   // 红月光晕：挂在无穷层的顶端
@@ -2284,17 +2295,6 @@ function render(now) {
       drawPerson(ctx, sx, sy + Math.sin(t * 1.5) * 2, { coat: "#9fc0d8", hair: "#d0e4f0", skin: "#cfe0ea", dir: 0 });
       ctx.globalAlpha = 1;
     } else if (n.kind === "table") { /* 桌子是瓦片画的 */ }
-  }
-
-  // 向红月落去的浑黑身影
-  if (faller && G.area === "storm") {
-    const fx = faller.x - cam.x;
-    const fy = faller.y - cam.y;
-    ctx.fillStyle = "rgba(10,10,14,0.9)";
-    ctx.fillRect(fx, fy, 6, 10);
-    ctx.fillRect(fx + 1, fy - 3, 4, 4);
-    ctx.fillStyle = "rgba(10,10,14,0.3)";
-    ctx.fillRect(fx + 1, fy + 10, 4, 14);
   }
 
   // 金色雨滴
@@ -2405,6 +2405,7 @@ ui.startButton.addEventListener("click", () => {
   canvas.focus({ preventScroll: true });
   Expedition.onAreaChange();
   if (restoreEnding()) return;
+  if (G.area === "storm") startStormSequence();
   if (G.area === "mirror" && !F.m1 && !F.m2 && !F.m3) {
     playLines([
       "……睁开眼睛的时候，首先看到的是自己的手。",
