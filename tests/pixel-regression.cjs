@@ -418,7 +418,7 @@ function enterFamily(game) {
 
 function enterBlood(game) {
   enterFamily(game);
-  for (const id of ["father", "mother", "table"]) interact(game, id);
+  interact(game, "father"); choose(game, "不再停留");
   assert.equal(game.evaluate("G.area"), "blood");
   assert.equal(game.evaluate("!!F.sister"), true, "the bound awakening must precede free exploration");
   interact(game, "parents");
@@ -427,7 +427,7 @@ function enterBlood(game) {
 
 function beginAccusation(game) {
   enterFamily(game);
-  for (const id of ["father", "mother", "table"]) interact(game, id);
+  interact(game, "father"); choose(game, "不再停留");
   beginInteraction(game, "parents");
   advanceToText(game, "但他不能再移动了");
   nextLine(game);
@@ -442,9 +442,22 @@ function assertOrdinaryDialog(game) {
   }
 }
 
+function completeTwilightRain(game) {
+  assert.equal(game.evaluate("NarrativeTrials.rainActive()"), true);
+  if (game.evaluate("NarrativeTrials.rain.mode") === "intro") game.ids.get("rainStart").click();
+  for (let frame = 0; frame < 29 && game.evaluate("NarrativeTrials.rainActive()"); frame++) {
+    game.frame(1000);
+    for (const button of [...game.ids.get("rainDrops").children]) {
+      if (button.classList.contains("key-drop")) button.click();
+    }
+  }
+  assert.equal(game.evaluate("!!F.twilightCaught"), true, "all four key memories must leave the twilight sea");
+  finishDialog(game);
+}
+
 function enterMeta(game, retainRain) {
   enterBlood(game); choose(game, "不，我拒绝");
-  choose(game, "让世界崩坏"); choose(game, "抵达雨塔");
+  choose(game, "让世界崩坏"); completeTwilightRain(game); choose(game, "抵达雨塔");
   assert.equal(game.evaluate("G.area"), "rain");
   interact(game, "repress");
   choose(game, retainRain ? "为什么在流失" : "不回来是什么意思");
@@ -550,7 +563,7 @@ test("choice click bubbling does not skip or reveal newly opened dialogue", () =
   assert.equal(game.evaluate("currentFullText()"), game.evaluate("SCRIPTS.coffinThought.lines[0]"));
   finishDialog(game);
   button.click();
-  assert.equal(game.evaluate("dialogActive"), false, "detached stale choice restarts its action");
+  assert.equal(game.evaluate("currentDialogScript === SCRIPTS.coffinThought && !!dialogChoices"), true, "detached stale choice changes the current decision");
 });
 
 test("reset clears dialogue, choices, keyboard state, and pending continuation", () => {
@@ -806,7 +819,7 @@ test("every exploration-map spawn, interactable, conditional NPC, shard, and exi
     if (area === "storm" || area === "meta") continue;
     const { map, points, tile } = reachableField(game, area);
     game.evaluate(`G.area = ${JSON.stringify(area)}; F = Object.fromEntries([...Object.values(MAPS)].flatMap(m => (m.npcs || []).filter(n => n.cond).map(n => [n.cond, true])))`);
-    for (const target of [...(map.interact || []), ...(map.npcs || [])]) standNear(game, target.id);
+    for (const target of [...(map.interact || []), ...(map.npcs || []).filter(n => !n.passive)]) standNear(game, target.id);
     for (const target of [...(map.exits || []), ...(map.shard ? [map.shard] : [])]) {
       assert.ok(points.some(([x, y]) => Math.floor((x + 6) / tile) === target.x && Math.floor((y + 8) / tile) === target.y), `${area}: tile ${target.x},${target.y} is not reachable`);
     }
@@ -833,6 +846,10 @@ test("house arrivals wake in bed automatically and old explored saves preserve t
     assert.equal(resumed.evaluate("StoryStaging.playerOptions().pose"), "wake");
     finishDialog(resumed);
     assert.equal(resumed.evaluate(`!!F.${flag}`), true);
+    if (area === "house_family") {
+      choose(resumed, "不再停留");
+      assert.equal(resumed.evaluate("G.area"), "blood", "the old breakfast checkpoint cannot continue without retired markers");
+    }
     assert.equal(resumed.evaluate("F.hasPhoto && F.father && F.mother"), true);
     assert.ok(resumed.value("G.memories").includes("已有的记忆"));
     assert.equal(resumed.evaluate("G.counters.pain"), 1);
@@ -871,6 +888,49 @@ test("the tank's second line switches to the garden while its dialogue remains a
   assert.equal(resumed.evaluate("!!F.photoReturned"), true);
 });
 
+test("the first return anchors both the marker and the interaction to the actual coffin board", () => {
+  const game = harness(); enterEmptyHouse(game);
+  for (const id of ["washer", "toilet"]) interact(game, id);
+  const coffin = game.value("MAPS.garden.interact.find(it => it.id === 'coffin')");
+  assert.equal(game.evaluate(`MAPS.garden.grid[${coffin.y}][${coffin.x}]`), "C");
+  assert.equal(game.evaluate("MAPS.garden.npcs.some(n => n.kind === 'echo')"), false, "the inscription must not be assigned to a shadow");
+  assert.equal(game.evaluate("nearestInteractable()?.it.id"), "coffin", "the returning player must reach the board without walking to a shadow");
+  assert.deepEqual(game.value("Expedition.goalPoint()"), coffin);
+  game.evaluate("globalThis.markers = []; globalThis.markerCamera = null; const originalCamera = StoryStaging.camera.bind(StoryStaging); StoryStaging.camera = (map, fallback) => { markerCamera = originalCamera(map, fallback); return markerCamera; }; ctx.fillText = (text, x, y) => { if (text === '!') markers.push({x, y}); }");
+  game.frame(16);
+  const cam = game.value("markerCamera");
+  assert.ok(game.value("markers").some(m => m.x === coffin.x * 16 + 6 - cam.x && Math.abs(m.y - (coffin.y * 16 - 4 - cam.y)) <= 2), "the displayed marker is detached from the coffin board");
+  game.evaluate("tryInteract()");
+  assert.equal(game.evaluate("currentDialogScript === SCRIPTS.coffinAgain"), true);
+  nextLine(game);
+  assert.equal(game.evaluate("StoryStaging.coffin"), true);
+  assert.ok(game.evaluate("currentFullText()").includes("打开棺材板"));
+});
+
+test("coffin reasoning offers sleep immediately and still allows garden exploration", () => {
+  for (const sleep of [false, true]) {
+    const game = harness(); enterGarden(game); interact(game, "coffin");
+    choose(game, "继续推理");
+    assert.equal(game.evaluate("currentDialogScript === SCRIPTS.coffinThought && !!dialogChoices"), true);
+    assert.ok(game.ids.get("dialogChoices").children.some(button => button.textContent.includes("再次躺入")));
+    choose(game, sleep ? "再次躺入" : "继续调查花园");
+    assert.ok(game.value("G.memories").includes("梦中沉眠"));
+    assert.equal(game.evaluate("G.area"), sleep ? "house_empty" : "garden");
+    assert.equal(game.evaluate("dialogActive"), false);
+    if (!sleep) { beginInteraction(game, "edge"); assert.equal(game.evaluate("currentDialogScript === SCRIPTS.edge"), true); }
+  }
+});
+
+test("old breakfast checkpoints resume at the unread table without repeating the parental greetings", () => {
+  const game = harness({ [SAVE]: JSON.stringify({ area: "house_family", px: 227, py: 82, flags: { familyWoke: true, father: true, mother: true }, memories: ["父亲", "母亲"], counters: {} }) });
+  game.ids.get("startButton").click();
+  assert.equal(game.evaluate("currentDialogScript === SCRIPTS.table"), true);
+  assert.equal(game.evaluate("StoryStaging.family"), "table");
+  finishDialog(game); choose(game, "不再停留");
+  assert.equal(game.evaluate("G.area"), "blood");
+  assert.equal(game.evaluate("F.familyDone && F.sister"), true);
+});
+
 test("the tower interlude, family breakfast, absent parents, and curtain follow the spoken scene", () => {
   const game = harness(); enterEmptyHouse(game);
   for (const id of ["washer", "toilet"]) interact(game, id);
@@ -889,13 +949,13 @@ test("the tower interlude, family breakfast, absent parents, and curtain follow 
   assert.equal(game.evaluate("StoryStaging.playerOptions().pose"), "wake");
   finishDialog(game);
   assert.equal(game.evaluate("!!F.familyWoke"), true);
-  interact(game, "father"); beginInteraction(game, "mother");
+  beginInteraction(game, "father"); advanceToText(game, "厨房门被打开");
   assert.equal(game.evaluate("StoryStaging.mother"), "carry");
   nextLine(game);
   const mother = game.value("StoryStaging.npc(MAPS.house_family.npcs.find(n => n.id === 'mother'))");
   assert.ok(mother.x > 7 && mother.x < 16 && mother.y < 7, "the mother's reply remains at the distant kitchen marker");
   assert.equal(game.evaluate("SCRIPTS.mother.lines.some(l => (typeof l === 'string' ? l : l.t || '').includes('慢慢喝'))"), false);
-  finishDialog(game); beginInteraction(game, "table"); advanceToText(game, "桌上摆着");
+  advanceToText(game, "桌上摆着");
   assert.equal(game.evaluate("StoryStaging.family"), "table");
   assert.equal(game.evaluate("StoryStaging.playerOptions().pose"), "eat");
   for (const id of ["father", "mother"]) {
@@ -910,6 +970,8 @@ test("the tower interlude, family breakfast, absent parents, and curtain follow 
   assert.equal(game.evaluate("StoryStaging.family"), "gone");
   assert.equal(game.evaluate("MAPS.house_family.npcs.filter(n => ['father','mother'].includes(n.id)).every(n => StoryStaging.npc(n).hidden)"), true);
   game.evaluate("Expedition.chapterTime = 10; Expedition.dom.chapterCard.classList.add('visible')");
+  finishDialog(game);
+  game.ids.get("dialogChoices").children.find(button => button.textContent.includes("不再停留")).click();
   advanceToText(game, "要开始了吗");
   assert.equal(game.evaluate("StoryStaging.scene"), "curtain");
   assert.equal(game.evaluate("Expedition.chapterTime"), 0);
@@ -923,8 +985,9 @@ test("the tower interlude, family breakfast, absent parents, and curtain follow 
 
 test("the blood scene binds the protagonist holding the heart and leads from the guestroom directly to accusation", () => {
   const game = harness(); enterFamily(game);
-  for (const id of ["father", "mother"]) interact(game, id);
-  beginInteraction(game, "table"); finishDialog(game); game.tick(1200);
+  beginInteraction(game, "father"); finishDialog(game);
+  game.ids.get("dialogChoices").children.find(button => button.textContent.includes("不再停留")).click();
+  finishDialog(game); game.tick(1200);
   assert.equal(game.evaluate("G.area"), "blood");
   assert.ok(game.evaluate("currentFullText()").startsWith("被束缚了。有什么东西在撕扯着我的身体，阻碍了我对身体的控制权。"));
   assert.equal(game.evaluate("!!F.sister"), false);
@@ -1032,7 +1095,7 @@ test("settings freeze takeover inputs and refusal restores ordinary dialogue and
   assert.equal(game.evaluate("StoryStaging.playerOptions().pose"), "stand");
   assertOrdinaryDialog(game);
   finishDialog(game); game.tick(); finishDialog(game);
-  choose(game, "让世界崩坏"); choose(game, "抵达雨塔");
+  choose(game, "让世界崩坏"); completeTwilightRain(game); choose(game, "抵达雨塔");
   assert.equal(game.evaluate("G.area"), "rain");
   assert.equal(game.evaluate("!!F.refused"), true);
   assertOrdinaryDialog(game);
@@ -1069,9 +1132,10 @@ test("restarting and both accusation endings clear takeover presentation from su
   }
 });
 
-test("the mother carries food through open floor, pauses with settings, and stays in the living room after refresh", () => {
+test("the mother carries food through open floor, pauses with settings, and an interrupted breakfast resumes safely", () => {
   const game = harness({ [SAVE]: JSON.stringify({ area: "house_family", px: 227, py: 82, flags: { familyWoke: true, father: true }, memories: [], counters: {} }) });
-  game.ids.get("startButton").click(); beginInteraction(game, "mother");
+  game.ids.get("startButton").click();
+  assert.equal(game.evaluate("currentDialogScript === SCRIPTS.mother"), true, "old saves must resume the next unread breakfast scene");
   game.evaluate("StoryStaging.renderSpecial(performance.now(), 0.4)");
   const moving = game.value("StoryStaging.npc(MAPS.house_family.npcs.find(n => n.id === 'mother'))");
   game.ids.get("settingsDialog").showModal();
@@ -1083,15 +1147,20 @@ test("the mother carries food through open floor, pauses with settings, and stay
     assert.equal(game.evaluate("(() => { const n = StoryStaging.npc(MAPS.house_family.npcs.find(n => n.id === 'mother')); return validSavedPosition(MAPS.house_family, n.x * TILE + 2, n.y * TILE); })()"), true, `mother crosses furniture or a wall at frame ${frame}`);
     game.evaluate("StoryStaging.renderSpecial(performance.now(), 1 / 60)");
   }
-  finishDialog(game);
-  const resumed = harness(game.snapshot()); resumed.ids.get("startButton").click();
-  const settled = resumed.value("StoryStaging.npc(MAPS.house_family.npcs.find(n => n.id === 'mother'))");
+  nextLine(game);
+  const settled = game.value("StoryStaging.npc(MAPS.house_family.npcs.find(n => n.id === 'mother'))");
   assert.equal(settled.x, 12); assert.equal(settled.y, 5);
-  resumed.evaluate("G.px = 13 * TILE + 3; G.py = 5 * TILE + 2");
-  assert.equal(resumed.evaluate("nearestInteractable()?.it.id"), "mother");
-  resumed.evaluate("tryInteract()");
-  assert.equal(resumed.evaluate("dialogActive"), true);
-  assert.ok(resumed.evaluate("currentFullText()").includes("吃饭了"));
+  advanceToText(game, "桌上摆着");
+  assert.equal(game.evaluate("StoryStaging.family"), "table");
+  assert.equal(game.evaluate("!!F.mother"), true);
+  assert.equal(!!JSON.parse(game.storage.get(SAVE)).flags.mother, false, "the continuous breakfast must not save a half-read sequence");
+  const resumed = harness(game.snapshot()); resumed.ids.get("startButton").click();
+  assert.equal(resumed.evaluate("currentDialogScript === SCRIPTS.mother"), true);
+  assert.equal(resumed.evaluate("StoryStaging.mother"), "carry");
+  finishDialog(resumed); choose(resumed, "不再停留");
+  assert.equal(resumed.evaluate("G.area"), "blood");
+  assert.equal(resumed.evaluate("F.father && F.mother && F.familyDone"), true);
+  assert.equal(JSON.parse(resumed.storage.get(SAVE)).flags.familyDone, true);
 });
 
 test("old family and blood checkpoints resume the next scene with the protagonist inside its camera", () => {
@@ -1161,7 +1230,7 @@ test("normal ending is reached through all original writing operations and compe
   assert.equal(refreshed.evaluate("endingId"), null);
 });
 
-test("reduced motion preserves the original textual answer and full true ending without a golden catch", () => {
+test("reduced motion preserves the original textual answer and full true ending without a finale golden-catch prerequisite", () => {
   const game = harness(); enterMeta(game, true);
   game.evaluate("particles = [{ k: 'spark', x: 10, y: 10, life: 1, max: 1 }]; lightning = 0.22; houseFlicker = 0.1");
   const motion = game.ids.get("motionControl");
@@ -1205,9 +1274,10 @@ test("frames and audio toggle execute with shipped scripts", () => {
 });
 
 
-test("the nine finale nodes preserve every original paragraph, insertion, replacement, and operation", () => {
+test("the nine finale nodes preserve operations and paragraphs with the novel correction to the compensation ending", () => {
   const original = fs.readFileSync(path.resolve(root, "..", "game.js"), "utf8");
   const originalScenes = vm.runInNewContext(original.slice(original.indexOf("const scenes ="), original.indexOf("const defaultState")) + "\nscenes");
+  originalScenes.normal_ending.text[1] = "于绝境之中领悟了真灵不灭法的存在，却在自身、自身之暗淡与敌人的斗争中，无意间造就了更为重要的东西之表象。";
   const game = harness();
   for (const key of game.value("Finale.keys")) assert.deepEqual(game.value("FinaleScenes[" + JSON.stringify(key) + "]"), JSON.parse(JSON.stringify(originalScenes[key])), key + ": original finale content changed");
   assert.equal(game.evaluate("FinaleScenes.meta_prequel.text.length"), 18);
@@ -1434,12 +1504,21 @@ test("an interrupted true ending replays its unread chapter before recording com
 });
 
 
-test("courtyard resistance, collision and rain preserve every canonical sentence", () => {
+test("courtyard and rain preserve game passages and restore omitted novel dialogue in its correct order", () => {
   const game = harness();
   const original = fs.readFileSync(path.join(root, '..', 'game.js'), 'utf8');
   const canonical = vm.runInNewContext(original.slice(original.indexOf('const scenes ='), original.indexOf('const defaultState')) + '\nscenes');
   for (const [script, scene] of [['refusal','refusal'],['clash','clash'],['repress','rain_1'],['rainMemory','rain_memory'],['rainDeath','rain_death'],['rainEnemy','rain_enemy']]) {
-    const expected = canonical[scene].text.map(line => typeof line === 'string' ? line : line.text);
+    const expected = Array.from(canonical[scene].text.map(line => typeof line === 'string' ? line : line.text));
+    if(scene==='refusal'){
+      expected[7]+='好似是有狮子在咆哮，好似是雷霆突然从黑暗中出现。';
+      expected.splice(8,0,'如果只是嘴上功夫的话可敷衍不了我们这群经验丰富，阅片无数的家伙啊。','快点，快些爆发出新的力量然后再一度被我们困入绝望的世界吧！我已经等不及了。');
+    }
+    if(scene==='clash') expected[3]+='在那红色的月亮之上，似乎还有一座更加宏伟的高塔，那两团光真正要落入的，或许是那如同台阶般无限衍生的塔之螺旋吧……';
+    if(scene==='rain_1'){
+      const explanation=expected.pop();expected.pop();expected.pop();
+      expected.push('话说回来，要不是我发现了这个情况，那你可能此时已经不在这里了呢，无中归来的人。','不在这里？你不是说……这里是我的心象空间？那么，我不应该想来时就可以来到吗？',explanation,'为什么？','你说的是哪一个？','所有的。');
+    }
     assert.deepEqual(game.value('SCRIPTS[' + JSON.stringify(script) + '].lines.map(line => line.t)'), Array.from(expected));
   }
   assert.deepEqual(game.value('SCRIPTS.refusal.choices.map(c => c.label)'), ['让世界崩坏']);
@@ -1501,6 +1580,8 @@ test("body ownership requires a matching act, wrong targets neither advance nor 
   game.ids.get('interactButton').click();
   assert.equal(game.evaluate('PhenomenonBattle.claimed[1]'), true);
   finishDialog(game); choose(game, '让世界崩坏');
+  assert.equal(game.evaluate('NarrativeTrials.rainActive()'), true);
+  completeTwilightRain(game);
   assert.equal(game.evaluate('PhenomenonBattle.phase'), 'clash');
   assert.equal(game.evaluate('F.refused'), undefined, 'clash is not a complete victory over the outsider');
   choose(game, '抵达雨塔');
@@ -1541,6 +1622,245 @@ test("battle motion stops under reduced motion and reset clears its unfinished a
   assert.equal(game.evaluate('PhenomenonBattle.pending'), false);
   assert.equal(game.ids.get('battlePanel').hidden, true);
   assert.equal(game.ids.get('portraitFrame').hidden, true);
+});
+
+function familyRiskGame(seed = 0, stays = 0) {
+  const game = harness({ [SAVE]: JSON.stringify({ area: "house_family", px: 179, py: 82, flags: { familyWoke: true, father: true, mother: true }, memories: ["父亲", "母亲"], counters: {}, trials: { version: 1, family: { mode: "choice", seed, stays } } }) });
+  game.ids.get("startButton").click(); finishDialog(game); return game;
+}
+function courtDecisionGame() {
+  const game = harness({ [SAVE]: JSON.stringify({ area: "blood", px: 195, py: 226, flags: { sister: true, parents: true }, memories: [], counters: {} }) });
+  game.ids.get("startButton").click(); return game;
+}
+function twilightGame() {
+  const game = courtDecisionGame(); finishDialog(game); choose(game, "我拒绝"); choose(game, "让世界崩坏");
+  assert.equal(game.evaluate("NarrativeTrials.rain.mode"), "intro"); return game;
+}
+
+test("family risk rises only on chosen stays and a stored lock cannot be rerolled on refresh", () => {
+  const game = familyRiskGame();
+  assert.ok(game.ids.get("dialogChoices").children[0].textContent.includes("20%"));
+  choose(game, "再留一天");
+  assert.equal(game.evaluate("NarrativeTrials.family.stays"), 1);
+  assert.ok(game.ids.get("dialogChoices").children[0].textContent.includes("30%"));
+  const afterDay = game.value("NarrativeTrials.family");
+  const resumed = harness(game.snapshot()); resumed.ids.get("startButton").click(); finishDialog(resumed);
+  assert.deepEqual(resumed.value("NarrativeTrials.family"), afterDay);
+  resumed.ids.get("dialogChoices").children[0].click();
+  assert.equal(resumed.evaluate("NarrativeTrials.family.mode"), "locked");
+  const lockedSave = resumed.snapshot();
+  const locked = harness(lockedSave); locked.ids.get("startButton").click();
+  assert.equal(locked.evaluate("NarrativeTrials.family.mode"), "locked");
+  assert.equal(locked.evaluate("!!dialogChoices"), false);
+  assert.ok(locked.evaluate("currentFullText()").includes("早餐之后仍然是早餐"));
+  finishDialog(locked); assertEnding(locked, "bad_family");
+  const ending = harness(locked.snapshot()); ending.ids.get("startButton").click(); assertEnding(ending, "bad_family");
+});
+
+test("family exploration leaves without a lottery and the day risk caps at sixty percent", () => {
+  const game = familyRiskGame(0, 9);
+  assert.ok(game.ids.get("dialogChoices").children[0].textContent.includes("60%"));
+  const stale = game.ids.get("dialogChoices").children[0];
+  choose(game, "不再停留");
+  assert.equal(game.evaluate("G.area"), "blood");
+  assert.equal(game.evaluate("NarrativeTrials.family"), null);
+  stale.click(); assert.equal(game.evaluate("endingId"), null);
+  assert.equal(game.evaluate("G.area"), "blood");
+});
+
+test("the occupation deadline starts only after all accusations are read and expires into the occupied-body ending", () => {
+  const game = courtDecisionGame(); game.frame(60000);
+  assert.equal(game.evaluate("NarrativeTrials.court"), null, "reading must not start a reaction clock");
+  finishDialog(game); assert.equal(game.evaluate("NarrativeTrials.court.remaining"), 24000);
+  assert.equal(game.ids.get("trialHUD").hidden, false);
+  game.frame(24001);
+  assert.equal(game.evaluate("NarrativeTrials.court.mode"), "lost");
+  assert.equal(game.evaluate("!!dialogChoices"), false);
+  finishDialog(game); assertEnding(game, "bad_owned");
+});
+
+test("occupation time and choices pause in settings, the background and a blurred window, then resume without a reset", () => {
+  const game = courtDecisionGame(); finishDialog(game); game.frame(5000);
+  assert.equal(game.evaluate("NarrativeTrials.court.remaining"), 19000);
+  game.ids.get("settingsButton").click(); game.frame(90000);
+  assert.equal(game.evaluate("NarrativeTrials.court.remaining"), 19000);
+  game.document.querySelector('[data-close="settingsDialog"]').click();
+  game.document.hidden = true; game.document.dispatchEvent(new MockEvent("visibilitychange")); game.frame(90000);
+  assert.equal(game.evaluate("NarrativeTrials.court.remaining"), 19000);
+  game.document.hidden = false; game.document.dispatchEvent(new MockEvent("visibilitychange"));
+  game.window.dispatchEvent(new MockEvent("blur")); game.frame(90000);
+  assert.equal(game.evaluate("NarrativeTrials.court.remaining"), 19000);
+  game.window.dispatchEvent(new MockEvent("focus")); game.frame(1000);
+  const resumed = harness(game.snapshot()); resumed.ids.get("startButton").click();
+  assert.equal(resumed.evaluate("NarrativeTrials.court.remaining"), 18000);
+  assert.equal(resumed.evaluate("!!dialogChoices"), true);
+  resumed.frame(18001); finishDialog(resumed); assertEnding(resumed, "bad_owned");
+});
+
+test("ownership targets consume decision time, a correct act restores five seconds, and refresh preserves the next act", () => {
+  const game = courtDecisionGame(); finishDialog(game); game.ids.get("dialogChoices").children[2].click();
+  game.evaluate("advanceDialog()"); game.frame(10000);
+  assert.equal(game.evaluate("NarrativeTrials.court.remaining"), 14000);
+  game.ids.get("battleTargets").children[2].click();
+  assert.equal(game.evaluate("NarrativeTrials.court.remaining"), 14000);
+  game.ids.get("battleTargets").children[0].click();
+  assert.equal(game.evaluate("NarrativeTrials.court.remaining"), 19000);
+  const written = harness(game.snapshot()); written.ids.get("startButton").click();
+  assert.equal(written.evaluate("PhenomenonBattle.pending"), false);
+  assert.ok(written.ids.get("battleTargets").children.every(button => button.disabled));
+  assert.equal(written.ids.get("battleTargets").children[0].classList.contains("written"), true);
+  advanceToText(game, "造下这一切的不是我"); game.evaluate("advanceDialog()"); game.frame(3000);
+  assert.equal(game.evaluate("NarrativeTrials.court.remaining"), 16000);
+  game.ids.get("battleTargets").children[2].dispatchEvent(new MockEvent("focus")); game.evaluate("NarrativeTrials.checkpoint()");
+  const resumed = harness(game.snapshot()); resumed.ids.get("startButton").click();
+  assert.equal(resumed.evaluate("dialogIndex"), 2);
+  assert.equal(resumed.evaluate("PhenomenonBattle.cue.target"), 1);
+  assert.deepEqual(resumed.value("PhenomenonBattle.claimed"), [true, false, false]);
+  assert.equal(resumed.evaluate("NarrativeTrials.court.remaining"), 16000);
+  assert.equal(resumed.evaluate("PhenomenonBattle.selected"), 2);
+  assert.equal(resumed.ids.get("battleTargets").children[2].classList.contains("selected"), true);
+  resumed.evaluate("advanceDialog()"); resumed.frame(16001); finishDialog(resumed); assertEnding(resumed, "bad_owned");
+});
+
+test("completed ownership acts stop the deadline before the collision narrative", () => {
+  const game = courtDecisionGame(); finishDialog(game); choose(game, "我拒绝");
+  assert.equal(game.evaluate("NarrativeTrials.court.mode"), "won");
+  const before = game.evaluate("NarrativeTrials.court.remaining"); game.frame(60000);
+  assert.equal(game.evaluate("NarrativeTrials.court.remaining"), before);
+  assert.equal(game.evaluate("endingId"), null);
+  const resumed = harness(game.snapshot()); resumed.ids.get("startButton").click(); finishDialog(resumed);
+  assert.equal(resumed.evaluate("NarrativeTrials.court.mode"), "won");
+  choose(resumed, "让世界崩坏"); assert.equal(resumed.evaluate("NarrativeTrials.rainActive()"), true);
+});
+
+test("twilight rain waits for an explicit start and all four catches resume the interrupted canonical paragraph", () => {
+  const game = twilightGame(); game.frame(120000);
+  assert.equal(game.evaluate("NarrativeTrials.rain.elapsed"), 0);
+  assert.equal(game.ids.get("rainStart").hidden, false);
+  completeTwilightRain(game);
+  assert.equal(game.evaluate("!!F.twilightCaught"), true);
+  assert.equal(game.evaluate("!!F.rainMemory"), false, "the minigame must not grant the later original answer");
+  assert.equal(game.evaluate("NarrativeTrials.rain"), null);
+  assert.equal(game.ids.get("rainTrial").hidden, true);
+  assert.ok(game.evaluate("currentFullText()").includes("显意识的边缘"));
+  choose(game, "抵达雨塔"); assert.equal(game.evaluate("G.area"), "rain");
+});
+
+test("missing zero or one of the four critical rains produces the twilight failure instead of reaching the tower", () => {
+  for (const caught of [0, 3]) {
+    const game = twilightGame(); game.ids.get("rainStart").click();
+    for (let step = 0; step < 30 && game.evaluate("NarrativeTrials.rain.mode") === "play"; step++) {
+      game.frame(1000);
+      if (caught) for (const button of [...game.ids.get("rainDrops").children]) {
+        if (button.classList.contains("key-drop") && button.textContent !== "意志") button.click();
+      }
+    }
+    assert.equal(game.evaluate("NarrativeTrials.rain.mode"), "lost");
+    assert.equal(game.evaluate("!!F.twilightCaught || !!F.refused"), false);
+    finishDialog(game); assertEnding(game, "bad_rain");
+    assert.equal(game.ids.get("rainDrops").children.length, 0);
+  }
+});
+
+test("rain catches and elapsed time survive refresh, with stale buttons unable to award a second catch", () => {
+  const game = twilightGame(); game.ids.get("rainStart").click(); game.frame(1300);
+  const gold = game.ids.get("rainDrops").children.find(button => button.classList.contains("key-drop"));
+  gold.click(); const saved = game.value("NarrativeTrials.rain"); gold.click();
+  assert.deepEqual(game.value("NarrativeTrials.rain"), saved);
+  const resumed = harness(game.snapshot()); resumed.ids.get("startButton").click();
+  assert.equal(resumed.evaluate("NarrativeTrials.rain.elapsed"), 1300);
+  assert.equal(resumed.evaluate("NarrativeTrials.rain.mask"), 1);
+  assert.equal(resumed.ids.get("rainStart").hidden, true);
+  completeTwilightRain(resumed); choose(resumed, "抵达雨塔");
+  assert.equal(resumed.evaluate("G.area"), "rain");
+});
+
+test("rain keeps retries for missed keys, pauses catches with utility panels, and supports keyboard and touch continuation", () => {
+  const game = twilightGame(); game.ids.get("touchInteract").click(); game.frame(1300);
+  const first = game.ids.get("rainDrops").children.find(button => button.classList.contains("key-drop"));
+  game.ids.get("settingsButton").click(); first.click(); game.frame(90000);
+  assert.equal(game.evaluate("NarrativeTrials.rain.elapsed"), 1300);
+  assert.equal(game.evaluate("NarrativeTrials.rain.mask"), 0);
+  game.document.querySelector('[data-close="settingsDialog"]').click();
+  game.frame(12000);
+  const retry = game.ids.get("rainDrops").children.find(button => button.classList.contains("key-drop") && button.textContent === "自我");
+  assert.ok(retry, "an uncaught key must return before the deadline");
+  for (let step = 0; step < 12 && game.evaluate("NarrativeTrials.selected") !== game.evaluate("NarrativeTrials.rain.drops.find(d => d.key === 0).id"); step++) game.document.dispatchEvent(new MockEvent("keydown", { key: "ArrowRight" }));
+  game.document.dispatchEvent(new MockEvent("keydown", { key: "e" }));
+  assert.equal(game.evaluate("NarrativeTrials.rain.mask & 1"), 1);
+  completeTwilightRain(game);
+});
+
+test("reduced motion freezes rain scenery and drop positions but preserves the challenge and its timing", () => {
+  const game = twilightGame(); game.ids.get("settingsButton").click();
+  game.ids.get("motionControl").checked = true; game.ids.get("motionControl").dispatchEvent(new MockEvent("change"));
+  game.document.querySelector('[data-close="settingsDialog"]').click();
+  game.ids.get("rainStart").click(); game.frame(1300);
+  const gold = game.ids.get("rainDrops").children.find(button => button.classList.contains("key-drop"));
+  const top = gold.style.top; game.frame(1000); assert.equal(gold.style.top, top);
+  assert.equal(game.evaluate("NarrativeTrials.rain.elapsed"), 2300);
+  completeTwilightRain(game);
+});
+
+test("restarting cancels every new trial and malformed trial data does not bypass the story", () => {
+  for (const factory of [familyRiskGame, courtDecisionGame, twilightGame]) {
+    const game = factory(); finishDialog(game);
+    const stale = game.ids.get("rainStart"); game.evaluate("resetRun()"); stale.click(); game.frame(40000);
+    assert.equal(game.evaluate("NarrativeTrials.family || NarrativeTrials.court || NarrativeTrials.rain"), null);
+    assert.equal(game.ids.get("rainTrial").hidden, true);
+    assert.equal(game.ids.get("trialHUD").hidden, true);
+    assert.equal(game.evaluate("G.area"), "mirror");
+  }
+  const game = harness({ [SAVE]: JSON.stringify({ area: "blood", px: 195, py: 226, flags: { sister: true, parents: true }, counters: {}, memories: [], trials: { version: 1, court: { mode: "choice", remaining: -1, script: "refusal", index: 99, claimed: [true] }, rain: { mode: "play", mask: 31, elapsed: null, drops: [null] } } }) });
+  game.ids.get("startButton").click();
+  assert.equal(game.evaluate("currentDialogScript === SCRIPTS.accuse"), true);
+  assert.equal(game.evaluate("NarrativeTrials.rain"), null);
+});
+
+test("novel speaker identities and the internal heart-space question follow chapters 053 and 057", () => {
+  const game=harness();
+  assert.equal(game.evaluate("SCRIPTS.storm2.lines.at(-1).s"),'无名者');
+  assert.equal(game.evaluate("SCRIPTS.echoStorm.lines.at(-1).s"),'无名者');
+  game.evaluate("ui.start.hidden=true;G.area='rain';playScript('repress')");
+  advanceToText(game,'心象空间有两种形式');assert.equal(game.ids.get('dialogSpeaker').textContent,'压抑');
+  nextLine(game);assert.equal(game.evaluate('currentFullText()'),'为什么？');assert.equal(game.ids.get('dialogSpeaker').textContent,'周防');
+  nextLine(game);assert.equal(game.evaluate('currentFullText()'),'你说的是哪一个？');assert.equal(game.ids.get('dialogSpeaker').textContent,'压抑');
+  nextLine(game);assert.equal(game.evaluate('currentFullText()'),'所有的。');assert.equal(game.ids.get('dialogSpeaker').textContent,'周防');
+});
+
+test("the dropped heart remains released through the guest room and an old courtyard checkpoint", () => {
+  const game=harness({[SAVE]:JSON.stringify({area:'blood',px:195,py:130,flags:{},memories:[],counters:{}})});
+  game.ids.get('startButton').click();advanceToText(game,'抓力松去');
+  assert.equal(game.evaluate('StoryStaging.playerOptions().pose'),'kneel');
+  assert.equal(game.evaluate('StoryStaging.playerOptions().heldHeart'),false);assert.equal(game.evaluate('StoryStaging.playerOptions().blood'),true);
+  finishDialog(game);assert.equal(game.evaluate('StoryStaging.playerOptions().heldHeart'),false);
+  const resumed=harness(game.snapshot());resumed.ids.get('startButton').click();
+  assert.equal(resumed.evaluate('StoryStaging.playerOptions().heldHeart'),false);assert.equal(resumed.evaluate('!!F.sister'),true);
+  beginInteraction(resumed,'parents');assert.equal(resumed.evaluate('StoryStaging.playerOptions().heldHeart'),false);
+});
+
+test("optional investigations expose the depicted objects without consuming the rain answer or inventing memories", () => {
+  const game=harness();game.evaluate("ui.start.hidden=true;G.area='rain';StoryStaging.reset();buildTileCache()");
+  for(const id of ['rainPool','rainCrack']){beginInteraction(game,id);assert.ok(game.evaluate('currentFullText()').includes(id==='rainPool'?'水潭':'裂隙'));finishDialog(game);}
+  assert.equal(game.evaluate('!!F.rainMemory||!!F.rainDone'),false);
+  game.evaluate("G.area='garden';buildTileCache()");beginInteraction(game,'coffinWood');assert.ok(game.evaluate('currentFullText()').includes('什么都没有留下'));finishDialog(game);
+  assert.equal(game.evaluate('!!F.sleptOnce'),false);
+});
+
+test("camera sampling snaps to source pixels while movement retains subpixel precision", () => {
+  const game=harness();game.evaluate("ui.start.hidden=true;G.area='garden';G.px=245.375;G.py=155.875;StoryStaging.reset();buildTileCache();globalThis.samples=[];ctx.drawImage=(image,...args)=>{if(image===tileCache)samples.push(args)}");
+  game.frame(16);const sample=game.value('samples[0]');assert.ok(sample);assert.equal(sample[0],Math.round(sample[0]));assert.equal(sample[1],Math.round(sample[1]));
+  assert.equal(game.evaluate('G.px'),245.375);assert.equal(game.evaluate('G.py'),155.875);
+});
+
+test("map pointer coordinates account for camera offset and mobile letterboxing", () => {
+  const game=harness();
+  game.evaluate("Expedition.camera={x:80,y:16};canvas.getBoundingClientRect=()=>({left:10,top:20,width:640,height:384})");
+  assert.deepEqual(game.value('Expedition.mapPoint(58,116)'),{x:104,y:64});
+  game.evaluate("canvas.getBoundingClientRect=()=>({left:10,top:20,width:320,height:280})");
+  assert.equal(game.evaluate('Expedition.mapPoint(50,30)'),null);
+  assert.deepEqual(game.value('Expedition.mapPoint(34,112)'),{x:104,y:64});
+  assert.equal(game.evaluate('Expedition.mapPoint(340,112)'),null);
 });
 
 let failed = 0;

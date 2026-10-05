@@ -268,8 +268,8 @@ const MAPS = {
       "#..........T.................#",
       "#............................#",
       "#......*..........*.....*....#",
-      "#..*........CC...............#",
-      "#..........CC........*.......#",
+      "#..*.......CCC...............#",
+      "#..........CCC.......*.......#",
       "#......*..........*......*...#",
       "#............................#",
       "#....T.............T.........#",
@@ -287,11 +287,12 @@ const MAPS = {
     shard: { x: 1, y: 20, name: "花园碎片" },
     exits: [],
     interact: [
-      { x: 12, y: 9, id: "coffin", label: "棺材" },
+      { x: 12, y: 8, id: "coffin", label: "棺材板与铭文" },
       { x: 27, y: 3, id: "recall", label: "记忆的暗处" },
       { x: 1, y: 19, id: "edge", label: "世界边界" },
+      { x: 11, y: 7, id: "coffinWood", label: "棺材的木面", inspect: true },
     ],
-    npcs: [{ x: 16, y: 9, kind: "echo", id: "echoGarden", label: "棺旁的影子", cond: "sleptOnce" }],
+    npcs: [],
   },
 
   house_empty: {
@@ -303,7 +304,7 @@ const MAPS = {
     grid: [
       "################################",
       "#......#........#..............#",
-      "#.B....#...F....#......M.......#",
+      "#.B....#..f..F..#......M.......#",
       "#......#........#..............#",
       "#......D........D..............#",
       "#......#........#..............#",
@@ -326,10 +327,11 @@ const MAPS = {
     exits: [],
     interact: [
       { x: 23, y: 2, id: "bathMirror", label: "卫生间的镜子" },
-      { x: 24, y: 9, id: "washer", label: "洗衣机" },
-      { x: 24, y: 13, id: "toilet", label: "马桶水箱" },
+      { x: 23, y: 9, id: "washer", label: "洗衣机" },
+      { x: 23, y: 13, id: "toilet", label: "马桶水箱" },
       { x: 2, y: 2, id: "bed", label: "自己的床" },
-      { x: 10, y: 5, id: "emptyLiving", label: "空荡的客厅" },
+      { x: 10, y: 2, id: "emptyLiving", label: "空荡的客厅" },
+      { x: 5, y: 8, id: "emptyBedroom", label: "没有压痕的双人床", inspect: true },
     ],
   },
 
@@ -348,7 +350,7 @@ const MAPS = {
       "#......#........#..............#",
       "#......#........#..............#",
       "########.#############.#########",
-      "#..............#...............#",
+      "#....BB........#...............#",
       "#..............#.......K.......#",
       "#..............#...............#",
       "#..............D...............#",
@@ -366,8 +368,8 @@ const MAPS = {
     interact: [{ x: 2, y: 2, id: "famBed", label: "自己的床" }],
     npcs: [
       { x: 13, y: 2, kind: "father", id: "father", label: "父亲" },
-      { x: 24, y: 9, kind: "mother", id: "mother", label: "母亲" },
-      { x: 10, y: 2, kind: "table", id: "table", label: "早餐桌" },
+      { x: 24, y: 9, kind: "mother", id: "mother", label: "母亲", passive: true },
+      { x: 10, y: 2, kind: "table", id: "table", label: "早餐桌", passive: true },
     ],
   },
 
@@ -444,7 +446,7 @@ const MAPS = {
     ],
     shard: { x: 23, y: 22, name: "心象碎片" },
     exits: [{ x: 11, y: 2, to: "meta", need: () => F.rainDone, locked: "裂缝尚未开启。还有话没有听完。" }],
-    interact: [],
+    interact: [{ x: 6, y: 12, id: "rainPool", label: "雨水汇成的水潭", inspect: true }, { x: 12, y: 18, id: "rainCrack", label: "流向塔底的裂隙", inspect: true }],
     npcs: [{ x: 12, y: 6, kind: "repress", id: "repress", label: "以压抑之名者" }],
   },
 
@@ -488,7 +490,7 @@ const MAPS = {
 
 const SOUND_FOR_ENDING = { bad: "horror", twilight: "horror", normal: "meta", true: "meta" };
 
-/* ============================== 剧情文本（沿用原版原文） ============================== */
+/* ============================== 剧情文本（原版游戏与小说正文对照） ============================== */
 
 function quote(t) { return { c: "quote", t }; }
 function fracture(t) { return { c: "fracture", t }; }
@@ -516,6 +518,7 @@ const SCRIPTS = {
     lines: [
       quote("是了，那是你哦。Ta这样说着。是了，那些都是哦。不仅如此，你还要这样，那样。于是，这样，那样就变得是的了。"),
       "从一开始，自我的构筑就混入了别的东西吧。更进一步地说，自我就是由别的东西统合而成的吧。更是有什么，在替着我们做着保证。",
+      "从不断的误认，不断的被要求中，ta们逐渐在一次次的认可中确认了自己的形态。而养育这一切的，正是随心所欲提出要求，不知为何总是消失却又出现的ta。",
       "如果有一天我被抛弃了会怎样呢？为了继续活下去，人们竭尽全力的想要满足ta。但是，人们总是不知道ta想要什么。",
     ],
     then() {
@@ -525,9 +528,15 @@ const SCRIPTS = {
   },
   m3: {
     lines: [
+      "再后来，人们终于在一次又一次的表演，一次又一次的遵循中明白，ta在渴求着什么，因为ta没有了这个东西。",
+      "可是，我们不是已经拥有着这个吗？享受着养育的人们不明白为什么ta仍然这么热衷于此，唯一的解释是：ta的确曾经拥有，但已经被剥夺了。剥夺需要有执行者，于是一个狂妄的小偷被设想出来，Ta夺走了ta的那个东西，从而使得照料着人们、给予人们爱的ta一次又一次地被吸引过去，从而造就了如此的不安。",
+      "因而，只需要把那个Ta杀掉就好了吧。只需要让Ta消失在世界上，ta就不会再离我而去了吧。可是如果只是这样，ta依旧可能被其他的Ta吸引而去的吧，真正重要的，不是成为让ta去追逐的那个东西吗？",
       "于是，人们怀着这样的爱恨，将自身化为了那永恒的变动者，那填入空隙的息壤。",
+      "但让它绝不能想到的事情发生了。在ta的承认下，小偷的形象从而消失殆尽，取代之的是一个覆盖了方方面面的秩序，统辖所有人，指示你如何去做事的法则。",
       "也就是说，那个对于人们至高无上的ta，本身就没有那个幻想中被夺取的东西，ta本身就是缺失着的。",
-      "在进入Ta的世界时，我们就已经被分割为了两种形态。一者是自对ta的误认中产生的自我，一者是遵循着Ta的律法而工作着的、特异的事物。",
+      "那种不可能得以实现的恐惧淹没了一切，惊恐的人们却在这一过程中逐渐放下，看到了新的希望：如果连ta都要遵守那样的规则，那规则必定也为我绘制了崭新的、生存的出路。",
+      "只是，那名为小偷的亡灵似乎还没有完全消退，那想要回到最初的圆满之愿望，似乎还没有完全随之而去，而是转变成了另一种形状，向着那个本来就不存在的空缺指去……",
+      "在进入Ta的世界时，我们就已经被分割为了两种形态。一者是自对ta的误认中产生的自我，一者是遵循着Ta的律法而工作着的、特异的事物，是那个被[我]所拒绝的，与自身截然不同者，那是对“总是如此”的拒绝。",
       "但是啊，总是会回来的，那些我们不愿意去接受，没有办法去接受的[名]。无论以何种方式，无论以何种辗转，总是会自那个与[我]们截然不同的地方回归。",
       quote("所以啊，你想起来了吗，你的一切？我无名的旅伴？"),
     ],
@@ -556,7 +565,7 @@ const SCRIPTS = {
       "噔。噔。噔。",
       "无穷向上延伸的回廊，响起了脚步声。无名的人向上看去，红色的月亮挂在无尽轮回的高塔之上。",
       "而在红月下方，有一个浑黑的身影，仿佛违反了物理法则一般，从高塔之中向月亮落去。",
-      say("浑黑的身影", "下一个奇点再见吧，无名的旅伴。", "quote"),
+      say("无名者", "下一个奇点再见吧，无名的旅伴。", "quote"),
     ],
     then() {
       F.storm2 = true;
@@ -615,12 +624,19 @@ const SCRIPTS = {
       "可是，如果不是这样的解释，那岂不是白白死去了？",
       "或者说，如果我在梦中清醒，那么我必然在现实中沉眠。那么反过来，在梦中沉眠呢？或许可以打破这个僵局。",
     ],
+    choices: [
+      { label: "再次躺入棺材", run: () => playScript("coffinSleep") },
+      { label: "暂时合上棺材，继续调查花园", run: () => {} },
+    ],
     then() { addMemory("梦中沉眠"); },
   },
   coffinSleep: {
     lines: [
       staged("周防再一度迈入棺材，躺下，将自己刚刚推开的棺材板重新覆盖在头顶，然后再一度陷入沉眠。", { at: [12, 9], focus: { x: 12, y: 8 }, pose: "sleep", coffin: true }),
       staged("在一切尚未发生之时，万千的表象被撕扯开联系，撕扯开因果，化为无数片。", { scene: "curtain" }),
+      "而后，一缕光芒自不知何处降临，将那近乎所有的表象再度撕扯而去，只落下些许暗淡而重复的时刻。",
+      say("无意识", "这是……[我]！", "quote"),
+      "无意识的呓语向虚空之中蔓延而去，像是在对什么人警告着。而后，光芒一闪而过，带着全部的表象消失不见。",
       "虚空中，无数张眼睛被张开。看来新的倒霉蛋出现了呢。这次，我们又可以增添多少乐趣了呢？",
     ],
     then() {
@@ -656,7 +672,7 @@ const SCRIPTS = {
   },
   washer: {
     lines: [
-      staged("洗衣机或许是一个值得调查的空间。果不其然，周防在里面发现了一条裤子，而裤兜中有一角残破的照片。", { at: [24, 10], focus: { x: 24, y: 9 }, pose: "search", dir: 3 }),
+      staged("洗衣机或许是一个值得调查的空间。果不其然，周防在里面发现了一条裤子，而裤兜中有一角残破的照片。", { at: [23, 10], focus: { x: 23, y: 9 }, pose: "search", dir: 3 }),
       staged("看着十分年轻的周防，在这角残片的中央站着。背后似乎有两个人一起站着，但因为照片的断裂，无法从四条腿辨认这两个人是谁。", { pose: "photo" }),
       "或许是我的父母？周防这样想着。",
     ],
@@ -669,7 +685,7 @@ const SCRIPTS = {
   },
   toiletPain: {
     lines: [
-      staged("当周防刚刚试图打开这坐便器的盖子时，右侧头部剧烈的痛苦吞噬了一切。", { at: [24, 14], focus: { x: 24, y: 13 }, pose: "pain" }),
+      staged("当周防刚刚试图打开这坐便器的盖子时，右侧头部剧烈的痛苦吞噬了一切。", { at: [23, 14], focus: { x: 23, y: 13 }, pose: "pain" }),
       staged("他从睡眠中醒来，在棺材里难受地打滚。痛，好痛，好痛。", { area: "garden", scene: "map", at: [12, 9], focus: { x: 12, y: 8 }, pose: "pain", coffin: true }),
       "许久之后，周防下意识摸向裤兜。那片照片残片本应只是那个世界的产物。",
       staged("可是，从裤兜里掏出的，是已经变干的那片照片残片。而站在里面的，正是那个不知为何的世界中，年轻的周防。", { pose: "photo" }),
@@ -702,7 +718,7 @@ const SCRIPTS = {
       staged("猛然的，周防再一度从那张熟悉的床上醒来。只不过这次，他异常地感到了安心。", { scene: "map", at: [3, 3], focus: { x: 3, y: 3 }, pose: "wake", coffin: false }),
       "咸香味，是厨房里面飘出来的。果然，我这次找对梦或世界了。",
     ],
-    then() { F.familyWoke = true; },
+    then() { F.familyWoke = true; startAreaScene(); },
   },
   father: {
     lines: [
@@ -714,6 +730,7 @@ const SCRIPTS = {
     then() {
       F.father = true;
       addMemory("父亲");
+      playScript("mother");
     },
   },
   mother: {
@@ -728,6 +745,7 @@ const SCRIPTS = {
       F.mother = true;
       addMemory("母亲");
       addMemory("小防");
+      playScript("table");
     },
   },
   table: {
@@ -738,19 +756,24 @@ const SCRIPTS = {
       quote("慢慢喝，没人抢你的吃。"),
       staged("家中又很快恢复寂静。父母不急不忙地去上班了。", { at: [11, 5], pose: "stand", family: "gone" }),
       "相比上一个梦或世界，唯一的变化就是原本应该在这里的生活痕迹全部回来了。",
-      staged("最后，是厕所的马桶。上一次把他直接遣返的地方。", { at: [24, 14], focus: { x: 24, y: 13 } }),
+      staged("最后，是厕所的马桶。上一次把他直接遣返的地方。", { at: [23, 14], focus: { x: 23, y: 13 } }),
       "或许我应该再等等几天再去看看，说不定有新的变化。",
       "或许是贪恋于饮食，或许是贪恋于日常的生活，又或许是因为之前那次剧痛的顾虑，周防停止了下一步的计划。",
       staged("于是平平淡淡的三日过去。周防知道了自己已经接到大学录取通知书，也知道自己似乎还有一个妹妹，现在应该在外婆家暂住着玩。", { at: [3, 3], focus: { x: 3, y: 3 } }),
       say("周防", "草，我怎么没想到这一点。", "quote"),
+    ],
+    need: () => F.mother,
+    locked: "早餐还冒着热气。先见过父亲和母亲。",
+    then() { NarrativeTrials.offerFamily(); },
+  },
+  familyCurtain: {
+    lines: [
       staged(quote("要开始了吗？新的一幕落下，演员也该正式入场了。"), { scene: "curtain" }),
       "嘻嘻，我很期待他看到那个场景该是什么样的神情，会不会后悔自己没有早点去打开那个……",
       "好了，言尽于此。别忘了我们这次演出也是要给那一侧的[朋友]们看的，提前剧透那么多信息可不是好文明。",
       "说的是。那么接下来，就逐个入场吧。",
       "第二幕，荒诞的转变。",
     ],
-    need: () => F.mother,
-    locked: "早餐还冒着热气。先见过父亲和母亲。",
     then() {
       F.familyDone = true;
       gotoArea("blood", "第二幕 · 荒诞的转变");
@@ -768,6 +791,8 @@ const SCRIPTS = {
       say("周防", "妹妹？你是……我的妹妹吗？", "quote"),
       "自我防护机制意外地工作起来。这一切只不过是一场刻意为之的戏剧。",
       "可是，不是这样的。不是这样的，这已经被我所发生了。",
+      staged("呆滞的周防瘫坐了下来，手中的抓力松去，而那颗苟延残喘已久的心脏也得以回到它来的地方，滚落在那片一无所有的空洞中。", { pose: "kneel", heldHeart: false }),
+      "视线僵直地向四周转去。火，如血一般燃烧的火。不，是带着血一起燃烧的火。焦味和血腥味一并出现在了周防的嗅觉当中，并再一度把他唤醒。",
       staged("只预留直感的周防缓缓站起，而后走出那个血色的庭院。", { at: [13, 11], focus: { x: 13, y: 10 }, pose: "stand" }),
     ],
     then() {
@@ -810,7 +835,7 @@ const SCRIPTS = {
     ],
   },
   refusal: {
-    lines: combatLines('refusal', {0:'周防',2:'周防',4:'外来者',5:'外来者',6:'周防',8:'周防'}, i => ({ pose: 'stand', ...([4,5].includes(i) ? { takeover: 2 } : {}), battle: { phase: 'ownership', progress: i, ...([0,2,6].includes(i) ? { target: {0:0,2:1,6:2}[i] } : {}) } })),
+    lines: combatLines('refusal', {0:'周防',2:'周防',4:'外来者',5:'外来者',6:'周防',8:'外来者',9:'外来者',10:'周防'}, i => ({ pose: 'stand', ...([4,5,8,9].includes(i) ? { takeover: 2 } : {}), battle: { phase: 'ownership', progress: i, ...([0,2,6].includes(i) ? { target: {0:0,2:1,6:2}[i] } : {}) } })),
     choices: [{ label: '让世界崩坏', run: () => playScript('clash') }],
     then() { addMemory('拒绝错误组合'); addMemory('书写权争夺'); },
   },
@@ -820,7 +845,7 @@ const SCRIPTS = {
     then() { addMemory('红灰光团'); },
   },
   repress: {
-    lines: combatLines('rain_1', {"3":"周防","4":"压抑","5":"压抑","6":"压抑","8":"压抑","9":"压抑","10":"周防","11":"压抑","12":"压抑","13":"周防","14":"压抑","15":"周防","16":"压抑","17":"压抑","18":"压抑","19":"周防","20":"压抑","21":"周防","22":"压抑","23":"压抑"}),
+    lines: combatLines('rain_1', {3:'周防',4:'压抑',5:'压抑',6:'压抑',7:'压抑',8:'压抑',9:'压抑',10:'周防',11:'压抑',12:'压抑',13:'周防',14:'压抑',15:'周防',16:'压抑',17:'压抑',18:'压抑',19:'周防',20:'压抑',21:'压抑',22:'周防',23:'压抑',24:'周防',25:'压抑',26:'周防'}),
     choices: [
       { label: '追问记忆为什么在流失', run: () => playScript('rainMemory') },
       { label: '追问不回来是什么意思', run: () => playScript('rainDeath') },
@@ -849,16 +874,9 @@ const SCRIPTS = {
   echoStorm: {
     lines: [
       "而在红月下方，有一个浑黑的身影，仿佛违反了物理法则一般，从高塔之中向月亮落去。",
-      say("浑黑的身影", "下一个奇点再见吧，无名的旅伴。", "quote"),
+      say("无名者", "下一个奇点再见吧，无名的旅伴。", "quote"),
     ],
     then() { addMemory("旅伴的回声"); },
-  },
-  echoGarden: {
-    lines: [
-      "周防打开棺木，看向底部。果然，如同棺材表面一样，上面也铭刻着些许字符。",
-      quote("自无中归来的人啊，醒来，醒来\n回到你的梦里去，回到那永恒的拒绝中去"),
-    ],
-    then() { addMemory("住客的回声"); },
   },
   echoBlood: {
     lines: [
@@ -876,6 +894,24 @@ function ngLines(_id, lines) {
 /* ============================== 结局 ============================== */
 
 const ENDINGS = {
+  bad_family: {
+    code: "BAD END 04", name: "被日常留住的一生",
+    summary: "追索被一次次推迟，普通的一生终于落入黄昏。",
+    text: `少年在熟悉的家中长大、老去。每个明天都足够普通，足够温暖，足够让他把未解的问题再次放下。
+直到岁月走尽，昏黄的海淹没了所有。没有找回的记忆，留待下一次从无中归来。`,
+  },
+  bad_owned: {
+    code: "BAD END 05", name: "他者掌中的身体",
+    summary: "没有及时决定与写入反抗，身体的所有权落入外来者手中。",
+    text: `指控仍在继续，而周防的回答没有落入现象。撕扯的力量占满了身体里最后的间隙。
+那副身体走完了被他者决定的故事。属于周防的意志，已经不能决定下一步。`,
+  },
+  bad_rain: {
+    code: "BAD END 06", name: "没有回来的雨水",
+    summary: "关键雨水没有接取完整，真灵没入黄昏之海。",
+    text: `雨水沿着裂隙流向塔底。那只试图留住什么的手，没能留下完整的回归契机。
+这一次，将醒未醒的边缘没有出现。真灵落入那昏黄的大海，泯灭于高塔尽头的红月。`,
+  },
   bad_twilight: {
     code: "BAD END 03",
     name: "落入黄昏之海",
@@ -950,7 +986,7 @@ let painFlash = 0; // 偏头痛红闪剩余时长
 let stormSequenceStarted = false;
 let lightning = 0; // 闪电白闪剩余时长
 let houseFlicker = 0; // 空屋灯光闪烁剩余时长
-const DYNAMIC_TILES = new Set(["~", "O", "I", "*", "x", "W"]);
+const DYNAMIC_TILES = new Set(["~", "O", "I", "*", "x", "W", "D"]);
 
 const keys = new Set();
 const keySeen = new Map();
@@ -962,11 +998,12 @@ function clearInput() {
 }
 let transitionLock = false;
 
-function saveRun() {
+function saveRun(trialCheckpoint = false) {
   // 对白、选择执行与区域切换视为一个事务；只保存玩家可继续的检查点。
-  if (dialogActive || dialogResolving || (transitionLock && !endingId)) return false;
+  const trialSafe = trialCheckpoint && NarrativeTrials.canCheckpoint();
+  if (!trialSafe && (dialogActive || dialogResolving || (transitionLock && !endingId))) return false;
   try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify({ area: G.area, px: G.px, py: G.py, flags: F, memories: G.memories, counters: G.counters, protagonistName: G.protagonistName, endingId }));
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ area: G.area, px: G.px, py: G.py, flags: F, memories: G.memories, counters: G.counters, protagonistName: G.protagonistName, endingId, trials: NarrativeTrials.snapshot() }));
     return true;
   } catch (e) { /* file:// 限制时忽略 */ }
   return false;
@@ -1020,6 +1057,7 @@ function validSavedPosition(map, px, py) {
 
 function loadAll() {
   // 沿用 v1 键；周目存档与跨周目图鉴独立读取，任何一份损坏不影响另一份。
+  NarrativeTrials.restore(null);
   F = {};
   G.area = "mirror";
   G.memories = [];
@@ -1039,6 +1077,7 @@ function loadAll() {
           loadedPosition = true;
         }
         F = savedFlags(s.flags);
+        NarrativeTrials.restore(s.trials);
         G.memories = savedNames(s.memories);
         G.counters = savedCounters(s.counters);
         if (typeof s.protagonistName === "string" && s.protagonistName.trim()) G.protagonistName = s.protagonistName.trim().slice(0, 40);
@@ -1162,6 +1201,7 @@ function renderLine() {
   Finale.onLine(line);
   PixelArt.onLine(line);
   PhenomenonBattle.onLine(line);
+  NarrativeTrials.onLine();
   if (G.area === "storm") StormFlight.onLine(line);
   updateDialogStatus();
   Expedition.sync();
@@ -1221,6 +1261,7 @@ function advanceDialog() {
     return;
   }
   if (PhenomenonBattle.pending) { PhenomenonBattle.commit(PhenomenonBattle.selected); return; }
+  if (NarrativeTrials.beforeAdvance()) return;
   if (dialogIndex + 1 >= dialogLines.length) {
     if (currentDialogScript && currentDialogScript.choices) showChoices(currentDialogScript.choices);
     else finishDialog(afterDialog);
@@ -1268,6 +1309,7 @@ function showChoices(choices) {
     });
     ui.dialogChoices.append(btn);
   }
+  NarrativeTrials.onChoices(script);
   if (Finale.active()) PhenomenonBattle.history();
   updateDialogStatus();
   const first = ui.dialogChoices.querySelector("button");
@@ -1299,6 +1341,7 @@ function closeDialog() {
 function showEnding(id) {
   const e = ENDINGS[id];
   if (!e) return;
+  NarrativeTrials.reset();
   closeDialog();
   endingId = id;
   transitionLock = true;
@@ -1340,6 +1383,7 @@ function leaveEnding() {
 }
 
 function resetRun() {
+  NarrativeTrials.reset();
   closeDialog();
   dialogResolving = false;
   endingId = null;
@@ -1454,7 +1498,7 @@ function drawTile(c, ch, x, y, map, t) {
       break;
     }
     case "~": { // 水
-      const w = Math.sin(t * 2 + x * 1.7 + y) * 2;
+      const w = Math.round(Math.sin(t * 2 + x * 1.7 + y) * 2);
       c.fillStyle = "#16283a";
       c.fillRect(px, py, TILE, TILE);
       c.fillStyle = "#2c4a66";
@@ -1524,7 +1568,7 @@ function drawTile(c, ch, x, y, map, t) {
           const rise = (t * 6 + h * 8) % 6;
           c.fillStyle = i % 2 ? "#e8a04a" : "#e06838";
           c.globalAlpha = 0.85 - rise * 0.12;
-          c.fillRect(px + 4 + Math.floor(h * 8), py + 4 - rise, 2, 2);
+          c.fillRect(px + 4 + Math.floor(h * 8), py + 4 - Math.round(rise), 2, 2);
           c.globalAlpha = 1;
         }
       }
@@ -1609,10 +1653,9 @@ function drawPerson(c, x, y, opt = {}) {
   const hair = opt.hair || "#222";
   const skin = opt.skin || "#e8c8a8";
   c.save();
-  c.translate(Math.round(x) + 6, Math.round(y + bob) + 8);
-  if (pose === "sleep" || opt.reclined) c.rotate(-Math.PI / 2 + (pose === "pain" && !Expedition.prefs.motion ? Math.sin(StoryStaging.time * 8) * 0.12 : 0));
-  else if (pose === "pain") c.rotate(-0.15);
-  else if (pose === "search") c.rotate(0.2);
+  c.translate(Math.round(x) + (pose === "pain" && !Expedition.prefs.motion ? Math.round(Math.sin(StoryStaging.time * 8)) : 0) + 6, Math.round(y + bob) + 8);
+  if (pose === "sleep" || opt.reclined) c.rotate(-Math.PI / 2);
+  // Pain and searching use their arm poses; arbitrary rotations blur pixel edges.
   const px = -6, py = -8;
   const lowered = pose === "kneel" ? 4 : 0;
   const arm = (x1, y1, x2, y2, color = coat) => {
@@ -1891,6 +1934,7 @@ function blockedAt(px, py) {
 }
 
 function movePlayer(dt) {
+  if (NarrativeTrials.rainActive()) return;
   if (G.area === "meta") return;
   if (G.area === "storm") return; // 逆落的主体运动由镜头推进，不以地面行走表示。
   if (dialogActive || transitionLock || Expedition.paused() || !ui.ending.hidden || !ui.start.hidden) return;
@@ -1939,6 +1983,7 @@ function nearestInteractable() {
   };
   for (const it of map.interact || []) consider(it.x, it.y, { type: "interact", it });
   for (const n of map.npcs || []) {
+    if (n.passive) continue;
     if (n.cond && !F[n.cond]) continue;
     const actor = StoryStaging.npc(n);
     if (!actor.hidden) consider(actor.x, actor.y, { type: "npc", it: n });
@@ -1947,6 +1992,7 @@ function nearestInteractable() {
 }
 
 function tryInteract() {
+  if (NarrativeTrials.interact()) return;
   if (dialogActive || transitionLock || Expedition.paused() || !ui.ending.hidden || !ui.start.hidden) return;
   const near = nearestInteractable();
   if (!near) return;
@@ -1975,6 +2021,14 @@ function handleInteraction(id) {
       else if (F.photoReturned && !F.familyDone) playScript("coffinAgain");
       else playLines(["棺材沉默着。铭文没有变化。"], () => {});
       break;
+    case "coffinWood":
+      playLines(["这具纯木打制的棺材不知为何意外地坚韧。周防试图用石子在上面雕刻出痕迹，然而什么都没有留下。只有从最开始就一直铭刻在其上的那些基本信息。"], () => {}); break;
+    case "emptyBedroom":
+      playLines([staged("一个平平无奇的双人大床。空空荡荡的衣橱、毫无一物的储物柜，和没有任何压痕的床铺都在显示这样一个事实：这里没有人住过。", { focus: { x: 5, y: 8 }, pose: "stand" })], () => {}); break;
+    case "rainPool":
+      playLines(["雨水在落下。自无尽螺旋的高塔，然后一滴滴掉落在地上，融为水潭。"], () => {}); break;
+    case "rainCrack":
+      playLines(["最后，沿着地板的裂隙，流入塔底。那是深不见底的晦暗，是不可见的流，却又以一种极其似曾相识的规律运转着。"], () => {}); break;
     case "recall": playScript("recall"); break;
     case "edge": playScript("edge"); break;
     case "bed": playScript("bed"); break;
@@ -2014,7 +2068,6 @@ function handleInteraction(id) {
     case "senpai":
     case "flower": Finale.enter(); break;
     case "echoStorm": playScript("echoStorm"); break;
-    case "echoGarden": playScript("echoGarden"); break;
     case "echoBlood": playScript("echoBlood"); break;
     case "flower":
       if (!F.metaDone) playLines(["水晶花沉睡着。碑文还没有被读完，她也还没有把话说完。"], () => {});
@@ -2119,11 +2172,15 @@ function applyStoryStage(line) {
 
 function startAreaScene() {
   if (dialogActive || transitionLock || Expedition.paused() || !ui.start.hidden || !ui.ending.hidden) return;
+  if (NarrativeTrials.resume()) return;
   if (G.area === "meta") { Finale.enter(); return; }
   if (G.area === "house_empty" && !F.emptyWoke) playScript("bed");
   else if (G.area === "house_family") {
     if (F.familyDone) gotoArea("blood", "第二幕 · 荒诞的转变");
     else if (!F.familyWoke) playScript("famBed");
+    // Continue old checkpoints at the next unread part of the breakfast.
+    else if (F.mother) playScript("table");
+    else if (F.father) playScript("mother");
   }
   else if (G.area === "blood") {
     if (F.refused) gotoArea("rain", "显意识的边缘");
@@ -2236,8 +2293,8 @@ function renderAreaFx(map, cam, t) {
     const cy = 8 * TILE - cam.y;
     const g = 0.2 + Math.sin(t * 2) * 0.12;
     ctx.fillStyle = `rgba(201,168,106,${g})`;
-    ctx.fillRect(cx - 1, cy - 5, 2, 9);
-    ctx.fillRect(cx - 4, cy - 2, 8, 2);
+    ctx.fillRect(cx - 9, cy - 3, 19, 1);
+    ctx.fillRect(cx - 7, cy, 15, 1);
   } else if (id === "house_empty") {
     // 斜窗光
     ctx.fillStyle = `rgba(200,198,175,${0.05 + 0.015 * Math.sin(t * 0.7)})`;
@@ -2272,8 +2329,9 @@ function renderAreaFx(map, cam, t) {
     // The hand and heart, then two charred remains: the objects described in the scene.
     const sx = 13 * TILE + 8 - cam.x, sy = 7 * TILE + 8 - cam.y;
     ctx.save(); ctx.translate(sx, sy); ctx.rotate(Math.PI / 2);
-    drawPerson(ctx, -6, -8, { coat: "#603345", hair: "#211318", skin: "#aa8278", dir: 0 });
+    drawPerson(ctx, -6, -8, { coat: "#603345", hair: "#211318", skin: "#aa8278", dir: 0, dead: true });
     ctx.restore();
+    if (F.sister || StoryStaging.heartReleased) { ctx.fillStyle = "#511425"; ctx.fillRect(sx - 1, sy - 2, 6, 4); ctx.fillStyle = "#aa3744"; ctx.fillRect(sx, sy - 2, 3, 2); }
     const px = 13 * TILE - cam.x, py = 15 * TILE - cam.y;
     ctx.fillStyle = "#09080a"; ctx.fillRect(px - 3, py + 1, 8, 13); ctx.fillRect(px + 5, py + 2, 8, 12);
     ctx.strokeStyle = "#bc6739"; ctx.beginPath(); ctx.moveTo(px - 1, py - 3); ctx.lineTo(px + 12, py + 12); ctx.stroke();
@@ -2312,8 +2370,10 @@ function updateHud() {
 }
 
 function render(now) {
-  const dt = Math.min(0.05, (now - lastT) / 1000);
+  const elapsed = Math.max(0, (now - lastT) / 1000);
+  const dt = Math.min(0.05, elapsed);
   lastT = now;
+  NarrativeTrials.update(elapsed);
 
   if (!Expedition.paused()) {
     movePlayer(dt);
@@ -2332,6 +2392,12 @@ function render(now) {
     if (n >= full.length) { typeDone = true; updateDialogStatus(); }
   }
   if (notifyT > 0) notifyT -= dt;
+
+  if (NarrativeTrials.render()) {
+    Expedition.render(dt, { x: 0, y: 0 }, now);
+    requestAnimationFrame(render);
+    return;
+  }
 
   if (G.area === "storm") {
     renderStorm(now, dt);
@@ -2361,6 +2427,8 @@ function render(now) {
     y: Math.max(0, Math.min(mh - VIEW_H, G.py + 8 - VIEW_H / 2)),
   });
 
+  cam.x = Math.round(cam.x); cam.y = Math.round(cam.y);
+  Expedition.camera = cam;
   ctx.clearRect(0, 0, VIEW_W, VIEW_H);
 
   ctx.drawImage(tileCache, cam.x, cam.y, VIEW_W, VIEW_H, 0, 0, VIEW_W, VIEW_H);
@@ -2391,6 +2459,8 @@ function render(now) {
     }
   }
 
+  PixelArt.sceneProps(ctx, map, cam);
+
   // 区域专属演出（倒影、雾缘、窗光、心跳、碑光等）
   renderAreaFx(map, cam, t);
 
@@ -2405,16 +2475,18 @@ function render(now) {
 
   // 交互点标记
   const near = nearestInteractable();
-  const drawMarker = (tx, ty, active) => {
+  const drawMarker = (tx, ty, active, inspect = false) => {
     if (dialogActive) return;
-    const sx = tx * TILE + 8 - cam.x;
-    const sy = ty * TILE - 4 - cam.y + Math.sin(t * 4) * 2;
+    const sx = Math.round(tx * TILE + 8 - cam.x);
+    const sy = Math.round(ty * TILE - 4 - cam.y + Math.sin(t * 4) * 2);
     ctx.fillStyle = active ? "#f0d88a" : "rgba(240,216,138,0.55)";
     ctx.font = "8px monospace";
-    ctx.fillText("!", sx - 2, sy);
+    if (inspect) { ctx.fillRect(sx - 2, sy - 4, 4, 1); ctx.fillRect(sx - 3, sy - 3, 1, 3); ctx.fillRect(sx + 2, sy - 3, 1, 3); ctx.fillRect(sx - 2, sy, 4, 1); }
+    else ctx.fillText("!", sx - 2, sy);
   };
-  for (const it of map.interact || []) drawMarker(it.x, it.y, near && near.it === it);
+  for (const it of map.interact || []) drawMarker(it.x, it.y, near && near.it === it, it.inspect);
   for (const n of map.npcs || []) {
+    if (n.passive) continue;
     if (n.cond && !F[n.cond]) continue;
     const actor = StoryStaging.npc(n);
     if (!actor.hidden) drawMarker(actor.x, actor.y, near && near.it === n);
@@ -2571,4 +2643,5 @@ Expedition.init();
 Finale.init();
 PixelArt.init();
 PhenomenonBattle.init();
+NarrativeTrials.init();
 requestAnimationFrame(render);

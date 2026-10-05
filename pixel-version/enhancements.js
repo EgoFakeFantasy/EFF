@@ -6,6 +6,8 @@ const Expedition = {
   journal: [],
   chapterTime: 0,
   effect: null,
+  selectedPoint: null,
+  camera: { x: 0, y: 0 },
   saveElapsed: 0,
   mapElapsed: 0,
   transitionTimers: [],
@@ -71,6 +73,7 @@ const Expedition = {
     const interact = () => {
       clearInput();
       if (this.paused()) return;
+      if (NarrativeTrials.interact()) return;
       if (dialogActive) advanceDialog(); else tryInteract();
       this.focusGameplay();
     };
@@ -80,6 +83,7 @@ const Expedition = {
       button.addEventListener("pointerdown", event => {
         event.preventDefault();
         if (dialogActive || this.paused() || transitionLock || !ui.start.hidden || !ui.ending.hidden) return;
+        if (NarrativeTrials.rainActive()) { if (["arrowleft", "arrowright"].includes(button.dataset.direction)) NarrativeTrials.select(button.dataset.direction === "arrowleft" ? -1 : 1); return; }
         button.setPointerCapture(event.pointerId);
         touchKeys.add(button.dataset.direction);
         button.classList.add("pressed");
@@ -89,8 +93,51 @@ const Expedition = {
     });
     const resumed = Boolean(F.m1 || G.area !== "mirror" || endingId);
     ui.startButton.textContent = resumed ? "继续这段旅途" : "进入回廊";
-    this.dom.startStatus.textContent = resumed ? `已停留于${MAPS[G.area].name} · 图鉴 ${META.shards.length} / 8` : "八处梦境 · 八枚碎片 · 六种结局";
+    this.dom.startStatus.textContent = resumed ? `已停留于${MAPS[G.area].name} · 图鉴 ${META.shards.length} / 8` : `八处梦境 · 八枚碎片 · ${Object.keys(ENDINGS).length} 种结局`;
+    this.initMapPointer();
+    this.initPixelScale();
     this.sync();
+  },
+
+  initPixelScale() {
+    const frame=document.querySelector('.screen-frame'), wrap=document.querySelector('.game-wrap');
+    if(!frame||!wrap||typeof ResizeObserver==='undefined')return;
+    const fit=()=>{
+      const column=window.innerWidth<=820;
+      const aside=!column&&!ui.codex.hidden?ui.codex.getBoundingClientRect().width+14:0;
+      const available=Math.max(1,wrap.getBoundingClientRect().width-aside-2), dpr=window.devicePixelRatio||1;
+      const scale=Math.max(1,Math.floor(available*dpr/VIEW_W));
+      // Every source pixel spans a whole number of device pixels when space permits.
+      const width=Math.min(available,VIEW_W*scale/dpr);
+      frame.style.setProperty('--pixel-width',(width+2)+'px');
+    };
+    this.scaleObserver=new ResizeObserver(fit);this.scaleObserver.observe(wrap);this.scaleObserver.observe(ui.codex);
+    window.addEventListener('resize',fit);fit();
+  },
+
+  mapPoint(clientX,clientY) {
+    const box=canvas.getBoundingClientRect(), scale=Math.min(box.width/VIEW_W,box.height/VIEW_H);
+    if(!scale)return null;
+    const x=(clientX-box.left-(box.width-VIEW_W*scale)/2)/scale;
+    const y=(clientY-box.top-(box.height-VIEW_H*scale)/2)/scale;
+    if(x<0||y<0||x>=VIEW_W||y>=VIEW_H)return null;
+    return {x:x+this.camera.x,y:y+this.camera.y};
+  },
+
+  initMapPointer() {
+    canvas.addEventListener('click',event=>{
+      if(dialogActive||this.paused()||transitionLock||!ui.start.hidden||!ui.ending.hidden||['storm','meta'].includes(G.area)||NarrativeTrials.rainActive())return;
+      const point=this.mapPoint(event.clientX,event.clientY);if(!point)return;
+      const map=MAPS[G.area];
+      const targets=[...(map.interact||[]),...(map.npcs||[]).filter(n=>!n.passive&&(!n.cond||F[n.cond])&&!StoryStaging.npc(n).hidden)];
+      const target=targets.map(it=>({it,at:(map.npcs||[]).includes(it)?StoryStaging.npc(it):it})).filter(({at})=>Math.hypot(point.x-(at.x*TILE+8),point.y-(at.y*TILE+8))<=16).sort((a,b)=>Math.hypot(point.x-a.at.x*TILE-8,point.y-a.at.y*TILE-8)-Math.hypot(point.x-b.at.x*TILE-8,point.y-b.at.y*TILE-8))[0];
+      if(!target){this.selectedPoint=null;return;}
+      const near=nearestInteractable();
+      if(near?.it===target.it){tryInteract();return;}
+      this.selectedPoint={...target.at,id:target.it.id,label:target.it.label};
+      this.status('已标记 · '+target.it.label+'。靠近后按 E 或「调查」。');
+      canvas.focus({preventScroll:true});
+    });
   },
 
   applyPrefs() {
@@ -107,6 +154,7 @@ const Expedition = {
   focusGameplay() {
     if (!ui.start.hidden) { ui.startButton.focus({ preventScroll: true }); return; }
     if (!ui.ending.hidden) { ui.endingRestart.focus({ preventScroll: true }); return; }
+    if (NarrativeTrials.rainActive()) { (NarrativeTrials.rain.mode === "intro" ? NarrativeTrials.dom.rainStart : canvas).focus({ preventScroll: true }); return; }
     const first = dialogChoices && ui.dialogChoices.querySelector("button");
     (first || canvas).focus({ preventScroll: true });
   },
@@ -118,12 +166,13 @@ const Expedition = {
 
   goal() {
     const target = (id, text) => ({ id, text });
+    if (NarrativeTrials.rainActive()) return target(null, "黄昏之海：点击雨滴，或左右选中、E 接住；收齐四滴关键雨水。");
     switch (G.area) {
       case "mirror": return !F.m1 ? target("m1", "调查第一面镜。") : !F.m2 ? target("m2", "倾听第二面镜。") : !F.m3 ? target("m3", "走向第三面镜。") : target("exit", "回廊的尽头已经打开。走进雨幕。");
       case "storm": return target(null, !F.storm1 ? "你正向天空中的红月逆落。倾听雨中的声音。" : !F.storm2 ? "按 E / 空格或「伸手」留住雨滴；左右可略微偏移，触及雨中的碎片。" : "下一个奇点再见吧，无名的旅伴。");
       case "garden": return target("coffin", F.photoReturned ? "带着照片残片，回到苏醒的容器。" : "调查棺底的铭文。世界边界与记忆的暗处，也可以探索。");
       case "house_empty": return !F.emptyLiving ? target("emptyLiving", "推开房门，看看没有声音的客厅。") : target(F.hasPhoto ? "toilet" : "washer", F.hasPhoto ? "照片残片已经握在手里。继续调查房间。" : "调查这间没有声音的家。洗衣机仍在震动。");
-      case "house_family": return !F.father ? target("father", "向沙发上的父亲打个招呼。") : !F.mother ? target("mother", "走向厨房，见过母亲。") : target("table", "早餐还冒着热气。");
+      case "house_family": return !F.father ? target("father", "向沙发上的父亲打个招呼，随后继续家中的早晨。") : target(null, "继续倾听：母亲端菜入场，一家人坐下吃早饭。");
       case "blood": return !F.sister ? target("sister", "先看清那只手，和心脏的主人。") : !F.parents ? target("parents", "穿过庭院尽头的门，走向褐色客房中的残骸。") : target(null, "那些声音在等待你的回答。");
       case "rain": return F.rainDone ? target("exit", "塔顶的裂缝已经开启。") : target("repress", "走向以压抑之名者，听完尚未说完的话。");
       case "meta": return target(null, FinaleScenes[Finale.node()].echo || "让字句显现，读见这一段故事的改变。");
@@ -132,6 +181,7 @@ const Expedition = {
   },
 
   goalPoint() {
+    if (this.selectedPoint) return this.selectedPoint;
     const id = this.goal().id;
     const map = MAPS[G.area];
     if (id === "gold") return goldDrop ? { x: (goldDrop.x - 8) / TILE, y: (goldDrop.catchY - 8) / TILE } : null;
@@ -156,7 +206,13 @@ const Expedition = {
     setText(this.dom.interactButton, dialogActive ? (dialogChoices ? "选择你的回答" : typeDone ? (PhenomenonBattle.pending ? "写入选中现象" : "继续倾听") : "显示全文") : near ? (G.area === "storm" ? near.it.label : `调查 · ${near.it.label}`) : G.area === "storm" ? "向红月逆落" : "靠近事物 · 调查");
     this.dom.touchInteract.disabled = unavailable || Boolean(dialogChoices);
     setText(this.dom.touchInteract, G.area === "storm" && !dialogActive ? "伸手" : dialogActive ? (PhenomenonBattle.pending && typeDone ? "写入" : "继续") : "调查");
-    this.dom.mapButton.disabled = G.area === "storm";
+    if (NarrativeTrials.rainActive()) {
+      this.dom.interactButton.disabled = unavailable;
+      this.dom.touchInteract.disabled = unavailable;
+      setText(this.dom.interactButton, NarrativeTrials.rain.mode === "intro" ? "伸出双手 · 开始接雨" : "接住选中的雨水");
+      setText(this.dom.touchInteract, "接雨");
+    }
+    this.dom.mapButton.disabled = G.area === "storm" || NarrativeTrials.rainActive();
     this.dom.mapButton.hidden = G.area === "meta";
     if (G.area === "meta") this.dom.mapPanel.hidden = true;
     if (G.area === "storm") this.dom.mapPanel.hidden = true;
@@ -166,6 +222,7 @@ const Expedition = {
   },
 
   onAreaChange() {
+    this.selectedPoint = null;
     clearInput();
     this.chapterTime = this.prefs.motion ? 1.5 : 3;
     this.effect = null;
@@ -180,6 +237,7 @@ const Expedition = {
   },
 
   onLine(line) {
+    this.selectedPoint = null;
     clearInput();
     ui.dialog.dataset.tone = line.c || (line.rewrite ? "rewrite" : "narration");
     // The log contains offered lines only, never the rest of a scene or a branch.
@@ -311,6 +369,16 @@ const Expedition = {
         ctx.restore();
       }
       if (this.effect.left <= 0) this.effect = null;
+    }
+    if (!dialogActive && !transitionLock && ui.start.hidden && ui.ending.hidden && !this.paused()) {
+      const point=this.selectedPoint || nearestInteractable()?.it;
+      if(point && Number.isFinite(point.x)) {
+        const x=Math.round(point.x*TILE-cam.x),y=Math.round(point.y*TILE-cam.y);
+        ctx.fillStyle=this.selectedPoint?'#82b9c5':'#e2c581';
+        for(const [dx,dy,sx,sy] of [[-2,-2,1,1],[18,-2,-1,1],[-2,18,1,-1],[18,18,-1,-1]]){
+          ctx.fillRect(x+dx,y+dy,4*sx,1);ctx.fillRect(x+dx,y+dy,1,4*sy);
+        }
+      }
     }
     if (!this.prefs.hints || dialogActive || transitionLock || !ui.start.hidden || !ui.ending.hidden || this.paused()) return;
     const goal = this.goalPoint();

@@ -13,7 +13,7 @@ const PixelArt = {
   profile(line) {
     const speaker = line?.s;
     if (!speaker || ["故事状态", "旁白"].includes(speaker)) return null;
-    const role = speaker === "？？？" ? "unknown" : speaker === "周防" ? "zhou" : speaker === "父亲" ? "father" : speaker === "母亲" ? "mother" : speaker === "妹妹" ? "sister" : ["压抑", "无意识", "旅伴", "浑黑的身影"].includes(speaker) ? "shadow" : ["外来者", "背景"].includes(speaker) ? "intruder" : null;
+    const role = speaker === "？？？" ? "unknown" : speaker === "周防" ? "zhou" : speaker === "父亲" ? "father" : speaker === "母亲" ? "mother" : speaker === "妹妹" ? "sister" : ["压抑", "无意识", "旅伴", "无名者", "浑黑的身影"].includes(speaker) ? "shadow" : ["外来者", "背景"].includes(speaker) ? "intruder" : null;
     if (!role) return null;
     return { role, blood: role === "zhou" && G.area === "blood", young: ["house_empty", "house_family", "blood"].includes(G.area), tense: G.area === "blood" || !!line.rewrite, shouting: /拽入深渊|绝不可能/.test(line.t || ""), speaker };
   },
@@ -115,6 +115,11 @@ const PixelArt = {
     r(28,35,2,2,'#343b46');r(37,35,2,2,'#343b46');r(28,35,1,1,'#a1aaa9');
     r(33,36,1,6,'#b18471');r(34,42,3,1,'#956b61');
     r(30,47,7,1,'#986966');r(32,49,4,1,'#e0b89a');
+    if(p.role==='zhou' && !p.young){r(24,40,5,1,'#af8572');r(38,40,3,1,'#aa7d6d');r(25,48,1,1,'#95786d');r(38,49,1,1,'#95786d');}
+    // Deliberate hair clusters and facial planes, rather than random texture.
+    r(25,36,2,1,'#342d32');r(36,36,1,1,'#342d32');r(26,34,4,1,'#523d3d');r(37,34,3,1,'#523d3d');
+    r(24,32,1,6,'#eac7a8');r(42,35,1,5,'#936758');r(33,39,1,2,'#ecc4a0');
+    r(26,20,3,1,hairMid);r(24,21,2,2,hairMid);r(36,18,2,2,hairMid);r(40,21,2,1,hairMid);
     if(p.tense){r(25,31,2,1,'#604944');r(27,32,4,1,'#604944');r(36,32,4,1,'#604944');r(40,31,1,1,'#604944');}
     if(p.shouting){r(30,46,7,4,'#56333d');r(31,46,5,1,'#ded1ba');}
     if(father){r(24,39,5,1,'#a97f6a');r(38,39,3,1,'#a97f6a');for(let y=46;y<53;y+=2)for(let x=27;x<40;x+=3)r(x,y,1,1,'#817367');}
@@ -224,7 +229,7 @@ const PixelArt = {
         r(2+Math.floor(hash(x,y,row)*5),row*8+3,7,1,shade(base,1.16));
       }
     }else if(map===MAPS.garden){
-      for(let i=0;i<4;i++){
+      for(let i=0;i<2;i++){
         const a=Math.floor(hash(x,y,i+40)*15),b=Math.floor(hash(x,y,i+52)*15);
         r(a,b,3,1,i%2?'#23392b':'#192c22');r(a+1,b-2,1,3,i%2?'#2b4330':'#213729');
       }
@@ -274,8 +279,8 @@ const PixelArt = {
       const ox=t?Math.round(Math.sin(t*2+x*2+y)):0;
       for(const [a,b] of [[6,4],[9,5],[5,7],[8,8]]){r(a+ox,b,2,2,petal);r(a+ox,b,1,1,'#e1ddbd');}r(7+ox,6,2,2,'#d5ba79');
     }else if(ch==='C'){
-      r(0,0,16,16,'#191a17');r(1,1,14,13,'#634d37');r(2,2,12,1,'#a18a5b');r(2,3,1,10,'#8d734b');r(13,3,1,10,'#302c25');r(3,12,10,1,'#372d23');
-      for(let i=0;i<3;i++)r(4,4+i*3,7+i%2*2,1,'#806848');r(7,5,2,5,'#b5a173');r(5,7,6,1,'#c7b381');r(2,14,12,2,'#27221c');
+      // Connected coffin tiles are drawn as one wooden object by sceneProps.
+      this.floor(c,'.',x,y,map);
     }else if(ch==='m'||ch==='M'){
       r(1,0,14,16,'#141b28');r(2,0,11,1,'#bdaf8d');r(2,1,2,13,'#857964');r(12,1,2,13,'#453d3d');r(3,14,10,2,'#9b8b71');
       r(4,2,8,11,'#35485e');r(5,3,6,3,'#6a879c');r(4,10,8,3,'#293546');
@@ -286,7 +291,7 @@ const PixelArt = {
       r(1,12,14,3,'#151b20');r(2,2,12,5,'#806d5b');r(3,3,10,1,'#a58c6a');r(2,7,12,6,'#665948');r(3,8,4,3,'#8b775d');r(8,8,4,3,'#7c6b56');r(7,7,1,5,'#493f38');r(1,5,2,7,'#9a8064');r(13,5,2,7,'#4a433a');
     }else if(ch==='f'||ch==='K'){
       r(0,3,16,11,'#463b2e');r(0,3,16,2,ch==='K'?'#a29e89':'#9b7f53');r(1,5,14,7,'#706044');r(1,12,14,2,'#3b322a');r(7,5,1,7,'#4c422f');r(4,7,2,1,'#c4b98a');r(10,7,2,1,'#c4b98a');
-      if(ch==='f'){r(2,4,5,3,'#d2c9af');r(3,4,3,2,'#ede4cb');r(10,8,4,2,'#d2c9af');}
+      if(ch==='f'&&map!==MAPS.house_empty){r(2,4,5,3,'#d2c9af');r(3,4,3,2,'#ede4cb');r(10,8,4,2,'#d2c9af');}
     }else if(ch==='W'){
       r(2,1,12,14,'#929b9d');r(3,2,10,12,'#c5c8bd');r(3,2,10,2,'#dddcd0');r(4,3,4,1,'#4c606a');r(11,3,1,1,'#9bbbaf');
       r(5,5,6,1,'#647985');r(4,6,8,5,'#4b6476');r(5,7,6,4,'#26394d');r(6,7,4,2,'#7b9aa8');r(5,11,6,1,'#819897');r(3,13,10,1,'#929f9f');
@@ -294,21 +299,83 @@ const PixelArt = {
     else if(ch==='|'){r(5,2,2,11,'#557186');r(9,2,2,11,'#1b2a40');r(3,0,10,1,'#79919d');r(3,14,10,1,'#516878');r(2,15,12,1,'#131e2a');}
     else if(ch==='b'){r(2,4,2,1,'#863838');r(6,6,3,1,'#9c4a44');r(10,10,2,1,'#7f332b');r(1,12,1,1,'#5b2021');}
     else if(ch==='O')this.moon(c,px+8,py+8,6);
-    else if(ch==='D'){r(3,1,1,14,shade(P.trim,1.8));r(12,1,1,14,shade(P.trim,.65));r(5,2,6,1,shade(P.glow,.7));r(10,9,1,1,'#f0d393');}
+    else if(ch==='D'){
+      const house=map===MAPS.house_empty||map===MAPS.house_family;
+      if(house&&Math.hypot(G.px+6-px-8,G.py+8-py-8)<25){
+        this.floor(c,'.',x,y,map);r(2,0,2,16,'#29261f');r(12,0,2,16,'#4d4735');r(3,1,2,13,'#8b7754');r(5,13,6,1,'#806b4e');
+      }else{r(3,1,1,14,shade(P.trim,1.8));r(12,1,1,14,shade(P.trim,.65));r(5,2,6,1,shade(P.glow,.7));r(10,9,1,1,'#f0d393');}
+    }
   },
 
   person(c, px, py, lowered, opt, pose) {
-    // Detail stays inside the original pose transform and collision footprint.
-    c.fillStyle = shade(opt.coat || "#3a4a6a", 1.25); c.fillRect(px + 3, py + 7 + lowered, 1, 4); c.fillRect(px + 6, py + 8 + lowered, 2, 1);
-    c.fillStyle = shade(opt.coat || "#3a4a6a", .62); c.fillRect(px + 8, py + 7 + lowered, 1, 4); c.fillRect(px + 5, py + 7 + lowered, 1, 5);
-    c.fillStyle = "#b2aa98"; c.fillRect(px + 5, py + 6 + lowered, 2, 1);
-    if (!opt.hood) { c.fillStyle = shade(opt.hair || "#222222", 1.7); c.fillRect(px + 4, py + lowered, 2, 1); c.fillRect(px + 8, py + 1 + lowered, 1, 1); }
-    if (opt.dir === 3 || pose === "mirror") {
-      c.fillStyle=opt.hair||"#222222";c.fillRect(px+3,py+2+lowered,6,4);
-      c.fillStyle=shade(opt.hair||"#222222",1.5);c.fillRect(px+4,py+2+lowered,1,2);
-      c.fillStyle=shade(opt.coat||"#3a4a6a",.7);c.fillRect(px+4,py+7+lowered,4,1);
+    const r=(x,y,w,h,color)=>{c.fillStyle=color;c.fillRect(px+x,py+y,w,h);};
+    const coat=opt.coat||"#3a4a6a", hair=opt.hair||"#222222", skin=opt.skin||"#e8c8a8";
+    const back=opt.dir===3||pose==="mirror", side=opt.dir===1?-1:opt.dir===2?1:0;
+    // Hard outlines and coherent clusters make each 1px mark legible when enlarged.
+    r(2,6+lowered,1,5,shade(coat,.48));r(9,7+lowered,1,5,shade(coat,.45));
+    r(3,7+lowered,1,4,shade(coat,1.5));r(4,8+lowered,1,2,shade(coat,1.2));
+    r(7,9+lowered,2,3,shade(coat,.7));r(5,7+lowered,1,5,shade(coat,.65));
+    r(4,6+lowered,4,1,shade(coat,1.8));r(5,7+lowered,2,1,'#c5bca7');
+    r(6,8+lowered,1,3,shade(coat,.5));r(7,10+lowered,1,1,'#a5a798');
+    if(!opt.hood){
+      r(3,-2+lowered,5,1,shade(hair,.6));r(2,-1+lowered,7,3,hair);
+      r(3,-1+lowered,2,1,shade(hair,1.8));r(6,lowered,2,1,shade(hair,1.4));
+      r(2,1+lowered,1,4,hair);r(9,2+lowered,1,2,shade(skin,.7));
+      if(back){r(3,2+lowered,6,4,hair);r(4,2+lowered,2,2,shade(hair,1.5));r(3,6+lowered,6,1,shade(coat,.5));}
+      else{
+        r(3,2+lowered,6,4,skin);r(3,4+lowered,1,1,shade(skin,1.1));r(8,4+lowered,1,2,shade(skin,.75));
+        r(3,1+lowered,2,2,hair);r(6,1+lowered,2,1,hair);
+        r(4+side,3+lowered,1,1,'#172030');r(7+side,3+lowered,1,1,'#172030');
+        r(6+side,4+lowered,1,1,'#b88873');r(5,5+lowered,2,1,'#9b7160');
+        if(pose==='sleep'||opt.dead){r(4+side,3+lowered,2,1,'#624d49');r(7+side,3+lowered,2,1,'#624d49');}
+      }
+    }else{r(2,lowered,1,4,'#77868d');r(3,2+lowered,5,3,'#222d3b');r(4,3+lowered,3,1,'#8fa69e');}
+    if(opt.beard){r(3,5+lowered,6,1,'#968779');r(4,6+lowered,4,1,'#6b655e');r(3,2+lowered,1,1,'#b2a698');}
+    if(opt.bun){r(9,-1+lowered,2,2,hair);r(9,-1+lowered,1,1,shade(hair,1.8));r(5,lowered,1,1,'#cfccc0');}
+    if(!['kneel','eat','sit'].includes(pose)){r(2,13,3,1,'#121925');r(7,13,3,1,'#121925');r(3,12,1,1,'#637183');r(8,12,1,1,'#4c596b');}
+  },
+
+  sceneProps(c, map, cam) {
+    const r=(x,y,w,h,col)=>{c.fillStyle=col;c.fillRect(x-cam.x,y-cam.y,w,h);};
+    // Connected wooden tiles form one container; no repeated cross-shaped lids.
+    for(let y=0;y<map.grid.length;y++)for(let x=0;x<map.grid[y].length;x++){
+      if(map.grid[y][x]!=='C'||map.grid[y][x-1]==='C'||map.grid[y-1]?.[x]==='C')continue;
+      if(map===MAPS.garden && (x!==11||y!==7))continue;
+      const garden=map===MAPS.garden, ox=(garden?11:x)*16, oy=y*16;
+      const w=garden?48:32,h=garden?32:16;
+      const poly=(pts,col)=>this.polygon(c,pts.map(([a,b])=>[ox+a-cam.x,oy+b-cam.y]),col);
+      poly([[8,2],[w-9,2],[w-2,7],[w-2,h-5],[w-7,h],[5,h],[1,h-6],[1,9]],'#090e10');
+      poly([[8,1],[w-10,1],[w-3,6],[w-3,h-7],[w-8,h-3],[6,h-3],[2,h-8],[2,7]],'#4d392b');
+      poly([[8,2],[w-10,2],[w-5,6],[w-5,h-9],[w-9,h-5],[7,h-5],[4,h-9],[4,7]],'#8f6c47');
+      poly([[9,4],[w-11,4],[w-7,7],[w-7,h-10],[w-10,h-7],[8,h-7],[6,h-10],[6,8]],'#564231');
+      r(ox+8,oy+5,w-19,1,'#b09b70');r(ox+7,oy+8,1,h-19,'#a08457');
+      for(let i=0;i<(garden?6:2);i++){r(ox+11,oy+8+i*2,w-25-i%3,1,i%2?'#a8946c':'#857353');}
+      r(ox+7,oy+h-3,w-14,1,'#231f1c');
+      if(garden&&StoryStaging.coffin){poly([[8,4],[w-11,4],[w-7,8],[w-7,h-11],[w-10,h-7],[8,h-7],[6,h-11],[6,8]],'#0c1316');r(ox+8,oy+6,1,h-16,'#826649');}
     }
-    if (opt.dir !== 3 && pose !== "mirror") { c.fillStyle = "#bb927e"; c.fillRect(px + 6, py + 4 + lowered, 1, 1); }
-    if (!["kneel", "eat", "sit"].includes(pose)) { c.fillStyle = "#191e2b"; c.fillRect(px + 2, py + 13, 3, 1); c.fillRect(px + 7, py + 13, 3, 1); }
+    if(map===MAPS.house_empty||map===MAPS.house_family){
+      const warm=map===MAPS.house_family;
+      // A rug and skirting organize the living room without blocking passage.
+      r(9*16,4*16,6*16,27,warm?'#584631':'#2a2a29');r(9*16+2,4*16+2,6*16-4,23,warm?'#736048':'#393a35');
+      for(let i=0;i<6;i++){r(9*16+5+i*14,4*16+4,7,1,warm?'#a68e65':'#555d58');r(9*16+5+i*14,4*16+22,7,1,warm?'#a68e65':'#555d58');}
+      // One double bed, matching the adjoining bedroom in chapter 054.
+      r(5*16+2,8*16+2,27,2,'#776556');r(5*16+3,8*16+4,25,9,'#605c74');r(5*16+4,8*16+4,10,4,'#d0ccbb');r(5*16+17,8*16+4,10,4,'#d0ccbb');
+      r(5*16+3,8*16+9,25,1,'#9691a0');r(5*16+3,8*16+13,25,1,'#39313c');
+      for(const dx of [3,10,18,25]){r((16+dx)*16,15,1,45,warm?'#57584b':'#394345');}
+    }
+    if(map===MAPS.rain){
+      // A visible fracture joins the wet floor to the darker channel below.
+      const points=[[12*16+8,17*16],[12*16+5,17*16+9],[12*16+11,18*16],[12*16+8,18*16+13],[12*16+15,19*16+3],[12*16+12,20*16]];
+      for(let i=1;i<points.length;i++){
+        const [x,y]=points[i-1],[nx,ny]=points[i],steps=Math.max(Math.abs(nx-x),Math.abs(ny-y));
+        for(let k=0;k<=steps;k++){const a=Math.round(x+(nx-x)*k/steps),b=Math.round(y+(ny-y)*k/steps);r(a,b,2,1,'#050a12');r(a+2,b,1,1,'#35566b');}
+      }
+      for(const [x,y] of [[6,13],[17,13]]){r(x*16-11,y*16+13,27,1,'#5c8191');r(x*16-6,y*16+15,20,1,'#284c62');}
+    }
+    if(map===MAPS.blood){
+      for(const [x,y] of [[12,7],[12,12],[13,13]]){r(x*16+3,y*16+6,7,3,'#411d22');r(x*16+4,y*16+5,4,1,'#754039');r(x*16+9,y*16+8,3,2,'#231116');}
+      // Burned joints and ash silhouettes emphasize the destroyed guest room.
+      r(13*16-1,15*16-8,3,23,'#291721');r(13*16-8,15*16+13,27,2,'#0e0a0d');
+    }
   },
 };

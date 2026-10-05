@@ -32,4 +32,5 @@ jobs:
       - run: node --check pixel-version/combat-script.js
       - run: node --check pixel-version/pixel-art.js
       - run: node --check pixel-version/phenomenon-battle.js
+      - run: node --check pixel-version/narrative-trials.js
       - run: node tests/pixel-regression.cjs

@@ -53,6 +53,17 @@
             <div id="dialogChoices" class="dialog-choices"></div>
           </div>
 
+          <section id="trialHUD" class="trial-hud" hidden aria-label="当前剧情风险">
+            <strong id="trialHeading"></strong><span id="trialStatus" role="status"></span>
+            <div class="trial-meter"><i id="trialMeter"></i></div>
+          </section>
+          <section id="rainTrial" class="rain-trial" hidden aria-label="黄昏之海接雨水">
+            <canvas id="rainCanvas" width="320" height="192" aria-label="黄昏之海，周防伸手留住雨水"></canvas>
+            <div class="rain-trial-heading"><strong>黄昏之海 · 留住回归的契机</strong><span id="rainClock">30 秒</span></div>
+            <p id="rainKeys" class="rain-key-ledger"></p>
+            <div id="rainDrops" class="rain-drop-field" aria-label="点击接住落下的雨滴"></div>
+            <div class="rain-trial-footer"><p>点击雨滴 / ← → 选择 / E 接住 · 四滴关键雨水必须全部留下</p><p id="rainFeedback" role="status">普通雨水会漏过；金色雨水藏着回归的契机。</p><button id="rainStart" type="button">伸出双手 · 开始接雨</button></div>
+          </section>
           <div id="fade" class="fade"><p id="fadeText"></p></div>
 
           <div id="endingOverlay" class="ending-overlay" hidden>
@@ -73,7 +84,7 @@
             <p class="start-kicker">无名的旅伴</p>
             <h2>无中归来者</h2>
             <p class="start-quote">“总是会自那个与[我]们截然不同的地方回归。”</p>
-            <p id="startStatus">八处梦境 · 八枚碎片 · 六种结局</p>
+            <p id="startStatus">八处梦境 · 八枚碎片 · 九种结局</p>
             <p>方向键 / WASD 移动 · Shift 快走 · E / 空格 互动</p>
             <p>靠近发光的事物，调查与倾听。有些顺序，本身就是结局。</p>
             <button id="startButton" type="button">进入回廊</button>
@@ -141,6 +152,7 @@
     <script src="./combat-script.js"></script>
     <script src="./pixel-art.js"></script>
     <script src="./phenomenon-battle.js"></script>
+    <script src="./narrative-trials.js"></script>
     <script src="./game.js"></script>
   </body>
 </html>

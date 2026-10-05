@@ -8,6 +8,7 @@ const StoryStaging = {
   mother: null,
   family: null,
   coffin: false,
+  heartReleased: false,
   time: 0,
   carryElapsed: 0,
   carryDuration: 2.5,
@@ -20,6 +21,7 @@ const StoryStaging = {
     this.mother = G.area === "house_family" && F.mother ? "carry" : null;
     this.family = G.area === "house_family" && F.familyDone ? "gone" : null;
     this.coffin = false;
+    this.heartReleased = !!F.sister;
     this.time = 0;
     this.carryElapsed = this.mother ? this.carryDuration : 0;
     this.tower = { x: 144, y: 160, time: 0, scroll: 0, pose: 0.7, shadow: 1, approach: 0.18 };
@@ -49,6 +51,7 @@ const StoryStaging = {
     }
     if (["table", "gone"].includes(cue.family)) this.family = cue.family;
     if (typeof cue.coffin === "boolean") this.coffin = cue.coffin;
+    if (typeof cue.heldHeart === "boolean") this.heartReleased = !cue.heldHeart;
   },
 
   camera(map, fallback) {
@@ -61,7 +64,7 @@ const StoryStaging = {
 
   playerOptions() {
     const blood = G.area === "blood";
-    return { pose: dialogActive ? this.pose : "stand", blood, heldHeart: blood, reclined: dialogActive && this.coffin };
+    return { pose: dialogActive ? this.pose : "stand", blood, heldHeart: blood && !F.sister && !this.heartReleased, reclined: dialogActive && this.coffin };
   },
 
   npc(n) {

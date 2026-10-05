@@ -599,3 +599,46 @@ input { accent-color: var(--accent); }
   .dialog[data-presentation='finale'] .portrait-frame { flex-basis: 52px; }
   .finale-heading { padding-left: 8px; }
 }
+
+/* Story risk and the twilight rain use a separate, readable play surface. */
+.trial-hud { position: absolute; top: 34px; left: 12px; right: 12px; z-index: 5; padding: 8px 12px; border: 1px solid #796a49; background: #17151ce8; color: #e0cfab; pointer-events: none; display: grid; gap: 4px; line-height: 1.5; font-size: clamp(11px, 1.2vw, 14px); }
+.trial-hud strong { font-weight: 600; }
+.trial-hud span { color: #c3bba5; }
+.trial-hud[data-kind="court"] { top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: 7px 12px; border-color: #a44f58; color: #f3c9bd; background: #260d19ed; }
+.trial-hud[data-kind="court"] .trial-meter { position: absolute; bottom: 1px; left: 12px; right: 12px; }
+.trial-hud.urgent { border-color: #e78680; box-shadow: inset 3px 0 #b54b52; }
+.trial-meter { height: 3px; background: #ffffff12; }
+.trial-meter i { display: block; height: 100%; background: #c0a976; }
+.trial-hud[data-kind="court"] .trial-meter i { background: #cd7778; }
+.rain-trial { position: absolute; inset: 0; z-index: 7; overflow: hidden; background: #10121a; color: #e3d4b2; line-height: 1.5; }
+.rain-trial > canvas { width: 100%; height: 100%; image-rendering: pixelated; display: block; }
+.rain-trial-heading { position: absolute; inset: 12px 16px auto; display: flex; justify-content: space-between; gap: 12px; font-size: clamp(12px, 1.6vw, 18px); text-shadow: 0 2px #000; }
+.rain-key-ledger { position: absolute; top: 38px; left: 16px; margin: 0; color: #d5ba76; font-size: clamp(11px, 1.3vw, 15px); }
+.rain-drop-field { position: absolute; inset: 0; pointer-events: none; }
+.trial-drop { z-index: 1; position: absolute; transform: translate(-50%, -50%); pointer-events: auto; min-width: 44px; min-height: 44px; padding: 2px 5px; border: 1px solid #94b9c45e; border-radius: 2px 2px 8px 8px; background: transparent; color: #b5d3dc; font-size: 0; touch-action: manipulation; }
+.trial-drop.key-drop { z-index: 2; padding-top: 18px; color: #ffdf87; border-color: #d6b674; background: #46342cc9; box-shadow: 0 0 0 2px #c9a85a20; font-size: clamp(11px, 1.2vw, 15px); }
+.trial-drop::before { content: ""; position: absolute; top: 3px; left: calc(50% - 7px); width: 14px; height: 22px; background: linear-gradient(90deg, #456c8b 35%, #a9d9e2 36%, #6b9ba9 62%); clip-path: polygon(50% 0, 65% 20%, 86% 45%, 100% 64%, 100% 82%, 80% 100%, 20% 100%, 0 82%, 0 64%, 14% 45%, 35% 20%); }
+.trial-drop.key-drop::before { background: linear-gradient(90deg, #917441 35%, #fff1b1 36%, #d6ab5c 62%); }
+.trial-drop::after { content: ""; position: absolute; left: 2px; bottom: 2px; width: calc(var(--drop-life, 100%) - 4px); height: 2px; background: currentColor; opacity: .55; }
+.trial-drop.selected { z-index: 3; outline: 2px solid #e8d399; outline-offset: 3px; }
+.rain-trial-footer { position: absolute; bottom: 8px; left: 12px; right: 12px; text-align: center; background: #10121dd9; padding: 6px 8px; font-size: clamp(10px, 1.2vw, 14px); pointer-events: none; }
+.rain-trial-footer p { margin: 2px 0; }
+.rain-trial-footer button { pointer-events: auto; margin-top: 6px; border-color: #d6b674; color: #e8d399; }
+@media (max-width: 600px) {
+  .trial-hud { top: 28px; left: 6px; right: 6px; padding: 5px 8px; }
+  .rain-trial-heading { inset: 8px 8px auto; font-size: 11px; }
+  .rain-key-ledger { top: 28px; left: 8px; font-size: 10px; }
+  .rain-trial-footer { bottom: 2px; left: 4px; right: 4px; padding: 2px; font-size: 9px; }
+  .trial-drop { min-width: 44px; min-height: 44px; }
+  .trial-hud[data-kind="court"] { top: 0; left: 0; right: 0; padding: 6px 8px; font-size: 10px; }
+}
+
+/* Device-pixel scaling preserves equal-sized grains, including high-DPI screens. */
+.screen-frame { flex: 0 1 var(--pixel-width, 100%); width: var(--pixel-width, 100%); max-width: 100%; margin-inline: auto; }
+@media (max-width: 820px) { .screen-frame { flex: 0 0 auto; align-self: center; } }
+.portrait-frame, .dialog[data-presentation='finale'] .portrait-frame { flex: 0 0 74px; padding: 4px; }
+.portrait-frame canvas { width: 64px; height: 80px; max-width: none; image-rendering: pixelated; }
+@media (max-width: 520px) {
+  .portrait-frame, .dialog[data-presentation='finale'] .portrait-frame { flex-basis: 38px; padding: 2px; }
+  .portrait-frame canvas { width: 32px; height: 40px; }
+}

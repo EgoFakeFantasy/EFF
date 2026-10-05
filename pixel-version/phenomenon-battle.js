@@ -1,7 +1,7 @@
 "use strict";
 
 // The contested objects are body, attribution and ending, then the history of
-// the event itself. No HP, reaction deadline, or additional ending prerequisite.
+// the event itself. NarrativeTrials supplies the author-requested response window.
 const PhenomenonBattle = {
   phase: null,
   time: 0,
@@ -97,6 +97,7 @@ const PhenomenonBattle = {
     this.dom.battleStatus.textContent = ["撕扯的力道突然消失了一点。", "造下这一切的不是我。我否定这样的事情。", "这样的结局绝不可能发生！"][index];
     for (const button of this.dom.battleTargets.children) button.disabled = true;
     this.dom.battleTargets.children[index].classList.add("written");
+    NarrativeTrials.onCommit();
     updateDialogStatus();
     return true;
   },
@@ -235,6 +236,10 @@ const PhenomenonBattle = {
         const y = Math.floor((layer * 48 + t * 24) % 192);
         c.fillStyle = "#253343"; c.fillRect(54, y, 75, 3); c.fillRect(192, y, 75, 3);
         c.fillStyle = "#536074"; c.fillRect(70, y + 3, 2, 10); c.fillRect(248, y + 3, 2, 10);
+      }
+      if(progress>=3&&!twilight){
+        PixelArt.moon(c,160,18,10);
+        for(let row=0;row<3;row++){c.fillStyle='#3c4557';c.fillRect(134-row*3,row*4,52+row*6,2);c.fillStyle='#637486';c.fillRect(134-row*3,row*4,52+row*6,1);}
       }
       for (let side = 0; progress >= 1 && side < 2; side++) {
         const exchange = Math.floor(t * 1.8 / Math.PI) % 2;
