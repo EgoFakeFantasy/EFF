@@ -148,11 +148,12 @@ const Expedition = {
   },
 
   paused() {
-    return document.hidden || Boolean(this.dom?.journalDialog.open || this.dom?.settingsDialog.open || document.getElementById("renameDialog")?.open || !ui.codex.hidden);
+    return document.hidden || NarrativeAgency.active() || Boolean(this.dom?.journalDialog.open || this.dom?.settingsDialog.open || document.getElementById("renameDialog")?.open || !ui.codex.hidden);
   },
 
   focusGameplay() {
     if (!ui.start.hidden) { ui.startButton.focus({ preventScroll: true }); return; }
+    if (NarrativeAgency.active()) { (NarrativeAgency.dom.agencyActions.querySelector("button:not([disabled])") || NarrativeAgency.dom.agencyCards.querySelector("button"))?.focus({ preventScroll: true }); return; }
     if (!ui.ending.hidden) { ui.endingRestart.focus({ preventScroll: true }); return; }
     if (NarrativeTrials.rainActive()) { (NarrativeTrials.rain.mode === "intro" ? NarrativeTrials.dom.rainStart : canvas).focus({ preventScroll: true }); return; }
     const first = dialogChoices && ui.dialogChoices.querySelector("button");
@@ -212,7 +213,12 @@ const Expedition = {
       setText(this.dom.interactButton, NarrativeTrials.rain.mode === "intro" ? "伸出双手 · 开始接雨" : "接住选中的雨水");
       setText(this.dom.touchInteract, "接雨");
     }
-    this.dom.mapButton.disabled = G.area === "storm" || NarrativeTrials.rainActive();
+    if (NarrativeAgency.active()) {
+      setText(this.dom.interactButton, "在画面中完成当前操作");
+      setText(this.dom.touchInteract, "选择片段与联系");
+      this.dom.mapPanel.hidden = true;
+    }
+    this.dom.mapButton.disabled = G.area === "storm" || NarrativeTrials.rainActive() || NarrativeAgency.active();
     this.dom.mapButton.hidden = G.area === "meta";
     if (G.area === "meta") this.dom.mapPanel.hidden = true;
     if (G.area === "storm") this.dom.mapPanel.hidden = true;

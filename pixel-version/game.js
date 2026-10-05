@@ -855,7 +855,7 @@ const SCRIPTS = {
   rainMemory: {
     lines: combatLines('rain_memory', {0:'压抑',1:'压抑',2:'压抑',3:'压抑',6:'周防',7:'压抑',12:'压抑'}, i => ({ battle: { phase: 'rain-body', progress: i } })),
     choices: [{ label: '继续追问黄昏', run: () => playScript('rainDeath') }],
-    then() { F.rainMemory = true; addMemory('手心里的雨水'); },
+    then() { F.rainMemory = true; if (NarrativeAgency.pending?.kind === 'body') NarrativeAgency.pending = null; addMemory('手心里的雨水'); },
   },
   rainDeath: {
     // The mirror/fairy aside belongs to a finale observer; keep their identity unrevealed.
@@ -1000,10 +1000,10 @@ let transitionLock = false;
 
 function saveRun(trialCheckpoint = false) {
   // 对白、选择执行与区域切换视为一个事务；只保存玩家可继续的检查点。
-  const trialSafe = trialCheckpoint && NarrativeTrials.canCheckpoint();
+  const trialSafe = trialCheckpoint && (NarrativeTrials.canCheckpoint() || NarrativeAgency.canCheckpoint());
   if (!trialSafe && (dialogActive || dialogResolving || (transitionLock && !endingId))) return false;
   try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify({ area: G.area, px: G.px, py: G.py, flags: F, memories: G.memories, counters: G.counters, protagonistName: G.protagonistName, endingId, trials: NarrativeTrials.snapshot() }));
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ area: G.area, px: G.px, py: G.py, flags: F, memories: G.memories, counters: G.counters, protagonistName: G.protagonistName, endingId, trials: NarrativeTrials.snapshot(), agency: NarrativeAgency.snapshot() }));
     return true;
   } catch (e) { /* file:// 限制时忽略 */ }
   return false;
@@ -1058,6 +1058,7 @@ function validSavedPosition(map, px, py) {
 function loadAll() {
   // 沿用 v1 键；周目存档与跨周目图鉴独立读取，任何一份损坏不影响另一份。
   NarrativeTrials.restore(null);
+  NarrativeAgency.restore(null);
   F = {};
   G.area = "mirror";
   G.memories = [];
@@ -1080,6 +1081,7 @@ function loadAll() {
         NarrativeTrials.restore(s.trials);
         G.memories = savedNames(s.memories);
         G.counters = savedCounters(s.counters);
+        NarrativeAgency.restore(s.agency);
         if (typeof s.protagonistName === "string" && s.protagonistName.trim()) G.protagonistName = s.protagonistName.trim().slice(0, 40);
         if (typeof s.endingId === "string" && Object.prototype.hasOwnProperty.call(ENDINGS, s.endingId)) endingId = s.endingId;
       }
@@ -1251,7 +1253,7 @@ function finishDialog(done) {
 }
 
 function advanceDialog() {
-  if (!dialogActive) return;
+  if (!dialogActive || Expedition.paused()) return;
   if (dialogChoices) return; // 等待选择
   if (!typeDone) {
     typeDone = true;
@@ -1261,6 +1263,7 @@ function advanceDialog() {
     return;
   }
   if (PhenomenonBattle.pending) { PhenomenonBattle.commit(PhenomenonBattle.selected); return; }
+  if (NarrativeAgency.beforeAdvance()) return;
   if (NarrativeTrials.beforeAdvance()) return;
   if (dialogIndex + 1 >= dialogLines.length) {
     if (currentDialogScript && currentDialogScript.choices) showChoices(currentDialogScript.choices);
@@ -1360,6 +1363,7 @@ function showEnding(id) {
   ui.ending.hidden = false;
   Finale.open = false;
   document.body.classList.remove("finale-active");
+  NarrativeAgency.onEnding();
   Finale.dom.endingRename.hidden = id !== "true";
   Finale.dom.endingGallery.hidden = !e.stay;
   document.title = id === "true" ? "无垠之萍 · 箱庭版" : "无中归来者 · 箱庭版";
@@ -1383,6 +1387,7 @@ function leaveEnding() {
 }
 
 function resetRun() {
+  NarrativeAgency.reset();
   NarrativeTrials.reset();
   closeDialog();
   dialogResolving = false;
@@ -2172,6 +2177,7 @@ function applyStoryStage(line) {
 
 function startAreaScene() {
   if (dialogActive || transitionLock || Expedition.paused() || !ui.start.hidden || !ui.ending.hidden) return;
+  if (NarrativeAgency.resume()) return;
   if (NarrativeTrials.resume()) return;
   if (G.area === "meta") { Finale.enter(); return; }
   if (G.area === "house_empty" && !F.emptyWoke) playScript("bed");
@@ -2392,6 +2398,12 @@ function render(now) {
     if (n >= full.length) { typeDone = true; updateDialogStatus(); }
   }
   if (notifyT > 0) notifyT -= dt;
+
+  if (NarrativeAgency.render(now)) {
+    Expedition.render(dt, { x: 0, y: 0 }, now);
+    requestAnimationFrame(render);
+    return;
+  }
 
   if (NarrativeTrials.render()) {
     Expedition.render(dt, { x: 0, y: 0 }, now);
@@ -2622,7 +2634,7 @@ ui.startButton.addEventListener("click", () => {
   ui.start.hidden = true;
   canvas.focus({ preventScroll: true });
   Expedition.onAreaChange();
-  if (restoreEnding()) return;
+  if (restoreEnding()) { NarrativeAgency.resume(); return; }
   if (G.area === "storm") startStormSequence();
   startAreaScene();
   if (G.area === "mirror" && !F.m1 && !F.m2 && !F.m3) {
@@ -2644,4 +2656,5 @@ Finale.init();
 PixelArt.init();
 PhenomenonBattle.init();
 NarrativeTrials.init();
+NarrativeAgency.init();
 requestAnimationFrame(render);

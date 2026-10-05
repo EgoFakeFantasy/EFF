@@ -166,6 +166,8 @@ const Finale = {
       this.to("meta_state_3", this.requestIndex() + 1);
     } else if (option.action === "unconsciousStep") {
       if (!this.intervening() || option.step !== this.step() + 1 || !this.options(this.node()).some(offered => offered.action === "unconsciousStep" && offered.step === option.step)) return;
+      if (!option.agencyApproved) { NarrativeAgency.beginHistory(option); return; }
+      if (!NarrativeAgency.history[option.step - 1]) return;
       G.counters.finaleStep = Math.max(this.step(), option.step);
       const id = option.target || this.node();
       const anchor = FinaleScenes[id].retroactiveReveals.find(reveal => reveal.step === option.step).text[0];
@@ -179,6 +181,7 @@ const Finale = {
       this.to("meta_1");
     } else if (option.action === "resetRun") resetRun();
     else if (option.action === "openGallery") { renderCodex(); ui.codex.hidden = false; this.terminal(); }
+    else if (option.action === "researchEpilogue") NarrativeAgency.openEpilogue();
     else if (option.action === "renameProtagonist") this.rename(true);
     else if (option.to) this.to(option.to);
   },
@@ -204,6 +207,18 @@ const Finale = {
       if (raw.className?.includes("revealed")) p.className = "recovered";
       this.dom.finaleLedger.append(p);
     }
+    if (this.intervening() && !F.finaleRewritten && NarrativeAgency.history.some(Boolean)) {
+      const p = document.createElement("p");
+      p.className = "recovered";
+      p.textContent = "本轮回写：" + NarrativeAgency.history.flatMap((record, i) => record ? [NarrativeAgency.historyData[i].title + " · " + NarrativeAgency.historyData[i].actions[record.method]] : []).join("；");
+      this.dom.finaleLedger.append(p);
+    }
+    if (F.agencySelf && this.node() === "ending" && NarrativeAgency.self.decisions.every(d => d >= 0)) {
+      const p = document.createElement("p");
+      p.className = "recovered";
+      p.textContent = "本轮自我编排：" + NarrativeAgency.self.order.map(id => NarrativeAgency.memories[id].title + " · " + NarrativeAgency.memories[id].meanings[NarrativeAgency.self.decisions[id]]).join("；");
+      this.dom.finaleLedger.append(p);
+    }
     this.dom.finaleLedger.hidden = !this.dom.finaleLedger.children.length;
     ui.dialog.dataset.voice = line.rewrite ? "rewrite" : line.s === "外来者" || line.s === "背景" ? "intruder" : line.s === "无意识" ? "unconscious" : line.s === "周防" ? "protagonist" : "narration";
     if (line.s === "周防") ui.dialogSpeaker.textContent = G.protagonistName || "周防";
@@ -216,7 +231,7 @@ const Finale = {
     G.counters.finaleNode = this.keys.indexOf(id);
     this.raw = FinaleScenes[id].text;
     this.offset = this.raw.length - 1;
-    playLines([this.line(this.raw.at(-1))], null, { choices: FinaleScenes[id].choices.map(option => ({ label: option.label, run: () => this.act(option) })) });
+    playLines([this.line(this.raw.at(-1))], null, { choices: [...FinaleScenes[id].choices, ...(F.finaleTrue ? [{ label: "螺旋之后 · 研究院尾声", action: "researchEpilogue" }] : [])].map(option => ({ label: option.label, run: () => this.act(option) })) });
   },
 
   rename(resume = false) {

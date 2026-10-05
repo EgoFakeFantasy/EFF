@@ -271,8 +271,38 @@ function harness(initialStorage = {}) {
   };
 }
 
+function agencyButton(game, fragment, parent = 'agencyActions') {
+  const b = game.ids.get(parent).children.find(item => item.tagName === 'BUTTON' && item.textContent.includes(fragment));
+  assert.ok(b, `missing agency button: ${fragment}`); assert.ok(!b.disabled); b.click();
+}
+
+// Complete new acts via the same rendered controls as a player. Route tests
+// still exercise every original paragraph and choice, including new gates.
+function completeAgency(game) {
+  if (!game.evaluate('NarrativeAgency.active()')) return;
+  const kind = game.evaluate('NarrativeAgency.pending.kind');
+  if (kind === 'body') {
+    for (let i = 0; i < 4; i++) {
+      if (game.evaluate(`NarrativeAgency.body.held[${i}]`)) continue;
+      game.ids.get('agencyCards').children[i].click(); agencyButton(game, '以自己的回答');
+    }
+    for (let i = 1; i < 4 && !game.evaluate('NarrativeAgency.connected()'); i++) {
+      game.ids.get('agencyCards').children[0].click();game.ids.get('agencyCards').children[i].click();agencyButton(game,'连接选中的');
+    }
+    agencyButton(game,'合而为一');
+  } else if (kind === 'self') {
+    for(let i=0;i<4;i++){game.ids.get('agencyCards').children[i].click();agencyButton(game,'承认');}
+    agencyButton(game,'由我决定这些过往');
+  } else if (kind === 'history') {
+    if(game.evaluate('NarrativeAgency.pending.stage')===0)game.ids.get('agencyCards').children[0].click();
+    if(game.evaluate('NarrativeAgency.pending.stage')===1)game.ids.get('agencyActions').children[0].click();
+    agencyButton(game,'返回现在');
+  } else assert.fail('optional epilogue must be operated explicitly');
+}
+
 function finishDialog(game) {
   for (let i = 0; i < 400; i++) {
+    if (game.evaluate("NarrativeAgency.active()")) { completeAgency(game); game.tick(0); continue; }
     if (!game.evaluate("dialogActive") || game.evaluate("!!dialogChoices")) return;
     game.evaluate("if (typeDone && PhenomenonBattle.pending) PhenomenonBattle.selected = PhenomenonBattle.cue.target; advanceDialog()");
   }
@@ -280,6 +310,7 @@ function finishDialog(game) {
 }
 
 function nextLine(game) {
+  if (game.evaluate("NarrativeAgency.active()")) { completeAgency(game); game.tick(0); return; }
   assert.equal(game.evaluate("dialogActive"), true, "cannot advance an inactive staged scene");
   game.evaluate("if (!typeDone) advanceDialog(); if (PhenomenonBattle.pending) { PhenomenonBattle.commit(PhenomenonBattle.cue.target); } advanceDialog()");
 }
@@ -1324,7 +1355,7 @@ test("unconscious help starts at Zhou's request after the complete two-party con
   assert.ok(resumed.ids.get('historyAnchors').children.every(button => button.disabled));
   finishDialog(resumed);
   assert.equal(resumed.ids.get('historyAnchors').children[0].disabled, false);
-  resumed.ids.get('historyAnchors').children[0].click(); resumed.tick();
+  resumed.ids.get('historyAnchors').children[0].click(); completeAgency(resumed); resumed.tick();
   assert.ok(resumed.evaluate('currentFullText()').includes('真的定义吗'));
   assert.equal(resumed.evaluate('Finale.step()'), 1);
 });
@@ -1358,13 +1389,13 @@ test("the first two retroactive actions reveal their original anchors while pres
   const start = game.value("[G.px, G.py]");
   game.evaluate("keys.add('d'); movePlayer(1)");
   assert.deepEqual(game.value("[G.px, G.py]"), start);
-  summonFinaleHelp(game); game.ids.get("dialogChoices").children[0].click(); game.tick();
+  summonFinaleHelp(game); game.ids.get("dialogChoices").children[0].click(); completeAgency(game); game.tick();
   assert.equal(game.evaluate("Finale.step()"), 1);
   assert.ok(game.evaluate("dialogLines[0].t").includes("真的定义吗"));
   assert.ok(game.ids.get("finaleLedger").textContent.includes("当且仅当"));
   assert.equal(game.evaluate("Finale.compose('meta_1').length"), 10);
   finishDialog(game); game.ids.get("dialogText").scrollTop = 100;
-  game.ids.get("dialogChoices").children[0].click(); game.tick();
+  game.ids.get("dialogChoices").children[0].click(); completeAgency(game); game.tick();
   assert.equal(game.ids.get("dialogText").scrollTop, 0);
   assert.equal(game.evaluate("Finale.step()"), 2);
   assert.ok(game.evaluate("dialogLines[0].t").includes("令人感到兴奋的知识"));
@@ -1426,7 +1457,7 @@ test("the rain-memory answer is absent without its original prerequisite and can
 
 test("refresh commits an insertion before its next page and restarting cancels queued finale work", () => {
   const game = harness(finaleSave()); game.ids.get("startButton").click(); summonFinaleHelp(game);
-  game.ids.get("dialogChoices").children[0].click();
+  game.ids.get("dialogChoices").children[0].click(); completeAgency(game);
   const saved = JSON.parse(game.storage.get(SAVE));
   assert.equal(saved.counters.finaleStep, 1);
   assert.equal(saved.counters.finaleFrom, 6);
@@ -1457,10 +1488,10 @@ test("settings pause the secret answer and the true ending restores naming and g
   assert.equal(game.document.title, "无垠之萍 · 箱庭版");
   game.ids.get("endingGallery").click();
   assert.equal(game.ids.get("codex").hidden, false);
-  game.ids.get("endingStay").click(); finishDialog(game);
+  game.ids.get("codexButton").click(); game.ids.get("endingStay").click(); finishDialog(game);
   assert.equal(game.ids.get("endingOverlay").hidden, true);
   assert.equal(game.evaluate("Finale.node()"), "ending");
-  assert.deepEqual(game.ids.get("dialogChoices").children.map(button => button.textContent), ["打开记忆画廊", "修改周防的名字", "从镜像阶段重新开始"]);
+  assert.deepEqual(game.ids.get("dialogChoices").children.map(button => button.textContent), ["打开记忆画廊", "修改周防的名字", "从镜像阶段重新开始", "螺旋之后 · 研究院尾声"]);
   const restored = harness(game.snapshot()); restored.ids.get("startButton").click();
   assert.equal(restored.evaluate("G.protagonistName"), "新的旅伴");
   assert.equal(restored.ids.get("endingOverlay").hidden, true);
@@ -1600,12 +1631,12 @@ test("history anchors unlock only the original offered retroaction and commit it
   assert.equal(anchor.disabled, false);
   game.ids.get('settingsButton').click(); anchor.click();
   assert.equal(game.evaluate('Finale.step()'), 0);
-  game.document.querySelector('[data-close="settingsDialog"]').click(); anchor.click();
+  game.document.querySelector('[data-close="settingsDialog"]').click(); anchor.click(); completeAgency(game);
   assert.equal(JSON.parse(game.storage.get(SAVE)).counters.finaleStep, 1);
   game.tick();
   assert.ok(game.evaluate('currentFullText()').includes('真的定义吗'));
   assert.ok(game.ids.get('phenomenonStage').getAttribute('aria-label').includes('已回写1处'));
-  finishDialog(game); game.ids.get('historyAnchors').children[1].click(); game.tick();
+  finishDialog(game); game.ids.get('historyAnchors').children[1].click(); completeAgency(game); game.tick();
   assert.equal(game.evaluate('Finale.step()'), 2);
   assert.ok(game.evaluate('currentFullText()').includes('幻海'));
 });
@@ -1861,6 +1892,147 @@ test("map pointer coordinates account for camera offset and mobile letterboxing"
   assert.equal(game.evaluate('Expedition.mapPoint(50,30)'),null);
   assert.deepEqual(game.value('Expedition.mapPoint(34,112)'),{x:104,y:64});
   assert.equal(game.evaluate('Expedition.mapPoint(340,112)'),null);
+});
+
+
+function startBodyAct() {
+  const game = harness({[SAVE]:JSON.stringify({area:'rain',px:195,py:258,flags:{repress:true},counters:{},memories:[]})});
+  game.ids.get('startButton').click();game.evaluate("playScript('rainMemory')");
+  advanceToText(game,'这似乎是个死局');nextLine(game);
+  assert.equal(game.evaluate('NarrativeAgency.pending.kind'),'body');return game;
+}
+function startSelfAct() {
+  const game = harness(finaleSave({finaleStarted:true,finaleRewritten:true,rainMemory:true},{finaleNode:8,finaleStep:3,finaleFlow:2}));
+  game.ids.get('startButton').click();advanceToText(game,'我的过往由我对他们重新的编排');nextLine(game);
+  assert.equal(game.evaluate('NarrativeAgency.pending.kind'),'self');return game;
+}
+function startHistoryAct() {
+  const game=harness(finaleSave());game.ids.get('startButton').click();summonFinaleHelp(game);
+  game.ids.get('historyAnchors').children[0].click();assert.equal(game.evaluate('NarrativeAgency.pending.kind'),'history');return game;
+}
+
+test('body shards resist imposed attribution and need a connected whole before the canonical reunion',()=>{
+ const game=startBodyAct(),index=game.evaluate('dialogIndex');
+ agencyButton(game,'让枯手');assert.equal(game.evaluate('!!F.agencyBody'),false);
+ assert.deepEqual(game.value('NarrativeAgency.body.held'),[false,false,false,false]);
+ game.evaluate('advanceDialog();keys.add("d");movePlayer(1)');assert.equal(game.evaluate('dialogIndex'),index);
+ for(const i of [3,1,0,2]){game.ids.get('agencyCards').children[i].click();agencyButton(game,'以自己的回答');}
+ assert.equal(game.evaluate('NarrativeAgency.connected()'),false);
+ const connect=(a,b)=>{game.ids.get('agencyCards').children[a].click();game.ids.get('agencyCards').children[b].click();agencyButton(game,'连接选中的');};
+ connect(2,3);connect(1,3);assert.equal(game.evaluate('NarrativeAgency.connected()'),false);connect(0,2);
+ assert.equal(game.evaluate('NarrativeAgency.connected()'),true);agencyButton(game,'合而为一');
+ assert.ok(game.evaluate('currentFullText()').includes('再度合而为一'));assert.equal(game.evaluate('!!F.rainMemory'),false);
+ finishDialog(game);choose(game,'继续追问黄昏');assert.equal(game.evaluate('!!F.rainMemory'),true);assert.equal(game.evaluate('NarrativeAgency.pending'),null);
+});
+
+test('shard progress, links and the unread reunion survive refresh without prematurely awarding rain memory',()=>{
+ let game=startBodyAct();game.ids.get('agencyCards').children[2].click();agencyButton(game,'以自己的回答');
+ game=harness(game.snapshot());game.ids.get('startButton').click();assert.deepEqual(game.value('NarrativeAgency.body.held'),[false,false,true,false]);
+ for(const i of [0,1,3]){game.ids.get('agencyCards').children[i].click();agencyButton(game,'以自己的回答');}
+ game.ids.get('agencyCards').children[1].click();game.ids.get('agencyCards').children[2].click();agencyButton(game,'连接选中的');
+ game=harness(game.snapshot());game.ids.get('startButton').click();assert.deepEqual(game.value('NarrativeAgency.body.links'),[[1,2]]);
+ completeAgency(game);const joined=harness(game.snapshot());joined.ids.get('startButton').click();
+ assert.equal(joined.evaluate('NarrativeAgency.active()'),false);assert.ok(joined.evaluate('currentFullText()').includes('再度合而为一'));
+ finishDialog(joined);choose(joined,'继续追问黄昏');assert.equal(joined.evaluate('!!F.rainMemory'),true);
+});
+
+test('new acts pause under utilities and blur and cannot be changed by replaced controls',()=>{
+ const game=startBodyAct(),old=game.ids.get('agencyActions').children[0];
+ game.ids.get('settingsButton').click();old.click();assert.equal(game.evaluate('NarrativeAgency.body.held[0]'),false);
+ game.document.querySelector('[data-close="settingsDialog"]').click();
+ game.window.dispatchEvent(new MockEvent('blur'));old.click();assert.equal(game.evaluate('NarrativeAgency.body.held[0]'),false);
+ game.window.dispatchEvent(new MockEvent('focus'));old.click();assert.equal(game.evaluate('NarrativeAgency.body.held[0]'),true);
+ game.ids.get('agencyCards').children[1].click();old.click();assert.equal(game.evaluate('NarrativeAgency.body.held[1]'),false);
+ game.evaluate('resetRun()');old.click();assert.equal(game.evaluate('NarrativeAgency.active()'),false);assert.equal(game.ids.get('dialog').inert,false);
+ assert.deepEqual(game.value('NarrativeAgency.body.held'),[false,false,false,false]);
+});
+
+test('history investigation changes premises before committing an insertion, not a stronger victory claim',()=>{
+ const game=startHistoryAct();assert.equal(game.evaluate('Finale.step()'),0);
+ game.ids.get('agencyCards').children[1].click();assert.equal(game.evaluate('NarrativeAgency.pending.stage'),0);
+ game.ids.get('agencyCards').children[0].click();game.ids.get('agencyActions').children[2].click();
+ assert.equal(game.evaluate('NarrativeAgency.pending.stage'),1);assert.equal(game.evaluate('Finale.step()'),0);
+ game.ids.get('agencyActions').children[1].click();assert.equal(game.evaluate('NarrativeAgency.pending.stage'),2);
+ assert.ok(game.ids.get('agencyCards').textContent.includes('真的定义吗'));
+ const stale=game.ids.get('agencyActions').children[0];stale.click();stale.click();game.tick();
+ assert.equal(game.evaluate('Finale.step()'),1);assert.deepEqual(game.value('NarrativeAgency.history[0]'),{method:1});
+ assert.ok(game.evaluate('currentFullText()').includes('真的定义吗'));
+});
+
+test('an incomplete history premise and its recovered wording resume before either next insertion or chapter rewrite',()=>{
+ let game=startHistoryAct();game.ids.get('agencyCards').children[0].click();
+ game=harness(game.snapshot());game.ids.get('startButton').click();assert.equal(game.evaluate('NarrativeAgency.pending.stage'),1);
+ game.ids.get('agencyActions').children[0].click();
+ game=harness(game.snapshot());game.ids.get('startButton').click();assert.equal(game.evaluate('NarrativeAgency.pending.stage'),2);
+ assert.equal(game.evaluate('Finale.step()'),0);agencyButton(game,'返回现在');game.tick();finishDialog(game);
+ choose(game,'幻海消息');assert.equal(game.evaluate('Finale.step()'),2);
+ choose(game,'朴素分层');assert.equal(game.evaluate('Finale.step()'),3);
+ assert.equal(game.evaluate('!!F.finaleRewritten'),false);assert.ok(game.value('NarrativeAgency.history').every(Boolean));
+});
+
+test('self attribution supports both interpretations and narrative ordering without changing the novel',()=>{
+ const game=startSelfAct(),canonical=game.value('FinaleScenes.ending.text');
+ agencyButton(game,'交给先于');assert.deepEqual(game.value('NarrativeAgency.self.decisions'),[-1,-1,-1,-1]);
+ game.ids.get('agencyCards').children[3].click();agencyButton(game,'将这一段向前');agencyButton(game,'将这一段向前');agencyButton(game,'将这一段向前');
+ assert.deepEqual(game.value('NarrativeAgency.self.order'),[3,0,1,2]);
+ for(let pos=0;pos<4;pos++){game.ids.get('agencyCards').children[pos].click();agencyButton(game,pos%2?'承认':'重释');}
+ assert.equal(game.evaluate('!!F.finaleTrue'),false);agencyButton(game,'由我决定这些过往');
+ assert.ok(game.ids.get('finaleLedger').textContent.includes('本轮自我编排'));assert.deepEqual(game.value('FinaleScenes.ending.text'),canonical);
+ assert.ok(game.value('Expedition.journal').some(e=>e.area.includes('本轮自我编排')&&e.text.startsWith('手心里的雨水')));
+ finishDialog(game);assertEnding(game,'true');assert.equal(game.value('META.endings').length,1);
+});
+
+test('partial self choices and their ordering survive refresh; completed choices resume the unread original lines',()=>{
+ let game=startSelfAct();game.ids.get('agencyCards').children[1].click();agencyButton(game,'重释');agencyButton(game,'将这一段向前');
+ game=harness(game.snapshot());game.ids.get('startButton').click();assert.deepEqual(game.value('NarrativeAgency.self.order'),[1,0,2,3]);
+ assert.deepEqual(game.value('NarrativeAgency.self.decisions'),[-1,1,-1,-1]);
+ completeAgency(game);assert.equal(game.evaluate('!!F.finaleTrue'),false);
+ game=harness(game.snapshot());game.ids.get('startButton').click();assert.equal(game.evaluate('NarrativeAgency.active()'),false);
+ assert.ok(game.evaluate('currentFullText()').includes('只有我能够决定'));finishDialog(game);assertEnding(game,'true');
+});
+
+function epilogueGame(overlay=false) {
+ const data=finaleSave({finaleStarted:true,finaleRewritten:true,finaleTrue:true},{finaleNode:8,finaleStep:3,finaleFlow:2});
+ if(overlay){const saved=JSON.parse(data[SAVE]);saved.endingId='true';data[SAVE]=JSON.stringify(saved);}
+ const game=harness(data);game.ids.get('startButton').click();
+ if(overlay)game.ids.get('endingResearch').click();else{finishDialog(game);game.ids.get('dialogChoices').children.find(b=>b.textContent.includes('研究院尾声')).click();}
+ return game;
+}
+
+test('research epilogue is true-only, retains the novel archive and returns to usable terminal controls',()=>{
+ const normal=harness(finaleSave({finaleStarted:true,finaleNormal:true},{finaleNode:7,finaleFlow:2}));normal.ids.get('startButton').click();finishDialog(normal);
+ assert.ok(normal.ids.get('dialogChoices').children.every(b=>!b.textContent.includes('研究院')));
+ const game=epilogueGame();assert.equal(game.evaluate('NarrativeAgency.pending.kind'),'epilogue');
+ assert.ok(game.ids.get('agencyQuote').textContent.includes('非(非(非(非我-我)-我)-我)'));
+ agencyButton(game,'继续看见');for(let i=0;i<3;i++){agencyButton(game,'剪开');agencyButton(game,i%2?'交叉':'沿另一侧');}
+ agencyButton(game,'查看研究院');assert.ok(game.ids.get('agencyQuote').textContent.includes('课题：无穷游戏-已然决定的胜利'));
+ assert.ok(game.ids.get('agencyQuote').textContent.includes('地点：猫岛，理型界'));agencyButton(game,'保存档案');
+ assert.equal(game.evaluate('!!F.agencyEpilogue'),true);assert.equal(JSON.parse(game.storage.get(SAVE)).flags.agencyEpilogue,true);
+ finishDialog(game);assert.ok(game.ids.get('dialogChoices').children.some(b=>b.textContent.includes('修改周防')));
+});
+
+test('epilogue scissors resume at an open cut and preserve the completed ending behind them',()=>{
+ let game=epilogueGame(true);agencyButton(game,'继续看见');agencyButton(game,'剪开');
+ game=harness(game.snapshot());game.ids.get('startButton').click();assert.equal(game.evaluate('NarrativeAgency.epilogue.cut'),true);
+ assert.equal(game.evaluate('endingId'),'true');assert.equal(game.ids.get('endingOverlay').inert,true);
+ agencyButton(game,'交叉');agencyButton(game,'暂时');assert.equal(game.ids.get('endingOverlay').hidden,false);
+ assert.equal(game.ids.get('endingOverlay').inert,false);assert.equal(game.evaluate('endingId'),'true');
+ game.ids.get('endingResearch').click();assert.equal(game.evaluate('NarrativeAgency.epilogue.cuts'),1);assert.deepEqual(game.value('NarrativeAgency.epilogue.ties'),[1]);
+ game.evaluate('resetRun()');assert.equal(game.evaluate('NarrativeAgency.active()'),false);assert.equal(game.evaluate('NarrativeAgency.pending'),null);
+});
+
+test('malformed narrative checkpoints reject out of range edges, order and history phase',()=>{
+ const game=harness(finaleSave({finaleSummoned:true},{finaleStep:0}));
+ game.evaluate(`NarrativeAgency.restore({version:1,body:{held:[true,true,true,true],links:[[0,9],[-1,2],[2,2],[0,1],[0,1]]},self:{decisions:[0,1,0,2],order:[0,0,2,3]},history:[{method:9},null,null],epilogue:{stage:9,cuts:-1,cut:'yes'},pending:{kind:'history',step:4,stage:99,method:0}})`);
+ assert.deepEqual(game.value('NarrativeAgency.body.links'),[[0,1]]);assert.deepEqual(game.value('NarrativeAgency.self.decisions'),[-1,-1,-1,-1]);
+ assert.equal(game.evaluate('NarrativeAgency.pending'),null);assert.equal(game.evaluate('NarrativeAgency.connected()'),false);
+});
+
+test('the epilogue retains all 49 supplied chapter 059 paragraphs in their source order',()=>{
+ const game=harness(),paragraphs=game.value('AgencyEpilogue.flat()');assert.equal(paragraphs.length,49);
+ // Golden digest comes from the supplied novel, excluding publisher navigation.
+ const digest=require('node:crypto').createHash('sha256').update(paragraphs.join('\n'),'utf8').digest('hex');
+ assert.equal(digest,'9c6d2b9a09e58228ebbac9a4d868918dc4057edf5c07e75f6bd6b0a1c28d0e67');
 });
 
 let failed = 0;

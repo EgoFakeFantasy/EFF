@@ -64,6 +64,14 @@
             <div id="rainDrops" class="rain-drop-field" aria-label="点击接住落下的雨滴"></div>
             <div class="rain-trial-footer"><p>点击雨滴 / ← → 选择 / E 接住 · 四滴关键雨水必须全部留下</p><p id="rainFeedback" role="status">普通雨水会漏过；金色雨水藏着回归的契机。</p><button id="rainStart" type="button">伸出双手 · 开始接雨</button></div>
           </section>
+          <section id="agencyPanel" class="agency-panel" hidden aria-labelledby="agencyHeading">
+            <header><span id="agencySource" class="agency-source"></span><h2 id="agencyHeading"></h2></header>
+            <canvas id="agencyCanvas" width="320" height="128" aria-label="经历与联系"></canvas>
+            <p id="agencyQuote" class="agency-quote"></p>
+            <div id="agencyCards" class="agency-cards" aria-label="选择片段或前提"></div>
+            <p id="agencyStatus" class="agency-status" role="status" aria-live="polite"></p>
+            <div id="agencyActions" class="agency-actions" aria-label="完成当前操作"></div>
+          </section>
           <div id="fade" class="fade"><p id="fadeText"></p></div>
 
           <div id="endingOverlay" class="ending-overlay" hidden>
@@ -72,6 +80,7 @@
             <p id="endingSummary" class="ending-summary"></p>
             <div id="endingText" class="ending-text"></div>
             <div class="ending-actions">
+              <button id="endingResearch" type="button" hidden>螺旋之后 · 研究院尾声</button>
               <button id="endingGallery" type="button" hidden>打开记忆图鉴</button>
               <button id="endingRename" type="button" hidden>修改周防的名字</button>
               <button id="endingRestart" type="button">从镜像阶段重新开始</button>
@@ -153,6 +162,7 @@
     <script src="./pixel-art.js"></script>
     <script src="./phenomenon-battle.js"></script>
     <script src="./narrative-trials.js"></script>
+    <script src="./narrative-agency.js"></script>
     <script src="./game.js"></script>
   </body>
 </html>
