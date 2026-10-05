@@ -495,6 +495,10 @@ function fracture(t) { return { c: "fracture", t }; }
 function say(speaker, t, c) { return { s: speaker, c, t }; }
 function staged(line, stage) { return { ...normalizeLine(line), stage }; }
 
+function combatLines(id, speakers = {}, stage) {
+  return CombatText[id].map((raw, index) => ({ t: typeof raw === 'string' ? raw : raw.text, c: raw.className, s: speakers[index], ...(stage ? { stage: stage(index) } : {}) }));
+}
+
 const SCRIPTS = {
   m1: {
     lines: [
@@ -552,7 +556,7 @@ const SCRIPTS = {
       "噔。噔。噔。",
       "无穷向上延伸的回廊，响起了脚步声。无名的人向上看去，红色的月亮挂在无尽轮回的高塔之上。",
       "而在红月下方，有一个浑黑的身影，仿佛违反了物理法则一般，从高塔之中向月亮落去。",
-      quote("下一个奇点再见吧，无名的旅伴。"),
+      say("浑黑的身影", "下一个奇点再见吧，无名的旅伴。", "quote"),
     ],
     then() {
       F.storm2 = true;
@@ -627,7 +631,7 @@ const SCRIPTS = {
   bed: {
     lines: [
       staged("在这个清晨，头发凌乱的少年猛然从床上弹起。", { scene: "map", at: [3, 3], focus: { x: 3, y: 3 }, pose: "wake", coffin: false }),
-      quote("我是……是了，我是周防。"),
+      say("周防", "我是……是了，我是周防。", "quote"),
       "这具身体似乎和花园时的状态很不一样，好像回到了十八岁。",
       "可是，如果是十八岁的躯体，这个时候应该是住在父母家里吧。为什么一点声音都没有听到？",
     ],
@@ -704,7 +708,7 @@ const SCRIPTS = {
     lines: [
       staged("周防打开房门。出现在眼前的，是一个窝在沙发上正在享用新闻联播的男人。", { at: [14, 3], focus: { x: 13, y: 2 }, pose: "stand", dir: 1 }),
       "看着这如同正态分布般生长的胡须，周防很快就知道了他是谁。",
-      quote("爸，早安。"),
+      say("周防", "爸，早安。", "quote"),
       "男人只是应了一声，然后继续聚精会神地看新闻。",
     ],
     then() {
@@ -715,7 +719,7 @@ const SCRIPTS = {
   mother: {
     lines: [
       staged("厨房门被打开，端着雪菜炒毛豆的女人走入客厅。", { at: [14, 5], focus: { x: 15, y: 5 }, pose: "stand", mother: "carry" }),
-      quote("吃饭了，小防，还有老公……咦，儿子你今天怎么了？"),
+      say("母亲", "吃饭了，小防，还有老公……咦，儿子你今天怎么了？", "quote"),
       "周防赶忙应付过去：没事，妈，我就是发现你好像又长了一根白头发。",
     ],
     need: () => F.father,
@@ -738,7 +742,7 @@ const SCRIPTS = {
       "或许我应该再等等几天再去看看，说不定有新的变化。",
       "或许是贪恋于饮食，或许是贪恋于日常的生活，又或许是因为之前那次剧痛的顾虑，周防停止了下一步的计划。",
       staged("于是平平淡淡的三日过去。周防知道了自己已经接到大学录取通知书，也知道自己似乎还有一个妹妹，现在应该在外婆家暂住着玩。", { at: [3, 3], focus: { x: 3, y: 3 } }),
-      quote("草，我怎么没想到这一点。"),
+      say("周防", "草，我怎么没想到这一点。", "quote"),
       staged(quote("要开始了吗？新的一幕落下，演员也该正式入场了。"), { scene: "curtain" }),
       "嘻嘻，我很期待他看到那个场景该是什么样的神情，会不会后悔自己没有早点去打开那个……",
       "好了，言尽于此。别忘了我们这次演出也是要给那一侧的[朋友]们看的，提前剧透那么多信息可不是好文明。",
@@ -761,7 +765,7 @@ const SCRIPTS = {
       "血液被残余的迸发鼓出撕裂的血管，洒在已经变得褐色的地板上。",
       "倒在周防眼前的，那个心脏的主人，此时此刻已然失去了她最后的脏器。",
       "视线颤抖着上移。那是一个年轻的面孔，一个熟悉但不曾在他前三日梦境中出现的角色。",
-      quote("妹妹？你是……我的妹妹吗？"),
+      say("周防", "妹妹？你是……我的妹妹吗？", "quote"),
       "自我防护机制意外地工作起来。这一切只不过是一场刻意为之的戏剧。",
       "可是，不是这样的。不是这样的，这已经被我所发生了。",
       staged("只预留直感的周防缓缓站起，而后走出那个血色的庭院。", { at: [13, 11], focus: { x: 13, y: 10 }, pose: "stand" }),
@@ -806,62 +810,34 @@ const SCRIPTS = {
     ],
   },
   refusal: {
-    lines: [
-      quote("不，我拒绝这一切。"),
-      staged("撕扯的力道突然消失了一点。造下这一切的不是我。我否定这样的事情。", { pose: "stand" }),
-      quote("我否定这样的结局。而后，我要亲自把你们这群操控棋局，真正造就恶孽而脱身于他者的家伙拽入深渊！"),
-      "伴随着强烈的意志，世界开始崩坏，画面如同老旧电视机屏幕般闪过雪花纹。",
-      "两个光团，一红一灰，猛烈地一次又一次碰撞着。怪异的是，那两团光居然在碰撞中交换着彼此的色彩。",
-      "红灰色的混沌，于无尽螺旋的圣塔底部向上落去。",
-    ],
-    then() {
-      F.refused = true;
-      addMemory("拒绝错误组合");
-      gotoArea("rain", "显意识的边缘");
-    },
+    lines: combatLines('refusal', {0:'周防',2:'周防',4:'外来者',5:'外来者',6:'周防',8:'周防'}, i => ({ pose: 'stand', ...([4,5].includes(i) ? { takeover: 2 } : {}), battle: { phase: 'ownership', progress: i, ...([0,2,6].includes(i) ? { target: {0:0,2:1,6:2}[i] } : {}) } })),
+    choices: [{ label: '让世界崩坏', run: () => playScript('clash') }],
+    then() { addMemory('拒绝错误组合'); addMemory('书写权争夺'); },
+  },
+  clash: {
+    lines: combatLines('clash', {}, i => ({ battle: { phase: 'clash', progress: i } })),
+    choices: [{ label: '抵达雨塔', run() { F.refused = true; gotoArea('rain', '显意识的边缘'); } }],
+    then() { addMemory('红灰光团'); },
   },
   repress: {
-    lines: [
-      "雨水在落下。自无尽螺旋的高塔，然后一滴滴掉落在地上，融为水潭。",
-      say("压抑", "总之，你现在总算知道，正在发生，并且将要继续发生的事情是什么了吧。"),
-      say("压抑", "我也不藏着掖着了，作为你诸多自我防御机制的面相之一，以压抑之名，向您致意。"),
-      say("周防", "我的...记忆在流失...?", "quote"),
-      say("压抑", "不，它们从未离开，只是因为某些原因，要去往一个更加安全的地方。"),
-    ],
+    lines: combatLines('rain_1', {"3":"周防","4":"压抑","5":"压抑","6":"压抑","8":"压抑","9":"压抑","10":"周防","11":"压抑","12":"压抑","13":"周防","14":"压抑","15":"周防","16":"压抑","17":"压抑","18":"压抑","19":"周防","20":"压抑","21":"周防","22":"压抑","23":"压抑"}),
     choices: [
-      { label: "追问记忆为什么在流失", run: () => playScript("rainMemory") },
-      { label: "追问不回来是什么意思", run: () => playScript("rainDeath") },
+      { label: '追问记忆为什么在流失', run: () => playScript('rainMemory') },
+      { label: '追问不回来是什么意思', run: () => playScript('rainDeath') },
     ],
+    then() { addMemory('无名旅伴'); addMemory('显意识边缘'); },
   },
   rainMemory: {
-    lines: [
-      say("压抑", "那可是太贪心了呢。但是竹篮打水，终究是一场空。"),
-      "[一双手自无中出现，双掌合拢，将那雨水接住]",
-      "[就算大多数从指缝漏过，也有些许被留在了手心]",
-      quote("这就是我的答案。"),
-      "于是，无数道裂痕贯穿了身体。然而无尽的身体碎片，竟然强行挣脱了约束，再度合而为一。",
-    ],
-    then() {
-      F.rainMemory = true;
-      addMemory("手心里的雨水");
-      playScript("rainDeath");
-    },
+    lines: combatLines('rain_memory', {0:'压抑',1:'压抑',2:'压抑',3:'压抑',6:'周防',7:'压抑',12:'压抑'}, i => ({ battle: { phase: 'rain-body', progress: i } })),
+    then() { F.rainMemory = true; addMemory('手心里的雨水'); playScript('rainDeath'); },
   },
   rainDeath: {
-    lines: [
-      say("周防", "我最后想问的，是为什么我会被抓到这里...", "quote"),
-      say("压抑", "字面意思，亲爱的。你的真灵将会落入那昏黄的大海，泯灭于高塔尽头的红月。"),
-      "这是战斗的宿命，这是无法挣脱的诡异。也就是你从来都忽视，却真正会临到你的死。",
-      say("压抑", "无家可归的流浪者，却又想占夺别人的契机。这是真正你死我活的战斗，请记住。"),
-      say("压抑", "我们只能这样走下去，也必然走下去，直到或是黄昏来临，或是新的礁石落下。"),
-      say("压抑", "而现在，去拥抱你来之不易的幸运吧，周防。"),
-    ],
-    then() {
-      F.rainDone = true;
-      addMemory("黄昏的海洋");
-      addMemory("外部入侵者");
-      notify("塔顶的裂缝开启了。");
-    },
+    lines: combatLines('rain_death', {0:'周防',1:'压抑',3:'压抑',5:'压抑',6:'压抑',7:'压抑'}),
+    then() { addMemory('黄昏的海洋'); playScript('rainEnemy'); },
+  },
+  rainEnemy: {
+    lines: combatLines('rain_enemy', {"0":"周防","1":"压抑","2":"压抑","3":"压抑","4":"周防","5":"压抑","6":"压抑","7":"压抑","8":"压抑","9":"压抑"}),
+    then() { F.rainDone = true; addMemory('外部入侵者'); notify('塔顶的裂缝开启了。'); },
   },
   // The original chapter is implemented by Finale; these compressed scripts are retired.
 
@@ -869,7 +845,7 @@ const SCRIPTS = {
   echoStorm: {
     lines: [
       "而在红月下方，有一个浑黑的身影，仿佛违反了物理法则一般，从高塔之中向月亮落去。",
-      quote("下一个奇点再见吧，无名的旅伴。"),
+      say("浑黑的身影", "下一个奇点再见吧，无名的旅伴。", "quote"),
     ],
     then() { addMemory("旅伴的回声"); },
   },
@@ -883,7 +859,7 @@ const SCRIPTS = {
   echoBlood: {
     lines: [
       "视线颤抖着上移。那是一个年轻的面孔，一个熟悉但不曾在他前三日梦境中出现的角色。",
-      quote("妹妹？你是……我的妹妹吗？"),
+      say("周防", "妹妹？你是……我的妹妹吗？", "quote"),
     ],
     then() { addMemory("妹妹的回声"); },
   },
@@ -1166,8 +1142,12 @@ function renderLine() {
   if (line.rewrite) {
     const del = document.createElement("del");
     del.textContent = line.rewrite.original;
+    del.tabIndex = 0;
+    del.setAttribute("aria-label", "原先的过程");
     const ins = document.createElement("ins");
     ins.textContent = line.rewrite.replacement;
+    ins.tabIndex = 0;
+    ins.setAttribute("aria-label", "改写后的过程");
     ui.dialogText.append(del, document.createTextNode(" "), ins);
     typeDone = true;
   } else if (typeDone && line.t) {
@@ -1176,7 +1156,11 @@ function renderLine() {
   updateDialogStatus();
   if (typeof Expedition !== "undefined") Expedition.onLine(line, dialogIndex, dialogLines.length);
   Finale.onLine(line);
+  PixelArt.onLine(line);
+  PhenomenonBattle.onLine(line);
   if (G.area === "storm") StormFlight.onLine(line);
+  updateDialogStatus();
+  Expedition.sync();
 }
 
 function setDialogPresentation(line) {
@@ -1206,7 +1190,7 @@ function currentFullText() {
 function updateDialogStatus() {
   if (ui.dialogProgress) ui.dialogProgress.textContent = dialogActive ? `${Math.min(dialogIndex + 1, dialogLines.length)} / ${dialogLines.length}` : "";
   if (ui.dialogHint) {
-    ui.dialogHint.textContent = !dialogActive ? "" : dialogChoices ? "选择你的回应" : typeDone ? "点击 / E / 空格 / Enter 继续" : "点击 / E / 空格 / Enter 显示全文";
+    ui.dialogHint.textContent = !dialogActive ? "" : dialogChoices ? "选择你的回应" : PhenomenonBattle.pending && typeDone ? "← / → 选择现象 · E 确认" : typeDone ? "点击 / E / 空格 / Enter 继续" : "点击 / E / 空格 / Enter 显示全文";
   }
 }
 
@@ -1232,6 +1216,7 @@ function advanceDialog() {
     updateDialogStatus();
     return;
   }
+  if (PhenomenonBattle.pending) { PhenomenonBattle.commit(PhenomenonBattle.selected); return; }
   if (dialogIndex + 1 >= dialogLines.length) {
     if (currentDialogScript && currentDialogScript.choices) showChoices(currentDialogScript.choices);
     else finishDialog(afterDialog);
@@ -1279,6 +1264,7 @@ function showChoices(choices) {
     });
     ui.dialogChoices.append(btn);
   }
+  if (Finale.active()) PhenomenonBattle.history();
   updateDialogStatus();
   const first = ui.dialogChoices.querySelector("button");
   if (first) first.focus({ preventScroll: true });
@@ -1298,6 +1284,8 @@ function closeDialog() {
   ui.dialogChoices.replaceChildren();
   setDialogPresentation();
   StoryStaging.finish();
+  PhenomenonBattle.clear();
+  PixelArt.onLine(null);
   updateDialogStatus();
   if (wasActive && typeof Expedition !== "undefined") Expedition.onDialogClose();
 }
@@ -1589,6 +1577,7 @@ function drawTile(c, ch, x, y, map, t) {
       c.fillRect(px + 5, py + 3, TILE - 10, TILE - 6);
       break;
   }
+  PixelArt.tile(c, ch, x, y, map);
 }
 
 function buildTileCache() {
@@ -1718,6 +1707,7 @@ function drawPerson(c, x, y, opt = {}) {
     c.fillStyle = "#748547"; c.fillRect(px + 1, py + 7, 10, 2);
     c.fillStyle = "#b4b072"; c.fillRect(px + 3, py + 7, 2, 1); c.fillRect(px + 7, py + 8, 2, 1);
   }
+  PixelArt.person(c, px, py, lowered, opt, pose);
   if (opt.blood) {
     // Fixed splashes cover face, bare hands, shirt and both trouser legs.
     c.fillStyle = "#751d2a";
@@ -2005,7 +1995,7 @@ function handleInteraction(id) {
     case "famBed": playScript("famBed"); break;
     case "father": playScript("father"); break;
     case "mother":
-      if (F.mother) playLines([quote("吃饭了，小防，还有老公……")], () => {});
+      if (F.mother) playLines([say("母亲", "吃饭了，小防，还有老公……", "quote")], () => {});
       else playScript("mother");
       break;
     case "table": playScript("table"); break;
@@ -2510,6 +2500,7 @@ function render(now) {
   }
 
   Expedition.render(dt, cam, now);
+  PhenomenonBattle.render(now, dt, cam);
   requestAnimationFrame(render);
 }
 
@@ -2579,4 +2570,6 @@ buildTileCache();
 updateHud();
 Expedition.init();
 Finale.init();
+PixelArt.init();
+PhenomenonBattle.init();
 requestAnimationFrame(render);

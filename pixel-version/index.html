@@ -35,8 +35,20 @@
             <p id="finalePhase" class="finale-phase" hidden></p>
             <h2 id="finaleHeading" class="finale-heading" hidden></h2>
             <div id="finaleLedger" class="finale-ledger" hidden></div>
+            <canvas id="phenomenonStage" width="320" height="64" hidden role="img" aria-label="过程争夺"></canvas>
+            <div id="historyAnchors" class="history-anchors" hidden></div>
+            <section id="battlePanel" class="battle-panel" hidden aria-label="现象争夺">
+              <p id="battleHeading"></p>
+              <div id="battleTargets" class="battle-targets"></div>
+              <p id="battleStatus" role="status"></p>
+            </section>
+            <div class="dialog-body">
+              <figure id="portraitFrame" class="portrait-frame" hidden><canvas id="speakerPortrait" width="64" height="80" role="img" aria-label="人物头像"></canvas></figure>
+              <div class="dialog-copy">
             <p id="dialogSpeaker" class="dialog-speaker"></p>
             <p id="dialogText" class="dialog-text" aria-live="polite" aria-atomic="true"></p>
+              </div>
+            </div>
             <div class="dialog-footer"><span id="dialogProgress"></span><span id="dialogHint" class="dialog-hint">E / 空格 继续</span></div>
             <div id="dialogChoices" class="dialog-choices"></div>
           </div>
@@ -126,6 +138,9 @@
     <script src="./story-staging.js"></script>
     <script src="./finale-script.js"></script>
     <script src="./finale.js"></script>
+    <script src="./combat-script.js"></script>
+    <script src="./pixel-art.js"></script>
+    <script src="./phenomenon-battle.js"></script>
     <script src="./game.js"></script>
   </body>
 </html>

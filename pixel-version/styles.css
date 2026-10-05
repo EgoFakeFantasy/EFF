@@ -5,7 +5,7 @@
 .dialog[data-presentation="finale"] {
   inset: 0; max-height: none; display: flex; flex-direction: column;
   padding: clamp(18px, 3cqw, 40px); border: 0; overflow: hidden;
-  background: linear-gradient(100deg, #070911f5, #0c1020df), url("../assets/crystal-flower.svg") center / cover;
+  background: linear-gradient(100deg, #070911f5, #0c1020df);
   box-shadow: inset 0 0 100px #0008; font-family: "Songti SC", "SimSun", serif;
 }
 .finale-phase { margin: 0 0 8px; color: #8fa8b4; font: 11px/1.6 sans-serif; letter-spacing: .2em; }
@@ -525,3 +525,51 @@ input { accent-color: var(--accent); }
   .map-panel { gap: 12px; padding: 10px; }
   .map-panel p { font-size: 10px; }
 }
+
+/* Portraits and the two arenas share the world's integer-pixel palette. */
+.dialog-body { display: flex; align-items: flex-start; gap: 16px; min-width: 0; }
+.dialog-copy { flex: 1 1 auto; min-width: 0; }
+.portrait-frame { flex: 0 0 72px; margin: 2px 0 0; padding: 3px; border: 1px solid #726855; background: #10151e; box-shadow: 3px 3px 0 #03050a; }
+.portrait-frame canvas { width: 100%; display: block; image-rendering: pixelated; }
+.portrait-frame[data-role='intruder'] { border-color: #98565d; }
+.portrait-frame[data-role='shadow'] { border-color: #669c90; }
+.dialog[data-presentation='takeover'] .dialog-body { flex: 1 0 auto; align-items: center; }
+.dialog[data-presentation='takeover'] .dialog-copy { display: flex; flex-direction: column; min-height: 100%; }
+.dialog[data-presentation='finale'] .dialog-body { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.dialog[data-presentation='finale'] .dialog-copy { display: flex; flex-direction: column; align-self: stretch; min-height: 0; }
+.dialog[data-presentation='finale'] .dialog-speaker { margin: 0 0 5px; }
+.dialog[data-presentation='finale'] .portrait-frame { flex-basis: 86px; }
+.dialog[data-presentation='finale'] .finale-heading { margin-bottom: 8px; }
+.dialog[data-presentation='finale'] .finale-ledger { flex-basis: 12%; max-height: 78px; margin-bottom: 8px; }
+#phenomenonStage { flex: 0 0 auto; height: 100px; width: 100%; image-rendering: pixelated; object-fit: contain; background: #0b111b; border: 1px solid #293342; }
+.history-anchors { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin: 5px 0 10px; flex: 0 0 auto; font-family: sans-serif; }
+.history-anchors button { padding: 5px 3px; font-size: 11px; color: #c2ccc7; border-color: #35414c; }
+.history-anchors button.recovered { color: #83bbab; }
+.history-anchors button:disabled { opacity: .7; cursor: default; }
+.history-anchors button:not(:disabled) { border-color: #83bbab; background: #163029; box-shadow: inset 0 -2px #7db39f; }
+.battle-panel { border-left: 2px solid #87b2a1; background: #10191eef; padding: 7px 10px; margin-bottom: 12px; line-height: 1.5; }
+.battle-panel p { margin: 0; font-size: 12px; color: #b9c7c3; }
+.battle-targets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 7px 0; }
+.battle-targets button { padding: 7px 4px; font-size: 13px; border-color: #4f4a55; }
+.battle-targets button.selected { border-color: #a1c2b2; background: #293a3a; }
+.battle-targets button.written { opacity: 1; color: #c7d5b7; border-color: #8eb19e; }
+.dialog[data-battle='ownership'] { border-top-color: #a1c2b2; }
+.dialog[data-battle='clash'] { border-top-color: #9a7686; }
+@media (max-width: 520px) {
+  .dialog-body { gap: 10px; }
+  .portrait-frame { flex-basis: 48px; padding: 2px; }
+  .dialog[data-presentation='finale'] .portrait-frame { flex-basis: 52px; }
+  #phenomenonStage { height: 58px; }
+  .history-anchors { margin-bottom: 7px; gap: 3px; }
+  .history-anchors button { font-size: 10px; padding: 4px 1px; }
+  .dialog[data-presentation='finale'] .finale-ledger { flex-basis: 8%; max-height: 38px; }
+  .dialog[data-presentation='finale'] .finale-heading { font-size: 19px; margin-bottom: 5px; }
+  .dialog[data-presentation='finale'] .finale-phase { margin-bottom: 4px; }
+  .battle-targets button { font-size: 11px; padding: 6px 2px; }
+  .battle-panel { padding: 6px 8px; margin-bottom: 8px; }
+}
+
+.dialog[data-presentation='finale'][data-voice='rewrite'] .dialog-text { display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+.dialog[data-presentation='finale'][data-voice='rewrite'] .dialog-text del { flex: 0 1 auto; max-height: 43%; min-height: 0; overflow-y: auto; font-size: .8em; line-height: 1.65; margin-bottom: 0; padding-right: 5px; }
+.dialog[data-presentation='finale'][data-voice='rewrite'] .dialog-text ins { flex: 1 1 auto; min-height: 2em; overflow-y: auto; font-size: 1em; line-height: 1.7; padding-right: 5px; }
+.dialog-text del:focus-visible, .dialog-text ins:focus-visible { outline: 1px solid #789587; outline-offset: 2px; }

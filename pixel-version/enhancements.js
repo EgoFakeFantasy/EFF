@@ -153,9 +153,9 @@ const Expedition = {
     const unavailable = transitionLock || this.paused() || !ui.start.hidden || !ui.ending.hidden;
     const near = !dialogActive && !unavailable ? nearestInteractable() : null;
     this.dom.interactButton.disabled = unavailable || (dialogActive ? Boolean(dialogChoices) : !near);
-    setText(this.dom.interactButton, dialogActive ? (dialogChoices ? "选择你的回答" : typeDone ? "继续倾听" : "显示全文") : near ? (G.area === "storm" ? near.it.label : `调查 · ${near.it.label}`) : G.area === "storm" ? "向红月逆落" : "靠近事物 · 调查");
+    setText(this.dom.interactButton, dialogActive ? (dialogChoices ? "选择你的回答" : typeDone ? (PhenomenonBattle.pending ? "写入选中现象" : "继续倾听") : "显示全文") : near ? (G.area === "storm" ? near.it.label : `调查 · ${near.it.label}`) : G.area === "storm" ? "向红月逆落" : "靠近事物 · 调查");
     this.dom.touchInteract.disabled = unavailable || Boolean(dialogChoices);
-    setText(this.dom.touchInteract, G.area === "storm" && !dialogActive ? "伸手" : dialogActive ? "继续" : "调查");
+    setText(this.dom.touchInteract, G.area === "storm" && !dialogActive ? "伸手" : dialogActive ? (PhenomenonBattle.pending && typeDone ? "写入" : "继续") : "调查");
     this.dom.mapButton.disabled = G.area === "storm";
     this.dom.mapButton.hidden = G.area === "meta";
     if (G.area === "meta") this.dom.mapPanel.hidden = true;

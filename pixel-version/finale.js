@@ -106,7 +106,7 @@ const Finale = {
     this.raw = this.compose(id);
     this.offset = Math.min(Math.max(0, G.counters.finaleFrom || 0), Math.max(0, this.raw.length - 1));
     const terminal = id === "normal_ending" || id === "ending";
-    const script = { choices: terminal ? null : this.options(id).map(option => ({ label: option.label, run: () => this.act(option) })) };
+    const script = { choices: terminal ? null : this.options(id).map(option => ({ label: option.label, step: option.step, run: () => this.act(option) })) };
     const complete = () => {
       for (const memory of scene.memories || []) addMemory(memory);
       if (terminal) {
@@ -195,7 +195,11 @@ const Finale = {
     this.dom.protagonistName.focus();
   },
 
-  render() {
+  render(now, dt) {
+    if (this.active()) {
+      if (!Expedition.paused() && !Expedition.prefs.motion) PhenomenonBattle.time += dt;
+      PhenomenonBattle.renderHistory();
+    }
     ctx.fillStyle = "#070910";
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   },

@@ -141,6 +141,18 @@ const StormFlight = {
         ctx.fillStyle = tower.window;
         ctx.fillRect(x - 5, py + 9, 4, 9);
         ctx.fillRect(x + 1, py + 9, 4, 9);
+        // Masonry, narrow arches and weathered joints preserve the scroll's
+        // depth while giving each layer a material surface.
+        ctx.fillStyle = '#344357'; ctx.fillRect(x - tower.width / 2 - 3, py + 2, tower.width + 6, 1);
+        ctx.fillStyle = '#101a2a'; ctx.fillRect(x - tower.width / 2, py + 23, tower.width, 1);
+        for (let brick = 0; brick < 4; brick++) {
+          const bx = Math.round(x - tower.width / 2 + 3 + brick * 7);
+          ctx.fillStyle = '#1a2638'; ctx.fillRect(bx, py + 25 + brick % 2 * 6, 1, 4);
+          ctx.fillStyle = '#283449'; ctx.fillRect(bx + 1, py + 24 + brick % 2 * 6, 5, 1);
+        }
+        ctx.fillStyle = '#8290a0'; ctx.fillRect(x - 5, py + 9, 1, 8); ctx.fillRect(x + 1, py + 9, 1, 8);
+        ctx.fillStyle = '#263344'; ctx.fillRect(x - 7, py + 22, 14, 1);
+        ctx.fillStyle = '#1e293c'; ctx.fillRect(x - 5, py + 5, 10, 1); ctx.fillRect(x - 3, py + 4, 6, 1);
         // A sloping stair trace belongs to the tower, never a walkable ground.
         limb(x - tower.width / 2, py + 26, x + tower.width / 2, py + 35, 1, tower.trim);
       }
@@ -159,6 +171,8 @@ const StormFlight = {
     ctx.beginPath(); ctx.arc(mx + radius * 0.22, my - radius * 0.13, radius * 0.86, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = "rgba(238,106,95,0.48)";
     ctx.fillRect(Math.round(mx - radius * 0.55), Math.round(my - radius * 0.35), Math.max(2, Math.round(radius * 0.14)), Math.max(2, Math.round(radius * 0.32)));
+
+    PixelArt.moon(ctx, mx, my, radius);
 
     // Every drop descends, independent of the story's tower reveal.
     ctx.fillStyle = "rgba(120,153,194,0.42)";

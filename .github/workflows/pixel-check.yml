@@ -29,4 +29,7 @@ jobs:
       - run: node --check pixel-version/story-staging.js
       - run: node --check pixel-version/finale-script.js
       - run: node --check pixel-version/finale.js
+      - run: node --check pixel-version/combat-script.js
+      - run: node --check pixel-version/pixel-art.js
+      - run: node --check pixel-version/phenomenon-battle.js
       - run: node tests/pixel-regression.cjs

@@ -274,14 +274,14 @@ function harness(initialStorage = {}) {
 function finishDialog(game) {
   for (let i = 0; i < 400; i++) {
     if (!game.evaluate("dialogActive") || game.evaluate("!!dialogChoices")) return;
-    game.evaluate("advanceDialog()");
+    game.evaluate("if (typeDone && PhenomenonBattle.pending) PhenomenonBattle.selected = PhenomenonBattle.cue.target; advanceDialog()");
   }
   assert.fail("dialogue did not finish within 400 advances");
 }
 
 function nextLine(game) {
   assert.equal(game.evaluate("dialogActive"), true, "cannot advance an inactive staged scene");
-  game.evaluate("if (!typeDone) advanceDialog(); advanceDialog()");
+  game.evaluate("if (!typeDone) advanceDialog(); if (PhenomenonBattle.pending) { PhenomenonBattle.commit(PhenomenonBattle.cue.target); } advanceDialog()");
 }
 
 function advanceToText(game, fragment) {
@@ -444,6 +444,7 @@ function assertOrdinaryDialog(game) {
 
 function enterMeta(game, retainRain) {
   enterBlood(game); choose(game, "不，我拒绝");
+  choose(game, "让世界崩坏"); choose(game, "抵达雨塔");
   assert.equal(game.evaluate("G.area"), "rain");
   interact(game, "repress");
   choose(game, retainRain ? "为什么在流失" : "不回来是什么意思");
@@ -1015,6 +1016,7 @@ test("settings freeze takeover inputs and refusal restores ordinary dialogue and
   assert.equal(game.evaluate("StoryStaging.playerOptions().pose"), "stand");
   assertOrdinaryDialog(game);
   finishDialog(game); game.tick(); finishDialog(game);
+  choose(game, "让世界崩坏"); choose(game, "抵达雨塔");
   assert.equal(game.evaluate("G.area"), "rain");
   assert.equal(game.evaluate("!!F.refused"), true);
   assertOrdinaryDialog(game);
@@ -1348,6 +1350,89 @@ test("an interrupted true ending replays its unread chapter before recording com
   finishDialog(restored);
   assert.equal(restored.evaluate("!!F.finaleTrue"), true);
   assertEnding(restored, "true");
+});
+
+
+test("courtyard resistance, collision and rain preserve every canonical sentence", () => {
+  const game = harness();
+  const original = fs.readFileSync(path.join(root, '..', 'game.js'), 'utf8');
+  const canonical = vm.runInNewContext(original.slice(original.indexOf('const scenes ='), original.indexOf('const defaultState')) + '\nscenes');
+  for (const [script, scene] of [['refusal','refusal'],['clash','clash'],['repress','rain_1'],['rainMemory','rain_memory'],['rainDeath','rain_death'],['rainEnemy','rain_enemy']]) {
+    const expected = canonical[scene].text.map(line => typeof line === 'string' ? line : line.text);
+    assert.deepEqual(game.value('SCRIPTS[' + JSON.stringify(script) + '].lines.map(line => line.t)'), Array.from(expected));
+  }
+  assert.deepEqual(game.value('SCRIPTS.refusal.choices.map(c => c.label)'), ['让世界崩坏']);
+  assert.deepEqual(game.value('SCRIPTS.clash.choices.map(c => c.label)'), ['抵达雨塔']);
+});
+
+test("body ownership requires a matching act, wrong targets neither advance nor invent a bad ending", () => {
+  const game = harness({ [SAVE]: JSON.stringify({ area:'blood',px:211,py:130,flags:{sister:true,parents:true},counters:{},memories:[] }) });
+  game.ids.get('startButton').click(); finishDialog(game);
+  game.ids.get('dialogChoices').children[2].click();
+  assert.equal(game.ids.get('portraitFrame').hidden, false);
+  assert.ok(game.ids.get('speakerPortrait').getAttribute('aria-label').includes('血迹'));
+  game.evaluate('advanceDialog()');
+  game.ids.get('battleTargets').children[2].click();
+  assert.equal(game.evaluate('dialogIndex'), 0);
+  assert.equal(game.evaluate('PhenomenonBattle.pending'), true);
+  assert.equal(game.evaluate('endingId'), null);
+  game.ids.get('battleTargets').children[0].click();
+  assert.equal(game.evaluate('PhenomenonBattle.pending'), false);
+  assert.equal(game.evaluate('dialogIndex'), 0, 'writing must not skip the response text');
+  game.ids.get('dialog').click();
+  nextLine(game);
+  assert.equal(game.evaluate('dialogIndex'), 2);
+  assert.equal(game.evaluate('PhenomenonBattle.cue.target'), 1);
+  game.evaluate('advanceDialog()');
+  game.ids.get('settingsButton').click();
+  const frozen = game.value('[dialogIndex, PhenomenonBattle.selected, PhenomenonBattle.time]');
+  game.ids.get('battleTargets').children[1].click(); game.frame(2000);
+  assert.deepEqual(game.value('[dialogIndex, PhenomenonBattle.selected, PhenomenonBattle.time]'), frozen);
+  game.document.querySelector('[data-close="settingsDialog"]').click();
+  game.document.dispatchEvent(new MockEvent('keydown', {key:'ArrowRight'}));
+  assert.equal(game.evaluate('PhenomenonBattle.selected'), 1);
+  assert.equal(game.document.activeElement, game.ids.get('battleTargets').children[1]);
+  game.ids.get('interactButton').click();
+  assert.equal(game.evaluate('PhenomenonBattle.claimed[1]'), true);
+  finishDialog(game); choose(game, '让世界崩坏');
+  assert.equal(game.evaluate('PhenomenonBattle.phase'), 'clash');
+  assert.equal(game.evaluate('F.refused'), undefined, 'clash is not a complete victory over the outsider');
+  choose(game, '抵达雨塔');
+  assert.equal(game.evaluate('G.area'), 'rain');
+  assert.equal(game.ids.get('battlePanel').hidden, true);
+});
+
+test("history anchors unlock only the original offered retroaction and commit its checkpoint", () => {
+  const game = harness(finaleSave({rainMemory:true})); game.ids.get('startButton').click();
+  assert.equal(game.ids.get('phenomenonStage').hidden, false);
+  assert.ok(game.ids.get('historyAnchors').children.every(button => button.disabled));
+  finishDialog(game);
+  const anchor = game.ids.get('historyAnchors').children[0];
+  assert.equal(anchor.disabled, false);
+  game.ids.get('settingsButton').click(); anchor.click();
+  assert.equal(game.evaluate('Finale.step()'), 0);
+  game.document.querySelector('[data-close="settingsDialog"]').click(); anchor.click();
+  assert.equal(JSON.parse(game.storage.get(SAVE)).counters.finaleStep, 1);
+  game.tick();
+  assert.ok(game.evaluate('currentFullText()').includes('真的定义吗'));
+  assert.ok(game.ids.get('phenomenonStage').getAttribute('aria-label').includes('已回写1处'));
+  finishDialog(game); game.ids.get('historyAnchors').children[1].click(); game.tick();
+  assert.equal(game.evaluate('Finale.step()'), 2);
+  assert.ok(game.evaluate('currentFullText()').includes('幻海'));
+});
+
+test("battle motion stops under reduced motion and reset clears its unfinished act", () => {
+  const game = harness({ [SAVE]: JSON.stringify({ area:'blood',px:211,py:130,flags:{sister:true,parents:true},counters:{},memories:[] }) });
+  game.ids.get('startButton').click(); finishDialog(game); game.ids.get('dialogChoices').children[2].click();
+  game.ids.get('settingsButton').click(); game.ids.get('motionControl').checked = true; game.ids.get('motionControl').dispatchEvent(new MockEvent('change'));
+  game.document.querySelector('[data-close="settingsDialog"]').click();
+  const before = game.evaluate('PhenomenonBattle.time'); game.frame(1000);
+  assert.equal(game.evaluate('PhenomenonBattle.time'), before);
+  assert.equal(game.evaluate('PhenomenonBattle.pending'), true, 'motion preference cannot solve the battle');
+  game.evaluate('resetRun()'); game.tick();
+  assert.equal(game.evaluate('PhenomenonBattle.pending'), false);
+  assert.equal(game.ids.get('battlePanel').hidden, true);
+  assert.equal(game.ids.get('portraitFrame').hidden, true);
 });
 
 let failed = 0;
