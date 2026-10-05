@@ -59,6 +59,7 @@ const PhenomenonBattle = {
     this.cue = cue;
     ui.dialog.dataset.battle = cue.phase;
     if (cue.phase === "clash") ui.areaName.textContent = ["崩坏的庭院", "红灰光团的碰撞", "场地消解 · 无色雨水", "圣塔底部 · 向上坠落", "黄昏的海", "显意识的边缘"][cue.progress];
+    if (cue.phase === "rain-rise") ui.areaName.textContent = "圣塔底部 · 向上坠落";
     this.dom.battlePanel.hidden = cue.target === undefined;
     if (cue.target === undefined) return;
     this.pending = true;
@@ -221,6 +222,11 @@ const PhenomenonBattle = {
       }
       if (twilight) { c.fillStyle = "#9d795456"; c.fillRect(0, 0, VIEW_W, VIEW_H); c.fillStyle = "#68503b"; c.fillRect(0, 90, VIEW_W, 102); }
       if (!Expedition.prefs.motion && progress === 0) { c.fillStyle = "#8d9ba233"; for (let i = 0; i < 30; i++) c.fillRect(Math.floor(hash(i, Math.floor(t * 4), 2) * 320), i * 6, 2, 1); }
+      return;
+    }
+    if (this.phase === "rain-rise") {
+      const snapshot = { x: 160, y: 112 - 42 * (1 - Math.exp(-t / 6)), scroll: t * 24, time: t, approach: .2 + .5 * (1 - Math.exp(-t / 8)), pose: .7, shadow: .8 };
+      StormFlight.render.call(snapshot, now);
       return;
     }
     if (this.phase === "rain-body") {

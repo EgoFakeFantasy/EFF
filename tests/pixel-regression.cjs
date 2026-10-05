@@ -448,7 +448,11 @@ function enterMeta(game, retainRain) {
   assert.equal(game.evaluate("G.area"), "rain");
   interact(game, "repress");
   choose(game, retainRain ? "为什么在流失" : "不回来是什么意思");
-  exitTo(game, "meta");
+  if (retainRain) choose(game, "继续追问黄昏");
+  choose(game, "询问那些入侵者");
+  assert.equal(game.evaluate("PhenomenonBattle.phase"), "rain-rise");
+  game.frame(100);
+  choose(game, "进入最后一章");
   finishFinaleToCompensation(game);
 }
 
@@ -1363,6 +1367,8 @@ test("courtyard resistance, collision and rain preserve every canonical sentence
   }
   assert.deepEqual(game.value('SCRIPTS.refusal.choices.map(c => c.label)'), ['让世界崩坏']);
   assert.deepEqual(game.value('SCRIPTS.clash.choices.map(c => c.label)'), ['抵达雨塔']);
+  for (const [script, scene] of [['rainMemory','rain_memory'],['rainDeath','rain_death'],['rainEnemy','rain_enemy']]) assert.deepEqual(game.value('SCRIPTS[' + JSON.stringify(script) + '].choices.map(c => c.label)'), Array.from(canonical[scene].choices.map(c => c.label)));
+  assert.equal(game.evaluate('SCRIPTS.rainEnemy.lines.at(-1).stage.battle.phase'), 'rain-rise');
 });
 
 test("body ownership requires a matching act, wrong targets neither advance nor invent a bad ending", () => {

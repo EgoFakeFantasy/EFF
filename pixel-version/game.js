@@ -829,14 +829,17 @@ const SCRIPTS = {
   },
   rainMemory: {
     lines: combatLines('rain_memory', {0:'压抑',1:'压抑',2:'压抑',3:'压抑',6:'周防',7:'压抑',12:'压抑'}, i => ({ battle: { phase: 'rain-body', progress: i } })),
-    then() { F.rainMemory = true; addMemory('手心里的雨水'); playScript('rainDeath'); },
+    choices: [{ label: '继续追问黄昏', run: () => playScript('rainDeath') }],
+    then() { F.rainMemory = true; addMemory('手心里的雨水'); },
   },
   rainDeath: {
     lines: combatLines('rain_death', {0:'周防',1:'压抑',3:'压抑',5:'压抑',6:'压抑',7:'压抑'}),
-    then() { addMemory('黄昏的海洋'); playScript('rainEnemy'); },
+    choices: [{ label: '询问那些入侵者', run: () => playScript('rainEnemy') }],
+    then() { addMemory('黄昏的海洋'); },
   },
   rainEnemy: {
-    lines: combatLines('rain_enemy', {"0":"周防","1":"压抑","2":"压抑","3":"压抑","4":"周防","5":"压抑","6":"压抑","7":"压抑","8":"压抑","9":"压抑"}),
+    lines: combatLines('rain_enemy', {0:'周防',1:'压抑',2:'压抑',3:'压抑',4:'周防',5:'压抑',6:'压抑',7:'压抑',8:'压抑',9:'压抑'}, i => i === 10 ? { battle: { phase: 'rain-rise', progress: i } } : {}),
+    choices: [{ label: '进入最后一章', run: () => gotoArea('meta', '终章 · 话语表面') }],
     then() { F.rainDone = true; addMemory('外部入侵者'); notify('塔顶的裂缝开启了。'); },
   },
   // The original chapter is implemented by Finale; these compressed scripts are retired.
