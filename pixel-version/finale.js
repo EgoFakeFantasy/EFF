@@ -36,6 +36,9 @@ const Finale = {
   active() { return this.open && G.area === "meta" && ui.start.hidden && ui.ending.hidden; },
   step() { return Math.min(3, Math.max(0, G.counters.finaleStep || 0)); },
   node() { return this.keys[G.counters.finaleNode] || "meta_1"; },
+  intervening() { return !!(F.finaleSummoned || F.finaleRewritten); },
+  requestIndex() { return FinaleScenes.meta_state_3.text.findIndex(raw => this.text(raw).includes("如果真的想帮上忙的话")); },
+  requesting() { return !this.intervening() && this.node() === "meta_state_3" && this.raw[this.offset + dialogIndex] === FinaleScenes.meta_state_3.text[this.requestIndex()]; },
 
   reset() {
     if (this.timer !== null) clearTimeout(this.timer);
@@ -43,6 +46,7 @@ const Finale = {
     this.renameResume = false;
     if (this.dom?.renameDialog.open) this.dom.renameDialog.close();
     this.open = false;
+    this.requestOffered = false;
     this.raw = [];
     this.prior = [];
     document.body.classList.remove("finale-active");
@@ -62,6 +66,14 @@ const Finale = {
     goldDrop = null;
     Expedition.chapterTime = 0;
     Expedition.dom.chapterCard.classList.remove("visible");
+    // Unfinished saves from the premature-assistance flow replay the chapter
+    // in the corrected order. Completed/re-written endings retain their progress.
+    if (F.finaleStarted && G.counters.finaleFlow !== 2 && !F.finaleRewritten && !F.finaleNormal && !F.finaleTrue) {
+      G.counters.finaleNode = 0; G.counters.finaleStep = 0; G.counters.finaleFrom = 0;
+      F.finaleSummoned = false;
+    }
+    G.counters.finaleFlow = 2;
+    if (F.finaleRewritten) F.finaleSummoned = true;
     // Former stele/golden-drop saves restart at the missing chapter, not after it.
     if (!F.finaleStarted) {
       F.finaleStarted = true;
@@ -76,7 +88,10 @@ const Finale = {
   compose(id) {
     const scene = FinaleScenes[id];
     let lines = scene.text.filter(line => !line.requiresMemory || F.rainMemory || G.memories.includes(line.requiresMemory));
-    if (scene.progressiveRetroactive) {
+    if (!this.intervening()) {
+      // Read the two-party contest first; the request is the intervention boundary.
+      if (id === "meta_state_3") lines = lines.slice(0, this.requestIndex() + 1);
+    } else if (scene.progressiveRetroactive) {
       const [first, second] = scene.retroactiveReveals;
       if (this.step() === 0) lines = lines.slice(0, first.at);
       else if (this.step() === 1) lines = [...lines.slice(0, first.at), ...first.text, ...lines.slice(first.at, second.at)];
@@ -84,6 +99,7 @@ const Finale = {
     } else {
       for (const reveal of scene.retroactiveReveals || []) if (this.step() >= reveal.step) lines.splice(reveal.at, 0, ...reveal.text);
     }
+    if (id === "meta_state_3" && this.intervening() && this.step() === 0) lines = lines.slice(0, this.requestIndex() + 2);
     if (F.finaleRewritten && scene.revealAfterRewrite) lines.splice(scene.revealAt || 0, 0, ...scene.revealAfterRewrite);
     return lines;
   },
@@ -91,6 +107,13 @@ const Finale = {
   options(id) {
     const scene = FinaleScenes[id];
     if (F.finaleRewritten && scene.choicesAfterRewrite) return scene.choicesAfterRewrite;
+    if (!this.intervening()) {
+      if (id === "meta_1") return scene.phaseChoices["2"];
+      if (id === "meta_state_3") return [{ label: "呼唤无意识，一起阻止改写", action: "summonUnconscious" }];
+    } else {
+      if (id === "meta_state_3" && this.step() === 0) return FinaleScenes.meta_1.phaseChoices["0"];
+      if (id === "meta_1" && this.step() === 2) return FinaleScenes.meta_state_3.phaseChoices["2"];
+    }
     return scene.phaseChoices?.[String(id === "meta_1" ? Math.min(2, this.step()) : this.step())] || scene.choices || [];
   },
 
@@ -104,11 +127,14 @@ const Finale = {
   offer() {
     const id = this.node(), scene = FinaleScenes[id];
     this.raw = this.compose(id);
+    this.requestOffered = false;
     this.offset = Math.min(Math.max(0, G.counters.finaleFrom || 0), Math.max(0, this.raw.length - 1));
     const terminal = id === "normal_ending" || id === "ending";
     const script = { choices: terminal ? null : this.options(id).map(option => ({ label: option.label, step: option.step, run: () => this.act(option) })) };
     const complete = () => {
-      for (const memory of scene.memories || []) addMemory(memory);
+      // The first visit is the present-only duel; award the temporal-war
+      // memories when this page is revisited by the actual intervention.
+      if (id !== "meta_1" || this.intervening()) for (const memory of scene.memories || []) addMemory(memory);
       if (terminal) {
         const ending = id === "ending" ? "true" : "normal";
         F[ending === "true" ? "finaleTrue" : "finaleNormal"] = true;
@@ -134,7 +160,12 @@ const Finale = {
 
   act(option) {
     if (Expedition.paused()) return;
-    if (option.action === "unconsciousStep") {
+    if (option.action === "summonUnconscious") {
+      if (this.intervening() || this.node() !== "meta_state_3" || !this.requestOffered) return;
+      F.finaleSummoned = true;
+      this.to("meta_state_3", this.requestIndex() + 1);
+    } else if (option.action === "unconsciousStep") {
+      if (!this.intervening() || option.step !== this.step() + 1 || !this.options(this.node()).some(offered => offered.action === "unconsciousStep" && offered.step === option.step)) return;
       G.counters.finaleStep = Math.max(this.step(), option.step);
       const id = option.target || this.node();
       const anchor = FinaleScenes[id].retroactiveReveals.find(reveal => reveal.step === option.step).text[0];
@@ -160,10 +191,11 @@ const Finale = {
   onLine(line) {
     if (!line.stage?.finale) { this.dismiss(); return; }
     const scene = FinaleScenes[this.node()];
+    if (this.requesting()) this.requestOffered = true;
     this.dom.finaleHeading.hidden = false;
     this.dom.finaleHeading.textContent = scene.title;
     this.dom.finalePhase.hidden = false;
-    this.dom.finalePhase.textContent = scene.kicker + (F.finaleRewritten ? " · 回写后" : "");
+    this.dom.finalePhase.textContent = scene.kicker + (F.finaleRewritten ? " · 回写后" : this.requesting() ? " · 周防呼唤援助" : this.intervening() ? " · 无意识介入，回溯改写" : " · 周防与外来者的表象争夺");
     this.dom.finaleLedger.replaceChildren();
     const history = this.raw.slice(0, this.offset + dialogIndex);
     for (const raw of (history.length ? history : this.prior).slice(-2)) {

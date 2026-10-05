@@ -458,9 +458,21 @@ function enterMeta(game, retainRain) {
 
 function finishFinaleToCompensation(game) {
   finishDialog(game);
-  for (const label of ["定义", "幻海消息", "故事表面", "下一种写法", "第三种写法", "朴素分层", "观察者", "前传人物的终止操作", "重写者回到终章开头", "阅读回写后的补偿结尾"]) choose(game, label);
+  for (const label of ["故事表面", "下一种写法", "第三种写法", "呼唤无意识", "定义", "幻海消息", "朴素分层", "观察者", "前传人物的终止操作", "重写者回到终章开头", "阅读回写后的补偿结尾"]) choose(game, label);
   assert.equal(game.evaluate("Finale.node()"), "meta_compensation");
   assert.equal(game.evaluate("!!F.finaleRewritten"), true);
+}
+
+function reachFinaleRequest(game) {
+  finishDialog(game);
+  for (const label of ["故事表面", "下一种写法", "第三种写法"]) choose(game, label);
+  assert.ok(game.evaluate("currentFullText()").includes("如果真的想帮上忙的话"));
+}
+
+function summonFinaleHelp(game) {
+  reachFinaleRequest(game);
+  choose(game, "呼唤无意识");
+  assert.ok(game.evaluate("currentFullText()").includes("如你所愿"));
 }
 
 function finaleSave(flags = {}, counters = {}, memories = []) {
@@ -1203,15 +1215,80 @@ test("the nine finale nodes preserve every original paragraph, insertion, replac
   assert.equal(game.evaluate("!!SCRIPTS.stele1 || !!SCRIPTS.flowerTrue"), false, "compressed finale scripts remain playable");
 });
 
+test("unconscious help starts at Zhou's request after the complete two-party contest", () => {
+  const game = harness(finaleSave()); game.ids.get('startButton').click();
+  assert.deepEqual(game.value('dialogLines.map(line => line.t)'), game.value('FinaleScenes.meta_1.text.map(raw => Finale.text(raw))'));
+  assert.equal(game.ids.get('phenomenonStage').dataset.mode, 'appearance');
+  assert.equal(game.ids.get('historyAnchors').hidden, true);
+  game.evaluate('Finale.act(FinaleScenes.meta_1.phaseChoices[0][0])');
+  assert.equal(game.evaluate('Finale.step()'), 0, 'help cannot be activated before the request');
+  finishDialog(game);
+  for (const label of ['故事表面', '下一种写法', '第三种写法']) {
+    const choice = game.ids.get('dialogChoices').children.find(button => button.textContent.includes(label));
+    assert.ok(choice); choice.click(); game.tick();
+    assert.equal(game.ids.get('phenomenonStage').dataset.mode, 'appearance');
+    assert.equal(game.ids.get('historyAnchors').hidden, true);
+    assert.equal(game.evaluate('Finale.step()'), 0);
+    if (label !== '第三种写法') finishDialog(game);
+  }
+  advanceToText(game, '我需要提醒你');
+  assert.equal(game.ids.get('phenomenonStage').dataset.mode, 'appearance', 'the warning must not start assistance');
+  nextLine(game);
+  assert.ok(game.evaluate('currentFullText()').includes('如果真的想帮上忙的话'));
+  assert.equal(game.ids.get('dialogSpeaker').textContent, '周防');
+  assert.equal(game.ids.get('phenomenonStage').dataset.mode, 'summons');
+  assert.equal(game.evaluate('!!F.finaleSummoned'), false);
+  finishDialog(game);
+  assert.ok(game.ids.get('dialogChoices').children.every(button => !button.textContent.includes('回溯')));
+  game.ids.get('settingsButton').click(); game.ids.get('dialogChoices').children[0].click();
+  assert.equal(game.evaluate('!!F.finaleSummoned'), false);
+  game.document.querySelector('[data-close="settingsDialog"]').click();
+  game.ids.get('dialogChoices').children[0].click();
+  const checkpoint = JSON.parse(game.storage.get(SAVE));
+  assert.equal(checkpoint.flags.finaleSummoned, true);
+  assert.equal(checkpoint.counters.finaleStep, 0);
+  assert.equal(checkpoint.counters.finaleFrom, 8);
+  const resumed = harness(game.snapshot()); resumed.ids.get('startButton').click();
+  assert.ok(resumed.evaluate('currentFullText()').includes('...如你所愿'));
+  assert.equal(resumed.ids.get('phenomenonStage').dataset.mode, 'history');
+  assert.ok(resumed.ids.get('historyAnchors').children.every(button => button.disabled));
+  finishDialog(resumed);
+  assert.equal(resumed.ids.get('historyAnchors').children[0].disabled, false);
+  resumed.ids.get('historyAnchors').children[0].click(); resumed.tick();
+  assert.ok(resumed.evaluate('currentFullText()').includes('真的定义吗'));
+  assert.equal(resumed.evaluate('Finale.step()'), 1);
+});
+
+test("unfinished premature-help saves replay the contest without erasing rain memory or completed endings", () => {
+  const game = harness(finaleSave({finaleStarted:true,rainMemory:true}, {finaleNode:0,finaleStep:1,finaleFrom:6}, ['手心里的雨水']));
+  game.ids.get('startButton').click();
+  assert.equal(game.evaluate('Finale.step()'), 0);
+  assert.equal(game.evaluate('G.counters.finaleFlow'), 2);
+  assert.equal(game.evaluate('dialogLines.length'), 10);
+  assert.equal(game.evaluate('!!F.finaleSummoned'), false);
+  assert.equal(game.evaluate('F.rainMemory'), true);
+  assert.ok(game.value('G.memories').includes('手心里的雨水'));
+  assert.equal(game.ids.get('historyAnchors').hidden, true);
+  reachFinaleRequest(game);
+  assert.equal(game.value("G.memories").includes("跨时序书写战"), false);
+  const resumed = harness(game.snapshot()); resumed.ids.get('startButton').click();
+  assert.equal(resumed.evaluate('Finale.node()'), 'meta_state_3');
+  assert.equal(resumed.evaluate('Finale.step()'), 0);
+  assert.equal(resumed.ids.get('phenomenonStage').dataset.mode, 'appearance');
+  finishDialog(resumed);
+  assert.ok(resumed.evaluate('currentFullText()').includes('如果真的想帮上忙的话'));
+  assert.equal(resumed.ids.get('historyAnchors').hidden, true);
+});
+
 test("the first two retroactive actions reveal their original anchors while preserving earlier wording", () => {
   const game = harness(finaleSave()); game.ids.get("startButton").click();
-  assert.equal(game.evaluate("dialogLines.length"), 6);
+  assert.equal(game.evaluate("dialogLines.length"), 10);
   assert.equal(game.ids.get("dialog").dataset.presentation, "finale");
   assert.equal(game.document.body.classList.contains("finale-active"), true);
   const start = game.value("[G.px, G.py]");
   game.evaluate("keys.add('d'); movePlayer(1)");
   assert.deepEqual(game.value("[G.px, G.py]"), start);
-  finishDialog(game); game.ids.get("dialogChoices").children[0].click(); game.tick();
+  summonFinaleHelp(game); game.ids.get("dialogChoices").children[0].click(); game.tick();
   assert.equal(game.evaluate("Finale.step()"), 1);
   assert.ok(game.evaluate("dialogLines[0].t").includes("真的定义吗"));
   assert.ok(game.ids.get("finaleLedger").textContent.includes("当且仅当"));
@@ -1227,12 +1304,12 @@ test("the first two retroactive actions reveal their original anchors while pres
 
 test("story revisions show the full struck wording and its replacement on the text stage", () => {
   const game = harness(finaleSave()); game.ids.get("startButton").click(); finishDialog(game);
-  for (const label of ["定义", "幻海消息", "故事表面", "下一种写法"]) choose(game, label);
+  for (const label of ["故事表面", "下一种写法"]) choose(game, label);
   assert.equal(game.evaluate("Finale.node()"), "meta_state_2");
   assert.equal(game.ids.get("dialogText").querySelector("del").textContent, game.evaluate("FinaleScenes.meta_state_2.text[0].original"));
   assert.equal(game.ids.get("dialogText").querySelector("ins").textContent, game.evaluate("FinaleScenes.meta_state_2.text[0].replacement"));
   assert.equal(game.ids.get("dialog").dataset.voice, "rewrite");
-  choose(game, "第三种写法"); choose(game, "朴素分层");
+  choose(game, "第三种写法"); choose(game, "呼唤无意识"); choose(game, "定义"); choose(game, "幻海消息"); choose(game, "朴素分层");
   assert.equal(game.evaluate("Finale.step()"), 3);
   assert.ok(game.evaluate("dialogLines[0].t").includes("我并不建议在这样朴素的分层中"));
   assert.equal(game.evaluate("Finale.compose('meta_state_3').length"), 12);
@@ -1241,7 +1318,7 @@ test("story revisions show the full struck wording and its replacement on the te
 test("chapter rewriting restores the original first-page insertion and awards the crystal fragment", () => {
   const game = harness(finaleSave({ rainMemory: true })); game.ids.get("startButton").click();
   finishDialog(game);
-  for (const label of ["定义", "幻海消息", "故事表面", "下一种写法", "第三种写法", "朴素分层", "观察者", "前传人物的终止操作"]) choose(game, label);
+  for (const label of ["故事表面", "下一种写法", "第三种写法", "呼唤无意识", "定义", "幻海消息", "朴素分层", "观察者", "前传人物的终止操作"]) choose(game, label);
   assert.equal(game.evaluate("Finale.node()"), "meta_prequel");
   assert.equal(game.evaluate("dialogLines.length"), 18);
   const prequel = game.value("FinaleScenes.meta_prequel.text.map(line => Finale.text(line))");
@@ -1278,7 +1355,7 @@ test("the rain-memory answer is absent without its original prerequisite and can
 });
 
 test("refresh commits an insertion before its next page and restarting cancels queued finale work", () => {
-  const game = harness(finaleSave()); game.ids.get("startButton").click(); finishDialog(game);
+  const game = harness(finaleSave()); game.ids.get("startButton").click(); summonFinaleHelp(game);
   game.ids.get("dialogChoices").children[0].click();
   const saved = JSON.parse(game.storage.get(SAVE));
   assert.equal(saved.counters.finaleStep, 1);
@@ -1434,8 +1511,10 @@ test("body ownership requires a matching act, wrong targets neither advance nor 
 test("history anchors unlock only the original offered retroaction and commit its checkpoint", () => {
   const game = harness(finaleSave({rainMemory:true})); game.ids.get('startButton').click();
   assert.equal(game.ids.get('phenomenonStage').hidden, false);
-  assert.ok(game.ids.get('historyAnchors').children.every(button => button.disabled));
-  finishDialog(game);
+  assert.equal(game.ids.get('historyAnchors').hidden, true);
+  assert.equal(game.ids.get('historyAnchors').children.length, 0);
+  summonFinaleHelp(game);
+  assert.equal(game.ids.get('historyAnchors').hidden, false);
   const anchor = game.ids.get('historyAnchors').children[0];
   assert.equal(anchor.disabled, false);
   game.ids.get('settingsButton').click(); anchor.click();

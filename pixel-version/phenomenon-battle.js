@@ -105,6 +105,8 @@ const PhenomenonBattle = {
   // stays disabled until the full passage has been read and that choice exists.
   history() {
     this.dom.historyAnchors.replaceChildren();
+    this.dom.historyAnchors.hidden = !Finale.intervening();
+    if (!Finale.intervening()) { this.renderHistory(); return; }
     const labels = ["定义之前", "幻海的消息", "分层之前"];
     labels.forEach((label, index) => {
       const step = index + 1;
@@ -135,6 +137,33 @@ const PhenomenonBattle = {
       PixelArt.polygon(c, [[256, 29], [x - 4, y - 3], [x, y - 5], [x + 4, y + 3]], i % 2 ? "#576475" : "#7a8192");
     }
     c.fillStyle = "#d8d7c9"; c.fillRect(254, 27, 4, 4);
+    if (!Finale.intervening()) {
+      // The present is contested by Zhou and the outsider. No past-directed
+      // stroke or third participant appears until Zhou asks for help.
+      const node = Finale.node(), asking = Finale.requesting();
+      this.dom.phenomenonStage.dataset.mode = asking ? "summons" : "appearance";
+      drawPerson(c, 236, 43, { coat: "#36465b", hair: "#222531", skin: "#d9b89b", dir: 2 });
+      c.fillStyle = "#b36c79"; c.fillRect(285, 26, 8, 23); c.fillRect(282, 30, 14, 3);
+      c.fillStyle = "#151421"; c.fillRect(286, 33, 4, 8);
+      const outsiderWrites = node === "meta_state_2";
+      c.fillStyle = outsiderWrites ? "#b36c79" : "#9babbd";
+      c.fillRect(28, 28, 179, 2); c.fillRect(48, 34, 147, 1);
+      c.fillStyle = outsiderWrites ? "#9babbd" : "#b36c79";
+      c.fillRect(34, 31, 158, 1);
+      c.font = "9px sans-serif";
+      c.fillStyle = "#d8d7c9";
+      c.fillText(node === "meta_state_1" ? "侵略者被赶出" : node === "meta_state_2" ? "无能为力的谎言" : node === "meta_state_3" ? "一切才刚刚开始" : "显现的场域", 30, 22);
+      if (asking) {
+        c.fillStyle = "#a3afa7";
+        for (let y = 5; y < 25; y += 4) c.fillRect(239, y, 1, 2);
+        c.fillText("呼唤", 212, 12);
+      }
+      c.fillStyle = "#685037";
+      for (let x = 0; x < 320; x += 4) c.fillRect(x, 59 + x % 3, 4, 4);
+      this.dom.phenomenonStage.setAttribute("aria-label", asking ? "周防正在呼唤无意识，一起阻止改写；尚未回写过去。" : "表象争夺：周防与外来者在显现的场域争夺主导权。");
+      return;
+    }
+    this.dom.phenomenonStage.dataset.mode = "history";
     const rewritten = F.finaleRewritten, step = Finale.step();
     const overwrite = ["meta_state_2", "meta_state_3"].includes(Finale.node());
     for (let i = 0; i < 4; i++) {
@@ -165,12 +194,14 @@ const PhenomenonBattle = {
       c.fillStyle = "#a66d79"; c.fillRect(186, 26, 32, 1); c.fillRect(197, 20, 21, 1);
       c.fillStyle = "#647083"; c.fillRect(191, 31, 19, 1);
     }
+    // Assistance is now present; its first strokes still wait for the chosen anchors.
+    c.fillStyle = "#82bfae"; c.fillRect(207, 8, 5, 6); c.fillRect(204, 15, 11, 2); c.fillRect(208, 18, 3, 6);
     // The sea remains a threat until the actual offered line says it is avoided.
     const history = Finale.raw.slice(0, Finale.offset + dialogIndex + 1).map(raw => Finale.text(raw)).join("\n");
     const ward = history.split("\n").some(text => text.includes("黄昏") && (text.includes("避开") || text.includes("避过") || text.includes("避免"))) || rewritten;
     c.fillStyle = ward ? "#35594f" : "#685037";
     for (let x = 0; x < 320; x += 4) c.fillRect(x, 59 + x % 3, 4, 4);
-    this.dom.phenomenonStage.setAttribute("aria-label", "过程争夺：" + (step ? "无意识从现在回到过去，已回写" + step + "处。" : "过去的三处锚点尚未回写。") + (overwrite ? "刚发生的过程正在被覆盖。" : "") + (rewritten ? "整章已被重写。" : ""));
+    this.dom.phenomenonStage.setAttribute("aria-label", "过程争夺：" + (step ? "无意识从现在回到过去，已回写" + step + "处。" : "无意识回应了周防的呼唤，过去的三处锚点尚未回写。") + (overwrite ? "刚发生的过程正在被覆盖。" : "") + (rewritten ? "整章已被重写。" : ""));
   },
 
   render(now, dt, cam) {
