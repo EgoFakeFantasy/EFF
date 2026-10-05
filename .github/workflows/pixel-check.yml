@@ -1,0 +1,35 @@
+name: Check pixel game
+
+on:
+  pull_request:
+    paths:
+      - 'pixel-version/**'
+      - 'tests/**'
+      - '.github/workflows/pixel-check.yml'
+  push:
+    paths:
+      - 'pixel-version/**'
+      - 'tests/**'
+      - '.github/workflows/pixel-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --check pixel-version/game.js
+      - run: node --check pixel-version/enhancements.js
+      - run: node --check pixel-version/storm-flight.js
+      - run: node --check pixel-version/story-staging.js
+      - run: node --check pixel-version/finale-script.js
+      - run: node --check pixel-version/finale.js
+      - run: node --check pixel-version/combat-script.js
+      - run: node --check pixel-version/pixel-art.js
+      - run: node --check pixel-version/phenomenon-battle.js
+      - run: node tests/pixel-regression.cjs
