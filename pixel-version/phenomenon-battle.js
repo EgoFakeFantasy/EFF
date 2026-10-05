@@ -130,21 +130,15 @@ const PhenomenonBattle = {
 
   renderHistory() {
     const c = this.stage;
-    c.fillStyle = "#0b111b"; c.fillRect(0, 0, 320, 64);
-    // Crystal petals are the arena of manifestation, not higher external tiers.
-    for (let i = 0; i < 12; i++) {
-      const angle = i * Math.PI / 6, x = 256 + Math.cos(angle) * 24, y = 29 + Math.sin(angle) * 19;
-      PixelArt.polygon(c, [[256, 29], [x - 4, y - 3], [x, y - 5], [x + 4, y + 3]], i % 2 ? "#576475" : "#7a8192");
-    }
-    c.fillStyle = "#d8d7c9"; c.fillRect(254, 27, 4, 4);
+    PixelArt.languageGround(c);
+    PixelArt.crystal(c, 256, 29, 24);
     if (!Finale.intervening()) {
       // The present is contested by Zhou and the outsider. No past-directed
       // stroke or third participant appears until Zhou asks for help.
       const node = Finale.node(), asking = Finale.requesting();
       this.dom.phenomenonStage.dataset.mode = asking ? "summons" : "appearance";
       drawPerson(c, 236, 43, { coat: "#36465b", hair: "#222531", skin: "#d9b89b", dir: 2 });
-      c.fillStyle = "#b36c79"; c.fillRect(285, 26, 8, 23); c.fillRect(282, 30, 14, 3);
-      c.fillStyle = "#151421"; c.fillRect(286, 33, 4, 8);
+      PixelArt.writingPresence(c, 281, 24);
       const outsiderWrites = node === "meta_state_2";
       c.fillStyle = outsiderWrites ? "#b36c79" : "#9babbd";
       c.fillRect(28, 28, 179, 2); c.fillRect(48, 34, 147, 1);
@@ -188,14 +182,13 @@ const PhenomenonBattle = {
     // Two opposing strokes work on the same phenomenon. Colors exchange in
     // the earlier courtyard battle; here each voice keeps its writing motif.
     drawPerson(c, 236, 43, { coat: "#36465b", hair: "#222531", skin: "#d9b89b", dir: 2 });
-    c.fillStyle = "#b36c79"; c.fillRect(285, 26, 8, 23); c.fillRect(282, 30, 14, 3); c.fillRect(286, 29, 5, 13);
-    c.fillStyle = "#151421"; c.fillRect(286, 33, 4, 8);
+    PixelArt.writingPresence(c, 281, 24);
     if (overwrite && !rewritten) {
       c.fillStyle = "#a66d79"; c.fillRect(186, 26, 32, 1); c.fillRect(197, 20, 21, 1);
       c.fillStyle = "#647083"; c.fillRect(191, 31, 19, 1);
     }
     // Assistance is now present; its first strokes still wait for the chosen anchors.
-    c.fillStyle = "#82bfae"; c.fillRect(207, 8, 5, 6); c.fillRect(204, 15, 11, 2); c.fillRect(208, 18, 3, 6);
+    PixelArt.writingPresence(c, 201, 8, true);
     // The sea remains a threat until the actual offered line says it is avoided.
     const history = Finale.raw.slice(0, Finale.offset + dialogIndex + 1).map(raw => Finale.text(raw)).join("\n");
     const ward = history.split("\n").some(text => text.includes("黄昏") && (text.includes("避开") || text.includes("避过") || text.includes("避免"))) || rewritten;

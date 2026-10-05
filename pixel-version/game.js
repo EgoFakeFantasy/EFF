@@ -1385,9 +1385,9 @@ const tileCache = document.createElement("canvas");
 const tileCtx = tileCache.getContext("2d");
 
 function hash(x, y, i) {
-  let h = (x * 374761393 + y * 668265263 + i * 974634211) | 0;
-  h = (h ^ (h >> 13)) * 1274126177;
-  return ((h ^ (h >> 16)) >>> 0) / 4294967295;
+  let h = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263) + Math.imul(i | 0, 974634211)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
 }
 
 function shade(hex, f) {
@@ -1405,12 +1405,7 @@ function drawTile(c, ch, x, y, map, t) {
   // 基底地板
   c.fillStyle = map === MAPS.blood && y > 10 ? "#30231d" : P.floor;
   c.fillRect(px, py, TILE, TILE);
-  // 地板噪点
-  for (let i = 0; i < 3; i++) {
-    const h = hash(x, y, i);
-    c.fillStyle = shade(P.floor, h > 0.5 ? 1.25 : 0.75);
-    c.fillRect(px + Math.floor(h * 13), py + Math.floor(hash(x, y, i + 9) * 13), 2, 2);
-  }
+  PixelArt.floor(c, ch, x, y, map);
 
   switch (ch) {
     case "#":
@@ -1581,7 +1576,7 @@ function drawTile(c, ch, x, y, map, t) {
       c.fillRect(px + 5, py + 3, TILE - 10, TILE - 6);
       break;
   }
-  PixelArt.tile(c, ch, x, y, map);
+  PixelArt.tile(c, ch, x, y, map, t);
 }
 
 function buildTileCache() {

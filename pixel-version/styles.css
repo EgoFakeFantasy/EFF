@@ -573,3 +573,29 @@ input { accent-color: var(--accent); }
 .dialog[data-presentation='finale'][data-voice='rewrite'] .dialog-text del { flex: 0 1 auto; max-height: 43%; min-height: 0; overflow-y: auto; font-size: .8em; line-height: 1.65; margin-bottom: 0; padding-right: 5px; }
 .dialog[data-presentation='finale'][data-voice='rewrite'] .dialog-text ins { flex: 1 1 auto; min-height: 2em; overflow-y: auto; font-size: 1em; line-height: 1.7; padding-right: 5px; }
 .dialog-text del:focus-visible, .dialog-text ins:focus-visible { outline: 1px solid #789587; outline-offset: 2px; }
+
+/* Cut-metal frames and restrained ink colors belong to the same pixel palette. */
+.hud { background: linear-gradient(180deg, #090f19ed, #0c1424c9); border-bottom: 1px solid #48526766; color: #d1d7d8; }
+.dialog:not([data-presentation]) { background: linear-gradient(110deg, #101824f7, #111420f5); border: 1px solid #596272; border-top: 2px solid #b9a276; box-shadow: 0 8px 24px #0008, inset 0 0 0 3px #080f1980; }
+.dialog-speaker { letter-spacing: .14em; color: #dac49b; text-shadow: 0 1px #000; }
+.portrait-frame { position: relative; flex-basis: 84px; padding: 4px; border-color: #536278; background: #080e18; box-shadow: 3px 3px 0 #03060c, inset 0 0 0 1px #1f2d40; }
+.portrait-frame::after { content: ''; position: absolute; inset: -2px; border-top: 1px solid #a5b2be; border-bottom: 1px solid #4d5f76; pointer-events: none; }
+.portrait-frame[data-role='intruder'] { background: #201320; border-color: #a6677b; }
+.portrait-frame[data-role='intruder']::after { border-top-color: #d19ba7; border-bottom-color: #754657; }
+.portrait-frame[data-role='shadow']::after { border-top-color: #a1bdb2; border-bottom-color: #4c756d; }
+.portrait-frame[data-role='unknown'] { border-color: #5b6b84; }
+.dialog[data-presentation='finale'] { background: radial-gradient(ellipse at 85% 10%, #29304930, transparent 55%), linear-gradient(105deg, #070d17fa, #111426f5); box-shadow: inset 0 0 0 1px #44516666, inset 0 0 80px #0007; }
+.finale-heading { padding-left: 10px; border-left: 2px solid #9b8dba; color: #e1ded9; }
+.finale-phase { color: #9bacc1; }
+#phenomenonStage { border-color: #46536d; box-shadow: inset 0 0 0 2px #0a101b, 0 3px 0 #030810; }
+.history-anchors button { background: #111d2b; box-shadow: inset 0 1px #53607833; }
+.history-anchors button:not(:disabled) { background: linear-gradient(135deg, #223c39, #152b2a); }
+.dialog[data-presentation='finale'] .dialog-text del { padding-left: 9px; border-left: 2px solid #845866; background: #39213133; }
+.dialog[data-presentation='finale'] .dialog-text ins { padding-left: 9px; border-left: 2px solid #84a79a; background: #243b3430; text-decoration: none; }
+.dialog-choices button { box-shadow: inset 0 1px #8e9caf18; }
+.dialog-choices button:focus-visible { outline-offset: -3px; }
+@media (max-width: 520px) {
+  .portrait-frame { flex-basis: 50px; padding: 2px; }
+  .dialog[data-presentation='finale'] .portrait-frame { flex-basis: 52px; }
+  .finale-heading { padding-left: 8px; }
+}
