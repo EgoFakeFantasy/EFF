@@ -13,7 +13,7 @@ const PixelArt = {
   profile(line) {
     const speaker = line?.s;
     if (!speaker || ["故事状态", "旁白"].includes(speaker)) return null;
-    const role = speaker === "周防" ? "zhou" : speaker === "父亲" ? "father" : speaker === "母亲" ? "mother" : speaker === "妹妹" ? "sister" : ["压抑", "无意识", "旅伴", "浑黑的身影"].includes(speaker) ? "shadow" : ["外来者", "背景"].includes(speaker) ? "intruder" : null;
+    const role = speaker === "？？？" ? "unknown" : speaker === "周防" ? "zhou" : speaker === "父亲" ? "father" : speaker === "母亲" ? "mother" : speaker === "妹妹" ? "sister" : ["压抑", "无意识", "旅伴", "浑黑的身影"].includes(speaker) ? "shadow" : ["外来者", "背景"].includes(speaker) ? "intruder" : null;
     if (!role) return null;
     return { role, blood: role === "zhou" && G.area === "blood", young: ["house_empty", "house_family", "blood"].includes(G.area), tense: G.area === "blood" || !!line.rewrite, shouting: /拽入深渊|绝不可能/.test(line.t || ""), speaker };
   },
@@ -24,7 +24,7 @@ const PixelArt = {
     ui.dialog.classList.toggle("with-portrait", !this.frame.hidden);
     if (this.frame.hidden) return;
     this.frame.dataset.role = profile.role;
-    this.canvas.setAttribute("aria-label", profile.role === "shadow" || profile.role === "intruder" ? profile.speaker + "的象征像" : profile.speaker + (profile.blood ? "，脸颊与衣服沾有血迹" : "的头像"));
+    this.canvas.setAttribute("aria-label", profile.role === "unknown" ? "身份不明的说话者" : profile.role === "shadow" || profile.role === "intruder" ? profile.speaker + "的象征像" : profile.speaker + (profile.blood ? "，脸颊与衣服沾有血迹" : "的头像"));
     this.portrait(this.context, profile);
   },
 
@@ -49,6 +49,14 @@ const PixelArt = {
     r(0, 0, 64, 80, "#10151e");
     for (let y = 2; y < 80; y += 3) for (let x = 2; x < 64; x += 3) if ((x + y) % 4) r(x, y, 1, 1, p.blood ? "#372029" : "#1c2733");
     r(4, 3, 1, 71, "#4e5157"); r(5, 3, 51, 1, "#4e5157"); r(58, 8, 1, 67, "#272e3b");
+    if (p.role === "unknown") {
+      // An anonymous glyph avoids assigning this observer an inner voice's face.
+      const glyph = ["01110", "11011", "00011", "00110", "00100", "00000", "00100"];
+      for (let y = 0; y < glyph.length; y++) for (let x = 0; x < glyph[y].length; x++) {
+        if (glyph[y][x] === "1") r(22 + x * 4, 24 + y * 4, 4, 4, "#a6b5c4");
+      }
+      return;
+    }
     if (["shadow", "intruder"].includes(p.role)) {
       this.polygon(c, [[9, 80], [12, 54], [19, 26], [25, 12], [42, 9], [50, 26], [53, 53], [60, 80]], "#171923");
       this.polygon(c, [[17, 60], [22, 25], [30, 17], [42, 21], [47, 54], [40, 68]], "#353540");

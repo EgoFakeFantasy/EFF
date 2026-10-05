@@ -833,7 +833,8 @@ const SCRIPTS = {
     then() { F.rainMemory = true; addMemory('手心里的雨水'); },
   },
   rainDeath: {
-    lines: combatLines('rain_death', {0:'周防',1:'压抑',3:'压抑',5:'压抑',6:'压抑',7:'压抑'}),
+    // The mirror/fairy aside belongs to a finale observer; keep their identity unrevealed.
+    lines: combatLines('rain_death', {0:'周防',1:'压抑',3:'压抑',4:'？？？',5:'？？？',6:'？？？',7:'？？？'}),
     choices: [{ label: '询问那些入侵者', run: () => playScript('rainEnemy') }],
     then() { addMemory('黄昏的海洋'); },
   },

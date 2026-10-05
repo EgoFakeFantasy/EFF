@@ -1371,6 +1371,29 @@ test("courtyard resistance, collision and rain preserve every canonical sentence
   assert.equal(game.evaluate('SCRIPTS.rainEnemy.lines.at(-1).stage.battle.phase'), 'rain-rise');
 });
 
+test("rain tower fairy aside belongs to an anonymous observer, then returns to the inner voice", () => {
+  const game = harness();
+  game.evaluate("ui.start.hidden = true; G.area = 'rain'; playScript('rainDeath')");
+  assert.deepEqual(game.value("SCRIPTS.rainDeath.lines.map(line => line.s || '')"), ['周防','压抑','','压抑','？？？','？？？','？？？','？？？']);
+  advanceToText(game, '水潭吗');
+  for (const fragment of ['水潭吗', '可爱的小妖精', '小妖精总是会离开', '请继续观赏吧']) {
+    assert.ok(game.evaluate('currentFullText()').includes(fragment));
+    assert.equal(game.ids.get('dialogSpeaker').textContent, '？？？');
+    assert.equal(game.ids.get('portraitFrame').hidden, false);
+    assert.equal(game.ids.get('portraitFrame').dataset.role, 'unknown');
+    assert.equal(game.ids.get('speakerPortrait').getAttribute('aria-label'), '身份不明的说话者');
+    nextLine(game);
+  }
+  const button = game.ids.get('dialogChoices').children.find(item => item.textContent.includes('询问那些入侵者'));
+  assert.ok(button);
+  button.click();
+  assert.equal(game.ids.get('dialogSpeaker').textContent, '周防');
+  assert.equal(game.ids.get('portraitFrame').dataset.role, 'zhou');
+  nextLine(game);
+  assert.equal(game.ids.get('dialogSpeaker').textContent, '压抑');
+  assert.equal(game.ids.get('portraitFrame').dataset.role, 'shadow');
+});
+
 test("body ownership requires a matching act, wrong targets neither advance nor invent a bad ending", () => {
   const game = harness({ [SAVE]: JSON.stringify({ area:'blood',px:211,py:130,flags:{sister:true,parents:true},counters:{},memories:[] }) });
   game.ids.get('startButton').click(); finishDialog(game);
