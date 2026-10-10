@@ -2274,6 +2274,50 @@ test("the mother walks while she carries the dish and stops at the table", () =>
   assert.equal(game.value("StoryStaging.npc(MAPS.house_family.npcs.find(n => n.id === 'mother'))").walk || 0, 0);
 });
 
+/* ---------- Procedural music and effects ---------- */
+
+test("each area plays its own theme only while the soundscape and music setting are on", () => {
+  const game = harness();
+  game.ids.get("startButton").click(); finishDialog(game);
+  game.frame(16);
+  assert.equal(game.evaluate("Music.notes"), 0, "music stays silent until the soundscape is turned on");
+  game.ids.get("audioButton").click();
+  assert.equal(game.evaluate("Music.theme"), "mirror");
+  game.evaluate("AudioEngine.ctx.currentTime = 1"); game.frame(16);
+  const first = game.evaluate("Music.notes");
+  assert.ok(first > 0, "the mirror theme schedules notes");
+  for (let i = 0; i < 5; i++) game.frame(16);
+  assert.equal(game.evaluate("Music.notes"), first, "scheduling only looks a short time ahead");
+  const step = game.evaluate("Music.step");
+  game.evaluate("AudioEngine.ctx.currentTime = 30"); game.frame(16);
+  assert.ok(game.evaluate("Music.step") > step, "later time schedules later steps (some of them rests)");
+  for (const [area, theme] of [["garden", "void"], ["house_family", "home"], ["blood", "horror"], ["rain", "rain"]]) {
+    game.evaluate(`AudioEngine.play(MAPS.${area}.sound)`);
+    assert.equal(game.evaluate("Music.theme"), theme);
+  }
+  game.evaluate("Expedition.prefs.music = false; Music.notes = 0; AudioEngine.ctx.currentTime = 60"); game.frame(16);
+  assert.equal(game.evaluate("Music.notes"), 0, "the music setting silences themes");
+  const saved = harness({ "wuzhong-returner-pixel-settings-v1": JSON.stringify({ music: false }) });
+  assert.equal(saved.ids.get("musicControl").checked, false);
+  game.evaluate("Expedition.prefs.music = true; showEnding('true')");
+  assert.equal(game.evaluate("Music.theme"), "true");
+  game.evaluate("showEnding('bad_accept')");
+  assert.equal(game.evaluate("Music.theme"), "bad");
+});
+
+test("turning points and fragments play their effects only with the soundscape on", () => {
+  const game = harness();
+  game.evaluate("ui.start.hidden = true; G.area = 'house_empty'; StoryStaging.reset(); buildTileCache(); playScript('bed')");
+  assert.deepEqual(game.value("Sfx.played"), []);
+  game.evaluate("closeDialog()");
+  game.ids.get("audioButton").click();
+  game.evaluate("Expedition.prefs.motion = false; playScript('bed'); closeDialog(); G.area = 'garden'; F = { gardenWoke: true }; StoryStaging.reset(); buildTileCache(); playScript('coffinSleep'); closeDialog()");
+  game.evaluate("G.area = 'mirror'; F = { m1: true, m2: true, m3: true }; buildTileCache(); gotoArea('storm')");
+  game.tick(1600);
+  game.evaluate("closeDialog(); G.area = 'garden'; buildTileCache(); G.px = 1 * TILE + 3; G.py = 20 * TILE + 2; checkExitsAndShards()");
+  assert.deepEqual(game.value("Sfx.played"), ["wake", "lid", "shatter", "shard"]);
+});
+
 let failed = 0;
 for (const [name, callback] of tests) {
   try { callback(); console.log(`PASS ${name}`); }

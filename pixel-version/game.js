@@ -117,6 +117,7 @@ const AudioEngine = {
 
   play(kind) {
     if (!this.enabled || !this.ensure()) return;
+    Music.setTheme(kind);
     if (!document.hidden && this.ctx.state === "suspended") this.ctx.resume().catch(() => {});
     if (this.current && this.current.kind === kind) return;
     this.stop();
@@ -166,6 +167,7 @@ const AudioEngine = {
     this.enabled = !this.enabled;
     ui.audioButton.textContent = this.enabled ? "音景：开" : "音景：关";
     if (this.enabled) this.play(endingId ? SOUND_FOR_ENDING[ENDINGS[endingId].stay ? (endingId === "true" ? "true" : "normal") : "bad"] : MAPS[G.area].sound);
+    if (this.enabled && endingId) Music.setTheme(endingId === "true" ? "true" : ENDINGS[endingId].stay ? "meta" : "bad");
     else this.stop();
   },
 };
@@ -1373,6 +1375,7 @@ function showEnding(id) {
   Finale.dom.endingGallery.hidden = !e.stay;
   document.title = id === "true" ? "无垠之萍 · 箱庭版" : "无中归来者 · 箱庭版";
   AudioEngine.play(SOUND_FOR_ENDING[e.stay ? (id === "true" ? "true" : "normal") : "bad"]);
+  Music.setTheme(id === "true" ? "true" : e.stay ? "meta" : "bad");
   saveRun();
 }
 
@@ -1404,6 +1407,7 @@ function resetRun() {
   G.seen = [];
   PlayAids.reset();
   Cutscenes.reset();
+  Music.reset();
   G.area = "mirror";
   const sp = MAPS.mirror.spawn;
   G.px = sp.x * TILE + 3;
@@ -2156,7 +2160,7 @@ function checkExitsAndShards() {
     META.shards.push(map.shard.name);
     saveMeta();
     notify(`拾取记忆碎片：${map.shard.name}（跨周目保留）`);
-    Expedition.chime(660, 0.2);
+    Sfx.play("shard");
     if (!ui.codex.hidden) renderCodex();
     updateHud();
   }
@@ -2275,7 +2279,7 @@ function updateStorm(dt) {
     META.shards.push(MAPS.storm.shard.name);
     saveMeta();
     notify("拾取记忆碎片：雨之碎片（跨周目保留）");
-    Expedition.chime(660, 0.2);
+    Sfx.play("shard");
     updateHud();
   }
 }
@@ -2631,6 +2635,7 @@ function renderFrame(now) {
 function render(now) {
   renderFrame(now);
   Cutscenes.overlay(ctx);
+  Music.update();
   requestAnimationFrame(render);
 }
 

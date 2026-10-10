@@ -26,8 +26,8 @@ const Cutscenes = {
 
   onLine(line) {
     const cue = line?.stage || {};
-    if (cue.pose === "wake" && !this.still()) this.wake = { t: 0 };
-    if (cue.pose === "sleep" && cue.coffin === true) this.lid = { t: 0 };
+    if (cue.pose === "wake" && !this.still()) { this.wake = { t: 0 }; Sfx.play("wake"); }
+    if (cue.pose === "sleep" && cue.coffin === true) { this.lid = { t: 0 }; Sfx.play("lid"); }
   },
 
   update(dt) {
@@ -70,6 +70,7 @@ const Cutscenes = {
     for (const e of edges) e.dist = Math.hypot((e[0][0] + e[1][0]) / 2 - ox, (e[0][1] + e[1][1]) / 2 - oy);
     const maxDelay = Math.max(...shards.map(s => s.delay));
     this.shatter = { t: 0, snapshot, shards, edges, crack: 0.5, end: 0.5 + maxDelay + 0.75 };
+    Sfx.play("shatter");
     return true;
   },
 
@@ -189,7 +190,10 @@ const Cutscenes = {
   },
 
   clashClock(progress) {
-    if (this.clash.progress !== progress) this.clash = { progress, t: 0, cracks: null };
+    if (this.clash.progress !== progress) {
+      this.clash = { progress, t: 0, cracks: null };
+      if (progress === 0) Sfx.play("crack"); else if (progress === 2) Sfx.play("crumble");
+    }
     return this.still() ? 4 : this.clash.t;
   },
 
