@@ -2,7 +2,7 @@
 
 // Exploration and presentation stay separate from the story and ending rules.
 const Expedition = {
-  prefs: { speed: 0.016, volume: 0.55, hints: true, motion: false, lighting: true },
+  prefs: { speed: 0.016, volume: 0.55, hints: true, motion: false, lighting: true, music: true },
   journal: [],
   chapterTime: 0,
   effect: null,
@@ -28,7 +28,7 @@ const Expedition = {
   init() {
     const byId = (id) => document.getElementById(id);
     this.dom = {};
-    for (const id of ["objectiveText", "chapterLabel", "chapterCard", "chapterNumber", "chapterQuote", "interactButton", "mapButton", "mapPanel", "mapTitle", "mapStatus", "areaMap", "statusMessage", "journalDialog", "journalEntries", "settingsDialog", "textSpeed", "volumeControl", "hintsControl", "motionControl", "lightingControl", "startStatus", "touchInteract"]) this.dom[id] = byId(id);
+    for (const id of ["objectiveText", "chapterLabel", "chapterCard", "chapterNumber", "chapterQuote", "interactButton", "mapButton", "mapPanel", "mapTitle", "mapStatus", "areaMap", "statusMessage", "journalDialog", "journalEntries", "settingsDialog", "textSpeed", "volumeControl", "hintsControl", "motionControl", "lightingControl", "musicControl", "startStatus", "touchInteract"]) this.dom[id] = byId(id);
     this.prefs.motion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches || false;
     try {
       const saved = JSON.parse(localStorage.getItem(this.key) || "null");
@@ -38,6 +38,7 @@ const Expedition = {
         if (typeof saved.hints === "boolean") this.prefs.hints = saved.hints;
         if (typeof saved.motion === "boolean") this.prefs.motion = saved.motion;
         if (typeof saved.lighting === "boolean") this.prefs.lighting = saved.lighting;
+        if (typeof saved.music === "boolean") this.prefs.music = saved.music;
       }
       const entries = JSON.parse(localStorage.getItem(this.journalKey) || "[]");
       if (Array.isArray(entries)) this.journal = entries.filter(e => e && typeof e.text === "string" && typeof e.area === "string").slice(-300);
@@ -47,10 +48,11 @@ const Expedition = {
     this.dom.hintsControl.checked = this.prefs.hints;
     this.dom.motionControl.checked = this.prefs.motion;
     if (this.dom.lightingControl) this.dom.lightingControl.checked = this.prefs.lighting;
+    if (this.dom.musicControl) this.dom.musicControl.checked = this.prefs.music;
     this.applyPrefs();
-    for (const id of ["textSpeed", "volumeControl", "hintsControl", "motionControl", "lightingControl"]) {
+    for (const id of ["textSpeed", "volumeControl", "hintsControl", "motionControl", "lightingControl", "musicControl"]) {
       this.dom[id]?.addEventListener("change", () => {
-        this.prefs = { speed: Number(this.dom.textSpeed.value), volume: Number(this.dom.volumeControl.value), hints: this.dom.hintsControl.checked, motion: this.dom.motionControl.checked, lighting: this.dom.lightingControl ? this.dom.lightingControl.checked : true };
+        this.prefs = { speed: Number(this.dom.textSpeed.value), volume: Number(this.dom.volumeControl.value), hints: this.dom.hintsControl.checked, motion: this.dom.motionControl.checked, lighting: this.dom.lightingControl ? this.dom.lightingControl.checked : true, music: this.dom.musicControl ? this.dom.musicControl.checked : true };
         this.applyPrefs();
         try { localStorage.setItem(this.key, JSON.stringify(this.prefs)); } catch { /* Optional. */ }
       });

@@ -140,6 +140,7 @@
     <dialog id="settingsDialog" class="utility-dialog">
       <div class="utility-head"><h2>阅读与演出</h2><button type="button" data-close="settingsDialog">关闭</button></div>
       <label class="setting-row">文字速度<select id="textSpeed"><option value="0.032">缓慢</option><option value="0.016">标准</option><option value="0.008">快速</option><option value="0">立即显示</option></select></label>
+      <label class="setting-row">背景音乐（需开启音景）<input id="musicControl" type="checkbox" checked /></label>
       <label class="setting-row">音量<input id="volumeControl" type="range" min="0" max="1" step="0.05" value="0.55" /></label>
       <label class="setting-row">探索提示<input id="hintsControl" type="checkbox" checked /></label>
       <label class="setting-row">减少动态与闪光<input id="motionControl" type="checkbox" /></label>
@@ -165,6 +166,7 @@
     <script src="./atmosphere.js"></script>
     <script src="./play-aids.js"></script>
     <script src="./cutscenes.js"></script>
+    <script src="./music.js"></script>
     <script src="./phenomenon-battle.js"></script>
     <script src="./narrative-trials.js"></script>
     <script src="./narrative-agency.js"></script>
