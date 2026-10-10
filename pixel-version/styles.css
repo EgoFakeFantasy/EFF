@@ -675,3 +675,14 @@ input { accent-color: var(--accent); }
   .agency-quote { font-size: 14px; padding-left: 10px; }
   .agency-actions button { flex-basis: 100%; }
 }
+
+/* Reading aids sit between progress and hint; they never advance the line themselves. */
+.dialog-footer { align-items: center; }
+.dialog-tools { display: inline-flex; gap: 4px; margin-left: auto; }
+.dialog-tools button { padding: 2px 8px; min-height: 24px; font-size: 11px; line-height: 1.4; color: #a9a495; border-color: #3b4252; background: #0d131dcc; }
+.dialog-tools button.on { color: #f1dca8; border-color: #b9a276; background: #2b2619; box-shadow: inset 0 -2px #b9a276; }
+.dialog[data-presentation="takeover"] .dialog-tools button { color: #dbb6af; border-color: #6e3438; background: #14060ad9; }
+.dialog[data-presentation="takeover"] .dialog-tools button.on { color: #ffe1d9; border-color: #df8e83; background: #391018; }
+@media (max-width: 520px) {
+  .dialog-tools button { padding: 1px 6px; min-height: 22px; font-size: 10px; }
+}

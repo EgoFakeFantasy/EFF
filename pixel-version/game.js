@@ -964,6 +964,7 @@ let G = {
   walk: 0,
   memories: [],
   counters: {},
+  seen: [], // 已调查的可选观察点（只影响标记，不影响剧情）
 };
 let META = { shards: [], endings: [] };
 
@@ -1003,7 +1004,7 @@ function saveRun(trialCheckpoint = false) {
   const trialSafe = trialCheckpoint && (NarrativeTrials.canCheckpoint() || NarrativeAgency.canCheckpoint());
   if (!trialSafe && (dialogActive || dialogResolving || (transitionLock && !endingId))) return false;
   try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify({ area: G.area, px: G.px, py: G.py, flags: F, memories: G.memories, counters: G.counters, protagonistName: G.protagonistName, endingId, trials: NarrativeTrials.snapshot(), agency: NarrativeAgency.snapshot() }));
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ area: G.area, px: G.px, py: G.py, flags: F, memories: G.memories, counters: G.counters, protagonistName: G.protagonistName, seen: G.seen, endingId, trials: NarrativeTrials.snapshot(), agency: NarrativeAgency.snapshot() }));
     return true;
   } catch (e) { /* file:// 限制时忽略 */ }
   return false;
@@ -1063,6 +1064,7 @@ function loadAll() {
   G.area = "mirror";
   G.memories = [];
   G.counters = {};
+  G.seen = [];
   G.protagonistName = "周防";
   endingId = null;
   let loadedPosition = false;
@@ -1081,6 +1083,7 @@ function loadAll() {
         NarrativeTrials.restore(s.trials);
         G.memories = savedNames(s.memories);
         G.counters = savedCounters(s.counters);
+        G.seen = savedNames(s.seen, PlayAids.inspectIds());
         NarrativeAgency.restore(s.agency);
         if (typeof s.protagonistName === "string" && s.protagonistName.trim()) G.protagonistName = s.protagonistName.trim().slice(0, 40);
         if (typeof s.endingId === "string" && Object.prototype.hasOwnProperty.call(ENDINGS, s.endingId)) endingId = s.endingId;
@@ -1199,6 +1202,7 @@ function renderLine() {
     paintText(line.t, line.c);
   }
   updateDialogStatus();
+  PlayAids.onLine(line);
   if (typeof Expedition !== "undefined") Expedition.onLine(line, dialogIndex, dialogLines.length);
   Finale.onLine(line);
   PixelArt.onLine(line);
@@ -1396,6 +1400,8 @@ function resetRun() {
   F = {};
   G.memories = [];
   G.counters = {};
+  G.seen = [];
+  PlayAids.reset();
   G.area = "mirror";
   const sp = MAPS.mirror.spawn;
   G.px = sp.x * TILE + 3;
@@ -1578,12 +1584,7 @@ function drawTile(c, ch, x, y, map, t) {
         }
       }
       break;
-    case "b": // 血迹
-      c.fillStyle = "#4a1614";
-      c.fillRect(px + 2, py + 3, 8, 6);
-      c.fillRect(px + 7, py + 9, 6, 4);
-      c.fillStyle = "#641e18";
-      c.fillRect(px + 4, py + 5, 4, 3);
+    case "b": // 血迹（形状由 PixelArt.tile 按瓦片变化）
       break;
     case "O": { // 红月
       c.fillStyle = "#d04a3a";
@@ -1651,9 +1652,29 @@ function buildTileCache() {
 
 /* ============================== 角色绘制 ============================== */
 
+// Four-frame gait: contact, passing, contact (other foot), passing.
+function personGait(opt, pose) {
+  const walking = opt.walk > 0 && pose === "stand";
+  const phase = walking ? Math.floor(opt.walk * 9) % 4 : -1;
+  const side = opt.dir === 1 ? -1 : opt.dir === 2 ? 1 : 0;
+  const lift = phase === 0 ? [1, 0] : phase === 2 ? [0, 1] : [0, 0];
+  // Front view keeps a gap between the legs; profiles overlap them and spread on a stride.
+  let legX = [2, 7], far = -1;
+  if (side) {
+    far = side > 0 ? 0 : 1;
+    const near = 1 - far, front = side > 0 ? 7 : 2, back = side > 0 ? 2 : 7;
+    legX = [];
+    if (phase === 0) { legX[near] = front; legX[far] = back; }
+    else if (phase === 2) { legX[far] = front; legX[near] = back; }
+    else { legX[far] = side > 0 ? 4 : 5; legX[near] = side > 0 ? 5 : 4; }
+  }
+  return { phase, side, lift, legX, far, bob: phase % 2 === 1 ? -1 : 0 };
+}
+
 function drawPerson(c, x, y, opt = {}) {
   const pose = opt.pose || "stand";
-  const bob = opt.walk && pose === "stand" ? Math.sin(opt.walk * 8) : 0;
+  const gait = personGait(opt, pose);
+  const bob = gait.bob;
   const coat = opt.coat || "#3a4a6a";
   const hair = opt.hair || "#222";
   const skin = opt.skin || "#e8c8a8";
@@ -1668,9 +1689,12 @@ function drawPerson(c, x, y, opt = {}) {
     const steps = Math.max(1, Math.ceil(Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1))));
     for (let i = 0; i <= steps; i++) c.fillRect(Math.round(x1 + (x2 - x1) * i / steps), Math.round(y1 + (y2 - y1) * i / steps), 2, 2);
   };
-  // 影
-  c.fillStyle = "rgba(0,0,0,0.35)";
-  c.fillRect(px + 1, py + 13, 10, 3);
+  // 影：贴地的椭圆，不随步伐上下
+  c.fillStyle = "rgba(0,0,0,0.3)";
+  c.fillRect(px + 2, py + 13 - bob, 8, 1);
+  c.fillRect(px + 1, py + 14 - bob, 10, 1);
+  c.fillStyle = "rgba(0,0,0,0.2)";
+  c.fillRect(px + 3, py + 15 - bob, 6, 1);
   let leftHand = { x: px, y: py + 9 + lowered };
   let rightHand = { x: px + 10, y: py + 9 + lowered };
   if (pose === "bound") {
@@ -1697,16 +1721,20 @@ function drawPerson(c, x, y, opt = {}) {
     arm(px + 2, py + 7 + lowered, leftHand.x, leftHand.y);
     arm(px + 8, py + 7 + lowered, rightHand.x, rightHand.y);
   }
-  // 身体
+  // 身体：躯干与两条腿分开绘制，步行时抬脚、前后错开
+  const seated = pose === "kneel" || pose === "eat" || pose === "sit";
   c.fillStyle = coat;
-  c.fillRect(px + 2, py + 6 + lowered, 8, pose === "kneel" ? 5 : 8);
+  c.fillRect(px + 2, py + 6 + lowered, 8, 5);
   c.fillStyle = shade(coat, 0.7);
-  if (pose === "kneel" || pose === "eat" || pose === "sit") {
+  if (seated) {
     c.fillRect(px + 1, py + 13, 5, 2);
     c.fillRect(px + 7, py + 13, 5, 2);
   } else {
-    c.fillRect(px + 2, py + 11, 3, 3);
-    c.fillRect(px + 7, py + 11, 3, 3);
+    // The far leg of a profile is drawn first and darker.
+    for (const i of gait.far === 1 ? [1, 0] : [0, 1]) {
+      c.fillStyle = shade(coat, i === gait.far ? 0.5 : 0.7);
+      c.fillRect(px + gait.legX[i], py + 11, 3, 3 - gait.lift[i]);
+    }
   }
   // 头
   c.fillStyle = skin;
@@ -1754,7 +1782,7 @@ function drawPerson(c, x, y, opt = {}) {
     c.fillStyle = "#748547"; c.fillRect(px + 1, py + 7, 10, 2);
     c.fillStyle = "#b4b072"; c.fillRect(px + 3, py + 7, 2, 1); c.fillRect(px + 7, py + 8, 2, 1);
   }
-  PixelArt.person(c, px, py, lowered, opt, pose);
+  PixelArt.person(c, px, py, lowered, opt, pose, gait);
   if (opt.blood) {
     // Fixed splashes cover face, bare hands, shirt and both trouser legs.
     c.fillStyle = "#751d2a";
@@ -1802,6 +1830,8 @@ function spawnAmbient(dt) {
   if (particles.length > 90) return;
   if (kind === "rain" && Math.random() < dt * 40) {
     particles.push({ k: "rain", x: Math.random() * w, y: -6, vy: 130 + Math.random() * 60, vx: -18 });
+    // 落在地面的雨滴溅起水花
+    if (Math.random() < 0.45) particles.push({ k: "splash", x: Math.random() * w, y: TILE + Math.random() * (map.grid.length - 2) * TILE, life: 0.3, max: 0.3 });
   } else if (kind === "petals" && Math.random() < dt * 3) {
     particles.push({ k: "petal", x: Math.random() * w, y: -4, vy: 10 + Math.random() * 8, vx: 6 + Math.random() * 8, ph: Math.random() * 6 });
   } else if (kind === "petals" && Math.random() < dt * 2.5) {
@@ -1839,8 +1869,11 @@ function updateParticles(dt) {
   particles = particles.filter((p) => p.y < h + 8 && p.y > -24 && (p.life === undefined || p.life > 0));
 }
 
-function drawParticles(c, cam) {
+const EMISSIVE_PARTICLES = new Set(["ember", "spark", "firefly", "glyph"]);
+
+function drawParticles(c, cam, emissive = null) {
   for (const p of particles) {
+    if (emissive !== null && EMISSIVE_PARTICLES.has(p.k) !== emissive) continue;
     const x = Math.round(p.x - cam.x);
     const y = Math.round(p.y - cam.y);
     if (p.k === "rain") {
@@ -1870,6 +1903,19 @@ function drawParticles(c, cam) {
       c.fillStyle = `rgba(184,168,232,${(p.life / p.max) * 0.7})`;
       c.font = "7px monospace";
       c.fillText(p.ch, x, y);
+    } else if (p.k === "splash") {
+      // A two-frame crown splash at the footfall.
+      const a = p.life / p.max;
+      c.fillStyle = `rgba(150,190,225,${a * 0.8})`;
+      if (a > 0.5) { c.fillRect(x - 1, y - 2, 1, 2); c.fillRect(x + 1, y - 2, 1, 2); c.fillRect(x, y - 3, 1, 1); }
+      else { c.fillRect(x - 3, y, 2, 1); c.fillRect(x + 2, y, 2, 1); }
+    } else if (p.k === "blade") {
+      c.fillStyle = `rgba(110,150,104,${(p.life / p.max) * 0.9})`;
+      c.fillRect(x, y, 1, 2);
+    } else if (p.k === "puff") {
+      const a = p.life / p.max;
+      c.fillStyle = G.area === "blood" ? `rgba(70,52,52,${a * 0.6})` : `rgba(150,140,128,${a * 0.35})`;
+      c.fillRect(x - (a < 0.5 ? 2 : 1), y - 1, a < 0.5 ? 4 : 2, 2);
     } else if (p.k === "ripple") {
       const r = (1 - p.life / p.max) * 10 + 2;
       c.strokeStyle = `rgba(140,180,220,${(p.life / p.max) * 0.6})`;
@@ -2002,10 +2048,12 @@ function tryInteract() {
   const near = nearestInteractable();
   if (!near) return;
   Expedition.chime(260);
+  PlayAids.face(near);
   handleInteraction(near.it.id);
 }
 
 function handleInteraction(id) {
+  PlayAids.noteInspect(id);
   switch (id) {
     case "m1": playScript("m1"); break;
     case "m2":
@@ -2386,6 +2434,7 @@ function render(now) {
     if (!Expedition.prefs.motion) { spawnAmbient(dt); updateParticles(dt); }
     updateGoldDrop(dt);
     updateStorm(dt);
+    PlayAids.update(dt);
   }
   if (painFlash > 0) painFlash -= dt * 0.7;
 
@@ -2397,6 +2446,7 @@ function render(now) {
     if (ui.dialogText.textContent !== full.slice(0, n)) paintText(full.slice(0, n), dialogLines[dialogIndex].c);
     if (n >= full.length) { typeDone = true; updateDialogStatus(); }
   }
+  PlayAids.updateReading(dt);
   if (notifyT > 0) notifyT -= dt;
 
   if (NarrativeAgency.render(now)) {
@@ -2476,34 +2526,6 @@ function render(now) {
   // 区域专属演出（倒影、雾缘、窗光、心跳、碑光等）
   renderAreaFx(map, cam, t);
 
-  // 碎片闪光
-  if (map.shard && !META.shards.includes(map.shard.name)) {
-    const sx = map.shard.x * TILE + 8 - cam.x;
-    const sy = map.shard.y * TILE + 8 - cam.y + Math.sin(t * 3) * 2;
-    ctx.fillStyle = "#f0e8c8";
-    ctx.fillRect(sx - 1, sy - 4, 2, 8);
-    ctx.fillRect(sx - 4, sy - 1, 8, 2);
-  }
-
-  // 交互点标记
-  const near = nearestInteractable();
-  const drawMarker = (tx, ty, active, inspect = false) => {
-    if (dialogActive) return;
-    const sx = Math.round(tx * TILE + 8 - cam.x);
-    const sy = Math.round(ty * TILE - 4 - cam.y + Math.sin(t * 4) * 2);
-    ctx.fillStyle = active ? "#f0d88a" : "rgba(240,216,138,0.55)";
-    ctx.font = "8px monospace";
-    if (inspect) { ctx.fillRect(sx - 2, sy - 4, 4, 1); ctx.fillRect(sx - 3, sy - 3, 1, 3); ctx.fillRect(sx + 2, sy - 3, 1, 3); ctx.fillRect(sx - 2, sy, 4, 1); }
-    else ctx.fillText("!", sx - 2, sy);
-  };
-  for (const it of map.interact || []) drawMarker(it.x, it.y, near && near.it === it, it.inspect);
-  for (const n of map.npcs || []) {
-    if (n.passive) continue;
-    if (n.cond && !F[n.cond]) continue;
-    const actor = StoryStaging.npc(n);
-    if (!actor.hidden) drawMarker(actor.x, actor.y, near && near.it === n);
-  }
-
   StoryStaging.renderProps(cam, t);
 
   // NPC
@@ -2549,7 +2571,25 @@ function render(now) {
   const playerY = StoryStaging.coffin ? 7.5 * TILE : G.py;
   drawPerson(ctx, playerX - cam.x, playerY - cam.y, { dir: G.dir, walk: G.walk, coat: "#3a4a6a", ...StoryStaging.playerOptions() });
 
-  drawParticles(ctx, cam);
+  drawParticles(ctx, cam, false);
+
+  // 光影：阴影按像素抖动量化；发光的粒子、碎片与调查标记画在阴影之上。
+  Atmosphere.render(ctx, map, cam, now);
+  drawParticles(ctx, cam, true);
+
+  // 碎片闪光
+  if (map.shard && !META.shards.includes(map.shard.name)) {
+    const sx = Math.round(map.shard.x * TILE + 8 - cam.x);
+    const sy = Math.round(map.shard.y * TILE + 8 - cam.y + Math.sin(t * 3) * 2);
+    ctx.fillStyle = "#f0e8c8";
+    ctx.fillRect(sx - 1, sy - 4, 2, 8);
+    ctx.fillRect(sx - 4, sy - 1, 8, 2);
+    ctx.fillStyle = "#fffbe8";
+    ctx.fillRect(sx - 1, sy - 1, 2, 2);
+  }
+
+  // 交互点标记：未读、尚未开启与已读各有形状。
+  PlayAids.drawMarkers(ctx, map, cam, t);
 
   // 偏头痛红闪
   if (painFlash > 0 && !Expedition.prefs.motion) {
@@ -2652,6 +2692,7 @@ StoryStaging.reset();
 buildTileCache();
 updateHud();
 Expedition.init();
+PlayAids.init();
 Finale.init();
 PixelArt.init();
 PhenomenonBattle.init();
