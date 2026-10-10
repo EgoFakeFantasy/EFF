@@ -49,7 +49,7 @@
             <p id="dialogText" class="dialog-text" aria-live="polite" aria-atomic="true"></p>
               </div>
             </div>
-            <div class="dialog-footer"><span id="dialogProgress"></span><span id="dialogHint" class="dialog-hint">E / 空格 继续</span></div>
+            <div class="dialog-footer"><span id="dialogProgress"></span><span class="dialog-tools" role="group" aria-label="阅读辅助"><button id="autoButton" type="button" aria-pressed="false" title="读完后自动翻到下一句；选择与操作仍需手动">自动</button><button id="skipButton" type="button" aria-pressed="false" title="快速跳过曾经读过的句子，遇到未读句子停下；也可按住 Ctrl">快进已读</button></span><span id="dialogHint" class="dialog-hint">E / 空格 继续</span></div>
             <div id="dialogChoices" class="dialog-choices"></div>
           </div>
 
@@ -96,6 +96,7 @@
             <p id="startStatus">八处梦境 · 八枚碎片 · 九种结局</p>
             <p>方向键 / WASD 移动 · Shift 快走 · E / 空格 互动</p>
             <p>靠近发光的事物，调查与倾听。有些顺序，本身就是结局。</p>
+            <p>对白中可开启「自动」，或按住 Ctrl /「快进已读」跳过读过的句子。</p>
             <button id="startButton" type="button">进入回廊</button>
           </div>
         </div>
@@ -118,7 +119,7 @@
       </section>
       <section id="mapPanel" class="map-panel" hidden aria-label="当前区域地图">
         <canvas id="areaMap" width="240" height="180" aria-label="当前位置与调查点"></canvas>
-        <div><h2 id="mapTitle">镜像回廊</h2><p>金色：调查点　蓝色：同行者</p><p>白色：你　菱形：未拾取碎片　方框：出口</p><p id="mapStatus"></p></div>
+        <div><h2 id="mapTitle">镜像回廊</h2><p>金色：未调查　灰色：尚未开启　暗绿：已调查</p><p>蓝色：人物　白色：你　菱形：未拾取碎片　方框：出口</p><p id="mapStatus"></p></div>
       </section>
       <div class="touch-controls" aria-label="触屏游戏操作">
         <div class="dpad"><button type="button" data-direction="arrowup" aria-label="向上">↑</button><button type="button" data-direction="arrowleft" aria-label="向左">←</button><button type="button" data-direction="arrowdown" aria-label="向下">↓</button><button type="button" data-direction="arrowright" aria-label="向右">→</button></div>
@@ -142,6 +143,7 @@
       <label class="setting-row">音量<input id="volumeControl" type="range" min="0" max="1" step="0.05" value="0.55" /></label>
       <label class="setting-row">探索提示<input id="hintsControl" type="checkbox" checked /></label>
       <label class="setting-row">减少动态与闪光<input id="motionControl" type="checkbox" /></label>
+      <label class="setting-row">光影与暗角<input id="lightingControl" type="checkbox" checked /></label>
       <p class="utility-note">打开回读、设置或图鉴时暂停探索。记忆与结局图鉴会跨周目保留。</p>
     </dialog>
 
@@ -160,6 +162,8 @@
     <script src="./finale.js"></script>
     <script src="./combat-script.js"></script>
     <script src="./pixel-art.js"></script>
+    <script src="./atmosphere.js"></script>
+    <script src="./play-aids.js"></script>
     <script src="./phenomenon-battle.js"></script>
     <script src="./narrative-trials.js"></script>
     <script src="./narrative-agency.js"></script>

@@ -241,8 +241,13 @@ const PixelArt = {
       if(ceramic || y%2===0){r(0,0,16,1,shade(tone,.64));r(0,1,16,1,shade(tone,1.22));}
       if(ceramic || (x+Math.floor(y/2))%2===0){r(0,0,1,16,shade(tone,.68));r(1,2,1,13,shade(tone,1.12));}
       if(wet&&hash(x,y,4)>.72){r(3,10,10,1,'#263d50');r(5,9,6,1,'#213348');r(8,12,5,1,'#1b2f40');}
-      if(!ceramic&&hash(x,y,5)>.8){r(6,4,4,1,shade(tone,.75));r(9,5,1,3,shade(tone,.75));r(10,8,3,1,shade(tone,.75));}
+      if(!ceramic&&hash(x,y,5)>.74)this.decal(r,tone,Math.floor(hash(x,y,6)*6),hash(x,y,7),hash(x,y,8));
       if(map===MAPS.mirror&&(y===2||y===11)){r(0,8,16,1,'#45445a');r(0,10,16,1,'#181c2b');}
+      // Inlaid diamonds give the long mirror hall a rhythm toward its far door.
+      if(map===MAPS.mirror&&x%4===2&&y%3===0&&y>2&&y<12){
+        for(let i=0;i<4;i++){r(8-i,4+i,i*2,1,'#3b3953');r(8-i,11-i,i*2,1,'#3b3953');}
+        r(6,7,4,1,'#4f4c6a');r(7,6,2,3,'#4f4c6a');r(7,6,1,1,'#77729a');r(4,7,1,1,'#191927');r(11,7,1,1,'#191927');
+      }
     }
     if(house && y>0 && y<7) for(const windowX of [3,11,24]) {
       const left=Math.max(0,Math.round((windowX-y*.28-x)*16));
@@ -252,6 +257,17 @@ const PixelArt = {
     // Ambient occlusion is baked into each tile and cannot obscure an actor.
     if(map.grid[y-1]?.[x]==='#'){r(0,0,16,2,'#080d164d');r(0,2,16,2,'#080d1626');}
     if(map.grid[y]?.[x-1]==='#')r(0,0,2,16,'#080d163b');
+  },
+
+  // Small surface marks chosen per tile: cracks, chips, pebbles, wear and stains.
+  decal(r, tone, kind, h1, h2) {
+    const a=2+Math.floor(h1*9), b=2+Math.floor(h2*9), dark=shade(tone,.7), deep=shade(tone,.55), light=shade(tone,1.25);
+    if(kind===0){for(const [dx,dy] of [[0,0],[1,1],[2,1],[3,2],[3,3],[4,4]])r(a+dx,b+dy,1,1,dark);r(a+2,b+2,1,1,light);}
+    else if(kind===1){const m=h1>.5?1:-1;r(a,b,3,1,dark);r(a+(m>0?3:-1),b+1,1,2,dark);r(a+(m>0?4:-3),b+3,3,1,dark);r(a+1,b+1,1,1,light);}
+    else if(kind===2){r(0,0,3,1,deep);r(0,1,2,1,deep);r(0,2,1,1,deep);r(1,2,1,1,light);r(2,1,1,1,light);}
+    else if(kind===3){for(let i=0;i<3;i++){const px=(a+i*4)%13+1,py=(b+i*3)%12+2;r(px,py,1,1,light);r(px,py+1,1,1,deep);}}
+    else if(kind===4){r(a-1,b,5,2,shade(tone,1.08));r(a,b+2,3,1,shade(tone,1.05));}
+    else{r(a,b,3,2,shade(tone,.84));r(a+3,b+1,2,1,shade(tone,.84));r(a+1,b+2,1,1,shade(tone,.84));}
   },
 
   tile(c, ch, x, y, map, t = 0) {
@@ -297,7 +313,13 @@ const PixelArt = {
       r(5,5,6,1,'#647985');r(4,6,8,5,'#4b6476');r(5,7,6,4,'#26394d');r(6,7,4,2,'#7b9aa8');r(5,11,6,1,'#819897');r(3,13,10,1,'#929f9f');
     }else if(ch==='L'){r(5,2,6,1,'#f2ebd7');r(3,8,1,4,'#a3b0ad');r(5,8,6,1,'#ebe9d9');r(6,10,4,1,'#6e8c96');r(5,13,6,1,'#a2aaa7');}
     else if(ch==='|'){r(5,2,2,11,'#557186');r(9,2,2,11,'#1b2a40');r(3,0,10,1,'#79919d');r(3,14,10,1,'#516878');r(2,15,12,1,'#131e2a');}
-    else if(ch==='b'){r(2,4,2,1,'#863838');r(6,6,3,1,'#9c4a44');r(10,10,2,1,'#7f332b');r(1,12,1,1,'#5b2021');}
+    else if(ch==='b'){
+      // Each pool differs: a few overlapping blots, a drag mark and scattered drops.
+      const h=k=>hash(x,y,k);
+      for(let i=0;i<3;i++){const bx=1+Math.floor(h(20+i)*9),by=2+Math.floor(h(30+i)*9),bw=3+Math.floor(h(40+i)*4),bh=2+Math.floor(h(50+i)*3);r(bx,by,bw,bh,i?'#581a1a':'#4a1614');r(bx+1,by,bw-2,1,'#6e2420');}
+      if(h(60)>.5){const dy=4+Math.floor(h(61)*8);r(3,dy,9,1,'#41141366');r(5,dy+1,5,1,'#41141344');}
+      r(2+Math.floor(h(70)*10),1+Math.floor(h(71)*3),1,1,'#863838');r(1+Math.floor(h(72)*12),12+Math.floor(h(73)*3),1,1,'#5b2021');r(6+Math.floor(h(74)*6),6,2,1,'#9c4a44');
+    }
     else if(ch==='O')this.moon(c,px+8,py+8,6);
     else if(ch==='D'){
       const house=map===MAPS.house_empty||map===MAPS.house_family;
@@ -307,32 +329,71 @@ const PixelArt = {
     }
   },
 
-  person(c, px, py, lowered, opt, pose) {
+  person(c, px, py, lowered, opt, pose, gait = { side: 0, legX: [2, 7], lift: [0, 0], phase: -1, far: -1 }) {
     const r=(x,y,w,h,color)=>{c.fillStyle=color;c.fillRect(px+x,py+y,w,h);};
     const coat=opt.coat||"#3a4a6a", hair=opt.hair||"#222222", skin=opt.skin||"#e8c8a8";
-    const back=opt.dir===3||pose==="mirror", side=opt.dir===1?-1:opt.dir===2?1:0;
+    const back=opt.dir===3||pose==="mirror", side=back?0:(opt.dir===1?-1:opt.dir===2?1:0);
+    const seated=['kneel','eat','sit'].includes(pose);
     // Hard outlines and coherent clusters make each 1px mark legible when enlarged.
-    r(2,6+lowered,1,5,shade(coat,.48));r(9,7+lowered,1,5,shade(coat,.45));
+    r(2,6+lowered,1,5,shade(coat,.48));r(9,7+lowered,1,4,shade(coat,.45));
     r(3,7+lowered,1,4,shade(coat,1.5));r(4,8+lowered,1,2,shade(coat,1.2));
-    r(7,9+lowered,2,3,shade(coat,.7));r(5,7+lowered,1,5,shade(coat,.65));
+    r(7,9+lowered,2,2,shade(coat,.7));r(5,7+lowered,1,4,shade(coat,.65));
     r(4,6+lowered,4,1,shade(coat,1.8));r(5,7+lowered,2,1,'#c5bca7');
     r(6,8+lowered,1,3,shade(coat,.5));r(7,10+lowered,1,1,'#a5a798');
+    // Resting and swinging arms belong to the plain standing pose; staged poses draw their own.
+    if(pose==='stand'&&!opt.blood){
+      const swing=gait.phase===0?1:gait.phase===2?-1:0;
+      if(side){
+        const hx=side>0?6+swing:5-swing;
+        r(5,7+lowered,2,3,shade(coat,.62));r(hx,10+lowered,1,1,shade(skin,.92));
+      }else{
+        r(1,7+lowered,1,3-Math.max(0,swing),shade(coat,.62));r(10,7+lowered,1,3-Math.max(0,-swing),shade(coat,.55));
+        r(1,10+lowered-Math.max(0,swing),1,1,shade(skin,.9));r(10,10+lowered-Math.max(0,-swing),1,1,shade(skin,.82));
+      }
+    }
     if(!opt.hood){
       r(3,-2+lowered,5,1,shade(hair,.6));r(2,-1+lowered,7,3,hair);
       r(3,-1+lowered,2,1,shade(hair,1.8));r(6,lowered,2,1,shade(hair,1.4));
-      r(2,1+lowered,1,4,hair);r(9,2+lowered,1,2,shade(skin,.7));
-      if(back){r(3,2+lowered,6,4,hair);r(4,2+lowered,2,2,shade(hair,1.5));r(3,6+lowered,6,1,shade(coat,.5));}
+      if(back){r(2,1+lowered,1,4,hair);r(9,2+lowered,1,2,shade(skin,.7));r(3,2+lowered,6,4,hair);r(4,2+lowered,2,2,shade(hair,1.5));r(3,6+lowered,6,1,shade(coat,.5));}
+      else if(side){
+        // Profile: hair covers the back of the head, one eye and the nose face forward.
+        const f=x=>side>0?x:11-x;
+        r(Math.min(f(3),f(8)),2+lowered,6,4,skin);
+        r(Math.min(f(2),f(4)),1+lowered,3,4,hair);r(f(5),1+lowered,1,1,hair);r(f(6),1+lowered,1,1,hair);
+        r(f(4),3+lowered,1,1,shade(skin,.7));
+        r(f(9),3+lowered,1,2,skin);r(f(9),4+lowered,1,1,shade(skin,.8));
+        r(f(8),5+lowered,1,1,'#9b7160');r(f(5),5+lowered,1,1,shade(skin,.78));
+        this.eye(c,px+f(7),py+3+lowered,opt,pose);
+      }
       else{
+        r(2,1+lowered,1,4,hair);r(9,2+lowered,1,2,shade(skin,.7));
         r(3,2+lowered,6,4,skin);r(3,4+lowered,1,1,shade(skin,1.1));r(8,4+lowered,1,2,shade(skin,.75));
         r(3,1+lowered,2,2,hair);r(6,1+lowered,2,1,hair);
-        r(4+side,3+lowered,1,1,'#172030');r(7+side,3+lowered,1,1,'#172030');
-        r(6+side,4+lowered,1,1,'#b88873');r(5,5+lowered,2,1,'#9b7160');
-        if(pose==='sleep'||opt.dead){r(4+side,3+lowered,2,1,'#624d49');r(7+side,3+lowered,2,1,'#624d49');}
+        this.eye(c,px+4,py+3+lowered,opt,pose);this.eye(c,px+7,py+3+lowered,opt,pose);
+        r(6,4+lowered,1,1,'#b88873');r(5,5+lowered,2,1,'#9b7160');
       }
     }else{r(2,lowered,1,4,'#77868d');r(3,2+lowered,5,3,'#222d3b');r(4,3+lowered,3,1,'#8fa69e');}
-    if(opt.beard){r(3,5+lowered,6,1,'#968779');r(4,6+lowered,4,1,'#6b655e');r(3,2+lowered,1,1,'#b2a698');}
+    if(opt.beard){const bx=side>0?5:3,bw=side?4:6;r(bx,5+lowered,bw,1,'#968779');r(bx+1,6+lowered,bw-2,1,'#6b655e');if(!side)r(3,2+lowered,1,1,'#b2a698');}
     if(opt.bun){r(9,-1+lowered,2,2,hair);r(9,-1+lowered,1,1,shade(hair,1.8));r(5,lowered,1,1,'#cfccc0');}
-    if(!['kneel','eat','sit'].includes(pose)){r(2,13,3,1,'#121925');r(7,13,3,1,'#121925');r(3,12,1,1,'#637183');r(8,12,1,1,'#4c596b');}
+    if(!seated){
+      for(const i of gait.far===1?[1,0]:[0,1]){
+        const x=gait.legX[i], lift=gait.lift[i], dark=i===gait.far;
+        r(x,13-lift,3,1,dark?'#0c111a':'#121925');r(x+1,12-lift,1,1,dark?'#3c4757':i?'#4c596b':'#637183');
+        if(side)r(side>0?x+3:x-1,13-lift,1,1,dark?'#0c111a':'#121925');
+      }
+    }
+  },
+
+  // Eyes blink now and then; each figure keeps its own rhythm.
+  eye(c, x, y, opt, pose) {
+    const closed = pose === 'sleep' || opt.dead;
+    let blink = false;
+    if (!closed && !Expedition.prefs.motion) {
+      const seed = [...(opt.coat || '')].reduce((a, ch) => a + ch.charCodeAt(0) * 37, 0);
+      blink = (performance.now() + seed * 13) % 4100 < 120;
+    }
+    if (closed || blink) { c.fillStyle = closed ? '#624d49' : '#8d6a5c'; c.fillRect(x, y, closed ? 2 : 1, 1); return; }
+    c.fillStyle = '#172030'; c.fillRect(x, y, 1, 1);
   },
 
   sceneProps(c, map, cam) {

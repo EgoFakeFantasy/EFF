@@ -927,10 +927,11 @@ test("the first return anchors both the marker and the interaction to the actual
   assert.equal(game.evaluate("MAPS.garden.npcs.some(n => n.kind === 'echo')"), false, "the inscription must not be assigned to a shadow");
   assert.equal(game.evaluate("nearestInteractable()?.it.id"), "coffin", "the returning player must reach the board without walking to a shadow");
   assert.deepEqual(game.value("Expedition.goalPoint()"), coffin);
-  game.evaluate("globalThis.markers = []; globalThis.markerCamera = null; const originalCamera = StoryStaging.camera.bind(StoryStaging); StoryStaging.camera = (map, fallback) => { markerCamera = originalCamera(map, fallback); return markerCamera; }; ctx.fillText = (text, x, y) => { if (text === '!') markers.push({x, y}); }");
+  game.evaluate("globalThis.markerCamera = null; const originalCamera = StoryStaging.camera.bind(StoryStaging); StoryStaging.camera = (map, fallback) => { markerCamera = originalCamera(map, fallback); return markerCamera; }");
   game.frame(16);
   const cam = game.value("markerCamera");
-  assert.ok(game.value("markers").some(m => m.x === coffin.x * 16 + 6 - cam.x && Math.abs(m.y - (coffin.y * 16 - 4 - cam.y)) <= 2), "the displayed marker is detached from the coffin board");
+  // Markers are pixel glyphs; their drawn anchors are recorded for each frame.
+  assert.ok(game.value("PlayAids.lastMarkers").some(m => m.id === "coffin" && m.state === "new" && m.x === coffin.x * 16 + 8 - cam.x && Math.abs(m.y - (coffin.y * 16 - 4 - cam.y)) <= 2), "the displayed marker is detached from the coffin board");
   game.evaluate("tryInteract()");
   assert.equal(game.evaluate("currentDialogScript === SCRIPTS.coffinAgain"), true);
   nextLine(game);
@@ -2033,6 +2034,167 @@ test('the epilogue retains all 49 supplied chapter 059 paragraphs in their sourc
  // Golden digest comes from the supplied novel, excluding publisher navigation.
  const digest=require('node:crypto').createHash('sha256').update(paragraphs.join('\n'),'utf8').digest('hex');
  assert.equal(digest,'9c6d2b9a09e58228ebbac9a4d868918dc4057edf5c07e75f6bd6b0a1c28d0e67');
+});
+
+/* ---------- Exploration feedback, reading aids, light and gait ---------- */
+
+test("investigation markers follow the story's own gates and optional inspections persist without story flags", () => {
+  const game = harness();
+  game.ids.get("startButton").click(); finishDialog(game);
+  const state = id => game.evaluate(`PlayAids.state(MAPS.mirror.interact.find(it => it.id === ${JSON.stringify(id)}))`);
+  assert.deepEqual(["m1", "m2", "m3"].map(state), ["new", "gated", "gated"]);
+  interact(game, "m1");
+  assert.deepEqual(["m1", "m2", "m3"].map(state), ["done", "new", "gated"]);
+  game.evaluate("Expedition.sync()");
+  assert.deepEqual(game.value("PlayAids.progress()"), { done: 1, total: 3 });
+  assert.ok(game.ids.get("chapterLabel").textContent.includes("调查 1/3"));
+  game.frame(16);
+  assert.deepEqual(game.value("PlayAids.lastMarkers.map(m => [m.id, m.state])"), [["m1", "done"], ["m2", "new"], ["m3", "gated"]]);
+  // The tank remains a trap: no marker warns that opening it early ends the run.
+  game.evaluate("G.area = 'house_empty'; buildTileCache()");
+  assert.equal(game.evaluate("PlayAids.state(MAPS.house_empty.interact.find(it => it.id === 'toilet'))"), "new");
+  const flags = game.value("F");
+  game.evaluate("G.area = 'garden'; StoryStaging.reset(); buildTileCache()");
+  interact(game, "coffinWood");
+  assert.deepEqual(game.value("G.seen"), ["coffinWood"]);
+  assert.deepEqual(game.value("F"), flags, "an optional inspection must not become a story flag");
+  assert.equal(game.evaluate("PlayAids.state(MAPS.garden.interact.find(it => it.id === 'coffinWood'))"), "done");
+  game.evaluate("saveRun()");
+  const reloaded = harness(game.snapshot());
+  assert.deepEqual(reloaded.value("G.seen"), ["coffinWood"]);
+  const record = JSON.parse(game.storage.get(SAVE)); record.seen = ["bogus", 5, "rainPool", "rainPool", "__proto__"];
+  assert.deepEqual(harness({ [SAVE]: JSON.stringify(record) }).value("G.seen"), ["rainPool"]);
+  reloaded.evaluate("resetRun()");
+  assert.deepEqual(reloaded.value("G.seen"), []);
+});
+
+test("shard resonance guides toward an uncollected fragment without collecting it", () => {
+  const game = harness();
+  // Pin chance so sparkle spawning is deterministic in this check.
+  game.evaluate("Math.random = () => 0.001; ui.start.hidden = true; G.area = 'garden'; F.gardenWoke = true; StoryStaging.reset(); buildTileCache(); G.px = 4 * TILE + 3; G.py = 18 * TILE + 2");
+  for (let i = 0; i < 40; i++) game.frame(16);
+  assert.ok(game.evaluate("PlayAids.resonance") > 0.4, "standing three tiles away should resonate");
+  assert.ok(game.ids.get("statusMessage").textContent.includes("共鸣"));
+  assert.equal(game.value("META.shards").includes("花园碎片"), false);
+  assert.ok(game.evaluate("particles.some(p => p.k === 'spark')"), "resonance sparkles around the fragment");
+  game.evaluate("G.px = 25 * TILE + 3; G.py = 3 * TILE + 2");
+  for (let i = 0; i < 80; i++) game.frame(16);
+  assert.ok(game.evaluate("PlayAids.resonance") < 0.05);
+  game.evaluate("particles = []; Expedition.prefs.motion = true; G.px = 2 * TILE + 3; G.py = 19 * TILE + 2");
+  for (let i = 0; i < 40; i++) game.frame(16);
+  assert.equal(game.evaluate("particles.length"), 0, "reduced motion keeps the resonance still");
+  walkToTile(game, 1, 20);
+  assert.ok(game.value("META.shards").includes("花园碎片"));
+  for (let i = 0; i < 40; i++) game.frame(16);
+  assert.ok(game.evaluate("PlayAids.resonance") < 0.05, "a collected fragment stops resonating");
+});
+
+test("auto-play advances finished lines, waits at choices, acts and secret answers, and pauses under utilities", () => {
+  const game = harness();
+  game.evaluate("ui.start.hidden = true; playScript('coffinFirst')");
+  game.ids.get("autoButton").click();
+  assert.equal(game.evaluate("PlayAids.auto"), true);
+  assert.equal(game.ids.get("autoButton").getAttribute("aria-pressed"), "true");
+  assert.equal(game.evaluate("dialogIndex"), 0, "toggling must not advance the line itself");
+  for (let i = 0; i < 25; i++) game.frame(50);
+  assert.equal(game.evaluate("typeDone"), true);
+  const first = game.evaluate("dialogIndex");
+  game.ids.get("settingsButton").click();
+  for (let i = 0; i < 200; i++) game.frame(50);
+  assert.equal(game.evaluate("dialogIndex"), first, "auto-play advanced underneath settings");
+  game.document.querySelector("[data-close='settingsDialog']").click();
+  for (let i = 0; i < 600 && !game.evaluate("!!dialogChoices"); i++) game.frame(50);
+  assert.equal(game.evaluate("!!dialogChoices"), true, "auto-play should reach the coffin choices");
+  for (let i = 0; i < 200; i++) game.frame(50);
+  assert.equal(game.evaluate("dialogActive && !!dialogChoices"), true, "auto-play must never choose");
+  // A phenomenon act waits for the player's target.
+  game.evaluate("closeDialog(); G.area = 'blood'; F.sister = true; F.parents = true; buildTileCache(); playScript('refusal')");
+  assert.equal(game.evaluate("PhenomenonBattle.pending"), true);
+  for (let i = 0; i < 200; i++) game.frame(50);
+  assert.equal(game.evaluate("dialogIndex"), 0);
+  assert.deepEqual(game.value("PhenomenonBattle.claimed"), [false, false, false]);
+  // The finale's clickable answer is never read past automatically.
+  game.evaluate("closeDialog(); playLines([{ t: 'answer', secretAction: 'trueEnding' }, 'after'], () => {})");
+  for (let i = 0; i < 200; i++) game.frame(50);
+  assert.equal(game.evaluate("dialogIndex"), 0);
+  game.ids.get("autoButton").click();
+  assert.equal(game.evaluate("PlayAids.auto"), false);
+});
+
+test("skip-read fast-forwards lines read in any run and stops at the first unread line", () => {
+  const game = harness();
+  game.evaluate("ui.start.hidden = true; playScript('coffinFirst')");
+  finishDialog(game); game.tick(1000);
+  const read = game.storage.get("wuzhong-returner-pixel-read-v1");
+  assert.ok(read && JSON.parse(read).length >= 4, "read lines are remembered across runs");
+  const next = harness(game.snapshot());
+  next.evaluate("ui.start.hidden = true; ((lines) => playLines([lines[0], lines[1], 'a sentence nobody has read', lines[2]], () => {}))(SCRIPTS.coffinFirst.lines)");
+  next.ids.get("skipButton").click();
+  assert.equal(next.evaluate("PlayAids.skip"), true);
+  for (let i = 0; i < 40; i++) next.frame(50);
+  assert.equal(next.evaluate("dialogIndex"), 2, "skip must stop at the unread sentence");
+  assert.equal(next.evaluate("PlayAids.skip"), false);
+  assert.ok(next.ids.get("statusMessage").textContent.includes("未读"));
+  // Holding Ctrl skips only while read lines continue.
+  next.evaluate("closeDialog(); ((lines) => playLines([lines[0], lines[1], lines[2]], () => {}))(SCRIPTS.coffinFirst.lines)");
+  next.window.dispatchEvent(new MockEvent("keydown", { key: "Control", target: next.document.body }));
+  for (let i = 0; i < 40; i++) next.frame(50);
+  assert.equal(next.evaluate("dialogActive"), false, "Ctrl skip should finish a fully read passage");
+  next.window.dispatchEvent(new MockEvent("keyup", { key: "Control", target: next.document.body }));
+  assert.equal(next.evaluate("PlayAids.ctrl"), false);
+  next.evaluate("resetRun()");
+  assert.ok(JSON.parse(next.storage.get("wuzhong-returner-pixel-read-v1") || "[]").length >= 4 || next.evaluate("PlayAids.read.size") >= 4, "restarting keeps read memory");
+});
+
+test("lighting is quantised on whole pixels, follows its sources and can be switched off", () => {
+  const game = harness();
+  const levels = game.value(`(() => {
+    const px = Atmosphere.compute([{ x: 160, y: 96, r: 48, i: 1, color: [255, 255, 255], tint: 0 }], { dark: [0, 0, 0], depth: 0.6 });
+    const alpha = i => px[i] >>> 24;
+    return { center: alpha(96 * 320 + 160), corner: alpha(2 * 320 + 2), set: [...new Set([...px].map(v => v >>> 24))].sort((a, b) => a - b) };
+  })()`);
+  assert.equal(levels.center, 0, "the light source itself is unshaded");
+  assert.ok(levels.corner > 100, "far corners are shaded");
+  assert.ok(levels.set.length <= 5, "darkness uses a small set of dithered bands");
+  game.evaluate("ui.start.hidden = true");
+  for (const area of ["mirror", "garden", "house_empty", "house_family", "blood", "rain"]) {
+    game.evaluate(`G.area = ${JSON.stringify(area)}; StoryStaging.reset(); particles = []; buildTileCache()`);
+    for (let i = 0; i < 4; i++) game.frame(30);
+    assert.ok(game.evaluate("Atmosphere.lastLights.length") >= 1, `${area} has no light sources`);
+  }
+  game.evaluate("Atmosphere.lastLights = []; Expedition.prefs.lighting = false");
+  game.frame(30);
+  assert.equal(game.evaluate("Atmosphere.render(ctx, MAPS[G.area], { x: 0, y: 0 }, 0)"), false);
+  const saved = harness({ "wuzhong-returner-pixel-settings-v1": JSON.stringify({ lighting: false }) });
+  assert.equal(saved.evaluate("Expedition.prefs.lighting"), false);
+  assert.equal(saved.ids.get("lightingControl").checked, false);
+});
+
+test("the walk cycle alternates feet, profiles face travel and interaction turns toward the object", () => {
+  const game = harness();
+  assert.deepEqual(game.value("personGait({ walk: 0 }, 'stand').lift"), [0, 0]);
+  assert.deepEqual(game.value("personGait({ walk: 0.01, dir: 0 }, 'stand').lift"), [1, 0]);
+  assert.deepEqual(game.value("personGait({ walk: 0.23, dir: 0 }, 'stand').lift"), [0, 1]);
+  assert.equal(game.evaluate("personGait({ walk: 0.12, dir: 0 }, 'stand').bob"), -1);
+  const left = game.value("personGait({ walk: 0.01, dir: 1 }, 'stand')"), right = game.value("personGait({ walk: 0.01, dir: 2 }, 'stand')");
+  // The near (lighter) leg leads in the direction of travel on a stride.
+  assert.notEqual(left.far, right.far);
+  assert.ok(right.legX[1 - right.far] > right.legX[right.far], "facing right, the near leg leads to the right");
+  assert.ok(left.legX[1 - left.far] < left.legX[left.far], "facing left, the near leg leads to the left");
+  assert.equal(game.value("personGait({ walk: 0.5, dir: 0 }, 'bound').phase"), -1, "staged poses never walk");
+  game.evaluate("ui.start.hidden = true; G.area = 'garden'; F.gardenWoke = true; StoryStaging.reset(); buildTileCache(); G.px = 10 * TILE + 3; G.py = 7 * TILE + 2; G.dir = 0");
+  assert.equal(game.evaluate("nearestInteractable()?.it.id"), "coffinWood");
+  game.evaluate("tryInteract()");
+  assert.equal(game.evaluate("G.dir"), 2, "the player turns toward the coffin's side before reading it");
+  finishDialog(game);
+  // Footfalls leave marks on wet ground; reduced motion keeps the floor still.
+  game.evaluate("ui.start.hidden = true; G.area = 'rain'; F = { rainDone: true }; StoryStaging.reset(); particles = []; buildTileCache(); G.px = 10 * TILE + 3; G.py = 20 * TILE + 2; keys.add('d')");
+  for (let i = 0; i < 40; i++) game.frame(16);
+  assert.ok(game.evaluate("particles.some(p => p.k === 'splash')"));
+  game.evaluate("keys.clear(); particles = []; Expedition.prefs.motion = true; keys.add('a')");
+  for (let i = 0; i < 40; i++) game.frame(16);
+  assert.equal(game.evaluate("particles.length"), 0);
+  game.evaluate("keys.clear()");
 });
 
 let failed = 0;

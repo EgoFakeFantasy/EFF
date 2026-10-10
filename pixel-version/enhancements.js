@@ -2,7 +2,7 @@
 
 // Exploration and presentation stay separate from the story and ending rules.
 const Expedition = {
-  prefs: { speed: 0.016, volume: 0.55, hints: true, motion: false },
+  prefs: { speed: 0.016, volume: 0.55, hints: true, motion: false, lighting: true },
   journal: [],
   chapterTime: 0,
   effect: null,
@@ -28,7 +28,7 @@ const Expedition = {
   init() {
     const byId = (id) => document.getElementById(id);
     this.dom = {};
-    for (const id of ["objectiveText", "chapterLabel", "chapterCard", "chapterNumber", "chapterQuote", "interactButton", "mapButton", "mapPanel", "mapTitle", "mapStatus", "areaMap", "statusMessage", "journalDialog", "journalEntries", "settingsDialog", "textSpeed", "volumeControl", "hintsControl", "motionControl", "startStatus", "touchInteract"]) this.dom[id] = byId(id);
+    for (const id of ["objectiveText", "chapterLabel", "chapterCard", "chapterNumber", "chapterQuote", "interactButton", "mapButton", "mapPanel", "mapTitle", "mapStatus", "areaMap", "statusMessage", "journalDialog", "journalEntries", "settingsDialog", "textSpeed", "volumeControl", "hintsControl", "motionControl", "lightingControl", "startStatus", "touchInteract"]) this.dom[id] = byId(id);
     this.prefs.motion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches || false;
     try {
       const saved = JSON.parse(localStorage.getItem(this.key) || "null");
@@ -37,6 +37,7 @@ const Expedition = {
         if (Number.isFinite(saved.volume)) this.prefs.volume = Math.max(0, Math.min(1, saved.volume));
         if (typeof saved.hints === "boolean") this.prefs.hints = saved.hints;
         if (typeof saved.motion === "boolean") this.prefs.motion = saved.motion;
+        if (typeof saved.lighting === "boolean") this.prefs.lighting = saved.lighting;
       }
       const entries = JSON.parse(localStorage.getItem(this.journalKey) || "[]");
       if (Array.isArray(entries)) this.journal = entries.filter(e => e && typeof e.text === "string" && typeof e.area === "string").slice(-300);
@@ -45,10 +46,11 @@ const Expedition = {
     this.dom.volumeControl.value = String(this.prefs.volume);
     this.dom.hintsControl.checked = this.prefs.hints;
     this.dom.motionControl.checked = this.prefs.motion;
+    if (this.dom.lightingControl) this.dom.lightingControl.checked = this.prefs.lighting;
     this.applyPrefs();
-    for (const id of ["textSpeed", "volumeControl", "hintsControl", "motionControl"]) {
-      this.dom[id].addEventListener("change", () => {
-        this.prefs = { speed: Number(this.dom.textSpeed.value), volume: Number(this.dom.volumeControl.value), hints: this.dom.hintsControl.checked, motion: this.dom.motionControl.checked };
+    for (const id of ["textSpeed", "volumeControl", "hintsControl", "motionControl", "lightingControl"]) {
+      this.dom[id]?.addEventListener("change", () => {
+        this.prefs = { speed: Number(this.dom.textSpeed.value), volume: Number(this.dom.volumeControl.value), hints: this.dom.hintsControl.checked, motion: this.dom.motionControl.checked, lighting: this.dom.lightingControl ? this.dom.lightingControl.checked : true };
         this.applyPrefs();
         try { localStorage.setItem(this.key, JSON.stringify(this.prefs)); } catch { /* Optional. */ }
       });
@@ -199,7 +201,7 @@ const Expedition = {
     if (!this.dom) return;
     const chapter = this.chapters[G.area];
     const setText = (element, text) => { if (element.textContent !== text) element.textContent = text; };
-    setText(this.dom.chapterLabel, `${chapter[0]} / ${chapter[1]}`);
+    setText(this.dom.chapterLabel, `${chapter[0]} / ${chapter[1]}${PlayAids.progressText()}`);
     setText(this.dom.objectiveText, this.prefs.hints || G.area === "storm" ? this.goal().text : "靠近发光的事物，调查与倾听。");
     const unavailable = transitionLock || this.paused() || !ui.start.hidden || !ui.ending.hidden;
     const near = !dialogActive && !unavailable ? nearestInteractable() : null;
@@ -223,7 +225,8 @@ const Expedition = {
     if (G.area === "meta") this.dom.mapPanel.hidden = true;
     if (G.area === "storm") this.dom.mapPanel.hidden = true;
     for (const button of document.querySelectorAll('[data-direction="arrowup"], [data-direction="arrowdown"]')) button.disabled = G.area === "storm";
-    setText(this.dom.mapStatus, `${META.shards.includes(MAPS[G.area].shard.name) ? "本区碎片已经拾取" : "本区仍有一枚碎片"} · 总计 ${META.shards.length} / 8`);
+    const progress = PlayAids.progress();
+    setText(this.dom.mapStatus, `${META.shards.includes(MAPS[G.area].shard.name) ? "本区碎片已经拾取" : "本区仍有一枚碎片"} · 总计 ${META.shards.length} / 8${progress ? ` · 已调查 ${progress.done} / ${progress.total}` : ""}`);
     setText(this.dom.mapTitle, MAPS[G.area].name);
   },
 
@@ -333,10 +336,11 @@ const Expedition = {
       c.fillRect(ox + x * scale, oy + y * scale, scale - 0.5, scale - 0.5);
     }
     const dot = (x, y, color, size = 3) => { c.fillStyle = color; c.fillRect(ox + (x + 0.5) * scale - size / 2, oy + (y + 0.5) * scale - size / 2, size, size); };
-    for (const it of map.interact || []) dot(it.x, it.y, "#c9a86a");
+    const stateColor = { new: "#e2c27c", gated: "#77746c", done: "#4f6458" };
+    for (const it of map.interact || []) dot(it.x, it.y, stateColor[PlayAids.state(it)]);
     for (const n of map.npcs || []) if (!n.cond || F[n.cond]) {
       const actor = StoryStaging.npc(n);
-      if (!actor.hidden) dot(actor.x, actor.y, "#7fb3d5");
+      if (!actor.hidden) dot(actor.x, actor.y, n.passive ? "#4c6a7c" : PlayAids.state(n) === "done" ? "#4f6458" : "#7fb3d5");
     }
     for (const exit of map.exits || []) { c.strokeStyle = "#c9a86a"; c.strokeRect(ox + exit.x * scale, oy + exit.y * scale, scale, scale); }
     if (!META.shards.includes(map.shard.name)) {
