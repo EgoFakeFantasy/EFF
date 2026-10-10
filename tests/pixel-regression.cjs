@@ -2318,6 +2318,23 @@ test("turning points and fragments play their effects only with the soundscape o
   assert.deepEqual(game.value("Sfx.played"), ["wake", "lid", "shatter", "shard"]);
 });
 
+test("every ending opens on its own illustration, still under reduced motion", () => {
+  const game = harness();
+  game.ids.get("startButton").click(); finishDialog(game);
+  const ids = game.value("Object.keys(ENDINGS)");
+  assert.deepEqual(ids.filter(id => !game.evaluate(`!!EndingArt.scenes[${JSON.stringify(id)}]`)), [], "an ending has no illustration");
+  for (const id of ids) {
+    game.evaluate(`showEnding(${JSON.stringify(id)})`);
+    game.frame(16);
+    assert.equal(game.evaluate("EndingArt.drawn"), id);
+    assert.equal(game.ids.get("endingArt").hidden, false);
+  }
+  game.evaluate("Expedition.prefs.motion = true"); game.frame(16);
+  assert.equal(game.evaluate("EndingArt.drawn"), "true");
+  game.evaluate("resetRun()"); game.evaluate("EndingArt.drawn = null"); game.frame(16);
+  assert.equal(game.evaluate("EndingArt.drawn"), null, "nothing is drawn once the ending closes");
+});
+
 let failed = 0;
 for (const [name, callback] of tests) {
   try { callback(); console.log(`PASS ${name}`); }

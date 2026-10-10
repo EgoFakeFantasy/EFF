@@ -2636,6 +2636,7 @@ function render(now) {
   renderFrame(now);
   Cutscenes.overlay(ctx);
   Music.update();
+  EndingArt.render(now);
   requestAnimationFrame(render);
 }
 
@@ -2705,6 +2706,7 @@ buildTileCache();
 updateHud();
 Expedition.init();
 PlayAids.init();
+EndingArt.init();
 Finale.init();
 PixelArt.init();
 PhenomenonBattle.init();

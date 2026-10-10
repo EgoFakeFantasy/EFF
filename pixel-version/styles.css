@@ -686,3 +686,7 @@ input { accent-color: var(--accent); }
 @media (max-width: 520px) {
   .dialog-tools button { padding: 1px 6px; min-height: 22px; font-size: 10px; }
 }
+
+/* Each ending opens on its own pixel illustration. */
+.ending-art { flex: 0 0 auto; width: min(640px, 100%); height: auto; aspect-ratio: 10 / 3; image-rendering: pixelated; border: 1px solid #3b3f52; box-shadow: 0 0 0 3px #0a0b12, 0 10px 30px #000a; }
+@media (max-width: 520px) { .ending-art { width: 100%; } }
