@@ -242,9 +242,9 @@ const PixelArt = {
       if(ceramic || (x+Math.floor(y/2))%2===0){r(0,0,1,16,shade(tone,.68));r(1,2,1,13,shade(tone,1.12));}
       if(wet&&hash(x,y,4)>.72){r(3,10,10,1,'#263d50');r(5,9,6,1,'#213348');r(8,12,5,1,'#1b2f40');}
       if(!ceramic&&hash(x,y,5)>.74)this.decal(r,tone,Math.floor(hash(x,y,6)*6),hash(x,y,7),hash(x,y,8));
-      if(map===MAPS.mirror&&(y===2||y===11)){r(0,8,16,1,'#45445a');r(0,10,16,1,'#181c2b');}
+      if(map===MAPS.mirror&&(y===2||y===10)){r(0,8,16,1,'#45445a');r(0,10,16,1,'#181c2b');}
       // Inlaid diamonds give the long mirror hall a rhythm toward its far door.
-      if(map===MAPS.mirror&&x%4===2&&y%3===0&&y>2&&y<12){
+      if(map===MAPS.mirror&&x%4===2&&y%3===0&&y>2&&y<10){
         for(let i=0;i<4;i++){r(8-i,4+i,i*2,1,'#3b3953');r(8-i,11-i,i*2,1,'#3b3953');}
         r(6,7,4,1,'#4f4c6a');r(7,6,2,3,'#4f4c6a');r(7,6,1,1,'#77729a');r(4,7,1,1,'#191927');r(11,7,1,1,'#191927');
       }

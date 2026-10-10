@@ -2071,19 +2071,19 @@ test("investigation markers follow the story's own gates and optional inspection
 test("shard resonance guides toward an uncollected fragment without collecting it", () => {
   const game = harness();
   // Pin chance so sparkle spawning is deterministic in this check.
-  game.evaluate("Math.random = () => 0.001; ui.start.hidden = true; G.area = 'garden'; F.gardenWoke = true; StoryStaging.reset(); buildTileCache(); G.px = 4 * TILE + 3; G.py = 18 * TILE + 2");
+  game.evaluate("Math.random = () => 0.001; ui.start.hidden = true; G.area = 'garden'; F.gardenWoke = true; StoryStaging.reset(); buildTileCache(); G.px = 4 * TILE + 3; G.py = 12 * TILE + 2");
   for (let i = 0; i < 40; i++) game.frame(16);
   assert.ok(game.evaluate("PlayAids.resonance") > 0.4, "standing three tiles away should resonate");
   assert.ok(game.ids.get("statusMessage").textContent.includes("共鸣"));
   assert.equal(game.value("META.shards").includes("花园碎片"), false);
   assert.ok(game.evaluate("particles.some(p => p.k === 'spark')"), "resonance sparkles around the fragment");
-  game.evaluate("G.px = 25 * TILE + 3; G.py = 3 * TILE + 2");
+  game.evaluate("G.px = 21 * TILE + 3; G.py = 3 * TILE + 2");
   for (let i = 0; i < 80; i++) game.frame(16);
   assert.ok(game.evaluate("PlayAids.resonance") < 0.05);
-  game.evaluate("particles = []; Expedition.prefs.motion = true; G.px = 2 * TILE + 3; G.py = 19 * TILE + 2");
+  game.evaluate("particles = []; Expedition.prefs.motion = true; G.px = 2 * TILE + 3; G.py = 13 * TILE + 2");
   for (let i = 0; i < 40; i++) game.frame(16);
   assert.equal(game.evaluate("particles.length"), 0, "reduced motion keeps the resonance still");
-  walkToTile(game, 1, 20);
+  walkToTile(game, 1, 14);
   assert.ok(game.value("META.shards").includes("花园碎片"));
   for (let i = 0; i < 40; i++) game.frame(16);
   assert.ok(game.evaluate("PlayAids.resonance") < 0.05, "a collected fragment stops resonating");
@@ -2314,8 +2314,25 @@ test("turning points and fragments play their effects only with the soundscape o
   game.evaluate("Expedition.prefs.motion = false; playScript('bed'); closeDialog(); G.area = 'garden'; F = { gardenWoke: true }; StoryStaging.reset(); buildTileCache(); playScript('coffinSleep'); closeDialog()");
   game.evaluate("G.area = 'mirror'; F = { m1: true, m2: true, m3: true }; buildTileCache(); gotoArea('storm')");
   game.tick(1600);
-  game.evaluate("closeDialog(); G.area = 'garden'; buildTileCache(); G.px = 1 * TILE + 3; G.py = 20 * TILE + 2; checkExitsAndShards()");
+  game.evaluate("closeDialog(); G.area = 'garden'; buildTileCache(); G.px = 1 * TILE + 3; G.py = 14 * TILE + 2; checkExitsAndShards()");
   assert.deepEqual(game.value("Sfx.played"), ["wake", "lid", "shatter", "shard"]);
+});
+
+test("every ending opens on its own illustration, still under reduced motion", () => {
+  const game = harness();
+  game.ids.get("startButton").click(); finishDialog(game);
+  const ids = game.value("Object.keys(ENDINGS)");
+  assert.deepEqual(ids.filter(id => !game.evaluate(`!!EndingArt.scenes[${JSON.stringify(id)}]`)), [], "an ending has no illustration");
+  for (const id of ids) {
+    game.evaluate(`showEnding(${JSON.stringify(id)})`);
+    game.frame(16);
+    assert.equal(game.evaluate("EndingArt.drawn"), id);
+    assert.equal(game.ids.get("endingArt").hidden, false);
+  }
+  game.evaluate("Expedition.prefs.motion = true"); game.frame(16);
+  assert.equal(game.evaluate("EndingArt.drawn"), "true");
+  game.evaluate("resetRun()"); game.evaluate("EndingArt.drawn = null"); game.frame(16);
+  assert.equal(game.evaluate("EndingArt.drawn"), null, "nothing is drawn once the ending closes");
 });
 
 let failed = 0;
