@@ -1203,6 +1203,7 @@ function renderLine() {
   }
   updateDialogStatus();
   PlayAids.onLine(line);
+  Cutscenes.onLine(line);
   if (typeof Expedition !== "undefined") Expedition.onLine(line, dialogIndex, dialogLines.length);
   Finale.onLine(line);
   PixelArt.onLine(line);
@@ -1402,6 +1403,7 @@ function resetRun() {
   G.counters = {};
   G.seen = [];
   PlayAids.reset();
+  Cutscenes.reset();
   G.area = "mirror";
   const sp = MAPS.mirror.spawn;
   G.px = sp.x * TILE + 3;
@@ -1654,7 +1656,7 @@ function buildTileCache() {
 
 // Four-frame gait: contact, passing, contact (other foot), passing.
 function personGait(opt, pose) {
-  const walking = opt.walk > 0 && pose === "stand";
+  const walking = opt.walk > 0 && (pose === "stand" || pose === "carry");
   const phase = walking ? Math.floor(opt.walk * 9) % 4 : -1;
   const side = opt.dir === 1 ? -1 : opt.dir === 2 ? 1 : 0;
   const lift = phase === 0 ? [1, 0] : phase === 2 ? [0, 1] : [0, 0];
@@ -2167,7 +2169,8 @@ function gotoArea(area, fadeText) {
   transitionLock = true;
   closeDialog();
   ui.fadeText.textContent = fadeText || MAPS[area].name;
-  ui.fade.classList.add("on");
+  // 离开镜像回廊时，画面本身碎裂坠落；其余转场（及减少动态时）使用渐暗。
+  if (!(area === "storm" && G.area === "mirror" && Cutscenes.beginShatter())) ui.fade.classList.add("on");
   Expedition.transitionTimers.push(setTimeout(() => {
     G.area = area;
     stormSequenceStarted = false;
@@ -2423,7 +2426,7 @@ function updateHud() {
   ui.hudRight.textContent = `记忆 ${G.memories.length} · 碎片 ${META.shards.length}/8${pain}`;
 }
 
-function render(now) {
+function renderFrame(now) {
   const elapsed = Math.max(0, (now - lastT) / 1000);
   const dt = Math.min(0.05, elapsed);
   lastT = now;
@@ -2435,6 +2438,7 @@ function render(now) {
     updateGoldDrop(dt);
     updateStorm(dt);
     PlayAids.update(dt);
+    Cutscenes.update(dt);
   }
   if (painFlash > 0) painFlash -= dt * 0.7;
 
@@ -2451,32 +2455,27 @@ function render(now) {
 
   if (NarrativeAgency.render(now)) {
     Expedition.render(dt, { x: 0, y: 0 }, now);
-    requestAnimationFrame(render);
     return;
   }
 
   if (NarrativeTrials.render()) {
     Expedition.render(dt, { x: 0, y: 0 }, now);
-    requestAnimationFrame(render);
     return;
   }
 
   if (G.area === "storm") {
     renderStorm(now, dt);
-    requestAnimationFrame(render);
     return;
   }
 
   if (StoryStaging.renderSpecial(now, dt)) {
     Expedition.render(dt, { x: 0, y: 0 }, now);
-    requestAnimationFrame(render);
     return;
   }
 
   if (G.area === "meta") {
     Finale.render(now, dt);
     Expedition.render(dt, { x: 0, y: 0 }, now);
-    requestAnimationFrame(render);
     return;
   }
 
@@ -2536,7 +2535,7 @@ function render(now) {
     const sx = actor.x * TILE + 2 - cam.x;
     const sy = actor.y * TILE - cam.y;
     if (n.kind === "father") drawPerson(ctx, sx, sy, { coat: "#5a5248", hair: "#3a342c", beard: true, dir: actor.dir, pose: actor.pose });
-    else if (n.kind === "mother") drawPerson(ctx, sx, sy, { coat: "#7a5a5a", hair: "#4a342c", bun: true, dir: actor.dir, pose: actor.pose });
+    else if (n.kind === "mother") drawPerson(ctx, sx, sy, { coat: "#7a5a5a", hair: "#4a342c", bun: true, dir: actor.dir, pose: actor.pose, walk: actor.walk });
     else if (n.kind === "repress") drawPerson(ctx, sx, sy, { coat: "#4a4a55", hood: true, skin: "#b8b8c0", glow: "#7fb3d5", dir: 0 });
     else if (n.kind === "senpai") drawPerson(ctx, sx, sy, { coat: "#c8b890", hair: "#e8dcc0", glow: "#f0e0a8", dir: 3 });
     else if (n.kind === "echo") {
@@ -2569,13 +2568,15 @@ function render(now) {
   // 玩家
   const playerX = StoryStaging.coffin ? 12 * TILE : G.px;
   const playerY = StoryStaging.coffin ? 7.5 * TILE : G.py;
-  drawPerson(ctx, playerX - cam.x, playerY - cam.y, { dir: G.dir, walk: G.walk, coat: "#3a4a6a", ...StoryStaging.playerOptions() });
+  drawPerson(ctx, playerX - cam.x, playerY - cam.y + Cutscenes.playerLift(), { dir: G.dir, walk: G.walk, coat: "#3a4a6a", ...StoryStaging.playerOptions() });
+  Cutscenes.drawLid(ctx, cam);
 
   drawParticles(ctx, cam, false);
 
   // 光影：阴影按像素抖动量化；发光的粒子、碎片与调查标记画在阴影之上。
   Atmosphere.render(ctx, map, cam, now);
   drawParticles(ctx, cam, true);
+  Cutscenes.drawSlit(ctx, cam);
 
   // 碎片闪光
   if (map.shard && !META.shards.includes(map.shard.name)) {
@@ -2624,6 +2625,12 @@ function render(now) {
 
   Expedition.render(dt, cam, now);
   PhenomenonBattle.render(now, dt, cam);
+}
+
+// 演出叠加在所有渲染之上：镜碎与睁眼。
+function render(now) {
+  renderFrame(now);
+  Cutscenes.overlay(ctx);
   requestAnimationFrame(render);
 }
 

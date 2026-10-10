@@ -201,9 +201,11 @@ const Atmosphere = {
     const lights = this.lightsFor(map, cam, t);
     this.lastLights = lights;
     // Lightning lights the whole room at once.
+    // Without ImageData there is nowhere to show the field; skip the work.
+    this.ensure();
+    if (!this.image) return false;
     const extra = Expedition.prefs.motion ? 0 : Math.min(1, Math.max(0, lightning) * 4.5);
     this.compute(lights, mood, extra);
-    if (!this.image) return false;
     this.context.putImageData(this.image, 0, 0);
     c.drawImage(this.canvas, 0, 0);
     return true;
