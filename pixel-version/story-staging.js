@@ -86,7 +86,8 @@ const StoryStaging = {
         const length = Math.hypot(nx - x, ny - y);
         if (distance <= length) {
           const ratio = distance / length;
-          return { ...result, x: x + (nx - x) * ratio, y: y + (ny - y) * ratio, pose: "carry", dir: ny < y ? 3 : ny > y ? 0 : nx < x ? 1 : 2 };
+          // Still walking while she carries the dish; the gait follows her progress.
+          return { ...result, x: x + (nx - x) * ratio, y: y + (ny - y) * ratio, pose: "carry", dir: ny < y ? 3 : ny > y ? 0 : nx < x ? 1 : 2, walk: progress < 1 ? 0.01 + this.carryElapsed * 0.62 : 0 };
         }
         distance -= length;
       }

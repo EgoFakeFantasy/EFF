@@ -2197,6 +2197,83 @@ test("the walk cycle alternates feet, profiles face travel and interaction turns
   game.evaluate("keys.clear()");
 });
 
+/* ---------- Cutscenes at the story's turning points ---------- */
+
+test("leaving the mirror stage shatters the frame without changing transition timing; reduced motion keeps the fade", () => {
+  const game = harness();
+  game.evaluate("ui.start.hidden = true; F = { m1: true, m2: true, m3: true }; Expedition.prefs.motion = false; gotoArea('storm')");
+  assert.equal(game.ids.get("fade").classList.contains("on"), false, "the shatter replaces the black fade");
+  assert.ok(game.evaluate("Cutscenes.shatter && Cutscenes.shatter.shards.length") > 40);
+  game.tick(1600);
+  assert.equal(game.evaluate("G.area"), "storm");
+  assert.equal(game.evaluate("transitionLock"), false);
+  for (let i = 0; i < 160 && game.evaluate("!!Cutscenes.shatter"); i++) game.frame(16);
+  assert.equal(game.evaluate("Cutscenes.shatter"), null, "the shards finish falling");
+  const still = harness();
+  still.evaluate("ui.start.hidden = true; F = { m1: true, m2: true, m3: true }; Expedition.prefs.motion = true; gotoArea('storm')");
+  assert.equal(still.ids.get("fade").classList.contains("on"), true);
+  assert.equal(still.evaluate("Cutscenes.shatter"), null);
+});
+
+test("waking opens the eyes with a blink and a hop, and pauses under utilities", () => {
+  const game = harness();
+  game.evaluate("ui.start.hidden = true; G.area = 'house_empty'; StoryStaging.reset(); buildTileCache(); playScript('bed')");
+  assert.ok(game.evaluate("!!Cutscenes.wake"));
+  assert.equal(game.evaluate("Cutscenes.openness(0.1)"), 0);
+  assert.ok(game.evaluate("Cutscenes.openness(0.5)") < game.evaluate("Cutscenes.openness(0.4)"), "the eyes blink before opening");
+  assert.equal(game.evaluate("Cutscenes.openness(1.1)"), 1);
+  // Frames are clamped to 50 ms, so use real-time sized steps.
+  for (let i = 0; i < 40; i++) game.frame(16);
+  const t = game.evaluate("Cutscenes.wake.t");
+  assert.ok(game.evaluate("Cutscenes.playerLift()") < 0, "the boy springs up as his eyes open");
+  game.ids.get("settingsButton").click();
+  for (let i = 0; i < 20; i++) game.frame(50);
+  assert.equal(game.evaluate("Cutscenes.wake.t"), t);
+  game.document.querySelector("[data-close='settingsDialog']").click();
+  for (let i = 0; i < 40; i++) game.frame(16);
+  assert.equal(game.evaluate("Cutscenes.wake"), null);
+  assert.equal(game.evaluate("Cutscenes.playerLift()"), 0);
+});
+
+test("the coffin lid closes over the sleeper and leaves the scene once the curtain falls", () => {
+  const game = harness();
+  game.evaluate("ui.start.hidden = true; G.area = 'garden'; F = { gardenWoke: true }; StoryStaging.reset(); buildTileCache(); playScript('coffinSleep')");
+  assert.ok(game.evaluate("!!Cutscenes.lid"));
+  assert.equal(game.evaluate("Cutscenes.lidActive()"), true);
+  for (let i = 0; i < 170; i++) game.frame(16);
+  assert.ok(game.evaluate("Cutscenes.lid.t") > 2.5);
+  nextLine(game);
+  assert.equal(game.evaluate("StoryStaging.scene"), "curtain");
+  assert.equal(game.evaluate("Cutscenes.lidActive()"), false);
+});
+
+test("the courtyard cracks in place on the first clash line and dissolves on the third", () => {
+  const game = harness();
+  game.evaluate("ui.start.hidden = true; G.area = 'blood'; F = { sister: true, parents: true }; StoryStaging.reset(); buildTileCache(); playScript('clash')");
+  for (let i = 0; i < 10; i++) game.frame(50);
+  assert.equal(game.evaluate("Cutscenes.clash.progress"), 0);
+  assert.ok(game.evaluate("Cutscenes.clash.cracks.length") >= 10);
+  nextLine(game); nextLine(game);
+  for (let i = 0; i < 10; i++) game.frame(50);
+  assert.equal(game.evaluate("Cutscenes.clash.progress"), 2);
+  assert.ok(game.evaluate("Cutscenes.clash.t") > 0.3);
+  game.evaluate("Expedition.prefs.motion = true");
+  assert.equal(game.evaluate("Cutscenes.collapse(ctx, { x: 0, y: 0 }, 0)"), true, "reduced motion still shows the broken courtyard");
+  game.evaluate("resetRun()");
+  assert.equal(game.evaluate("Cutscenes.clash.progress"), -1);
+});
+
+test("the mother walks while she carries the dish and stops at the table", () => {
+  const game = harness({ [SAVE]: JSON.stringify({ area: "house_family", px: 227, py: 82, flags: { familyWoke: true, father: true }, memories: [], counters: {} }) });
+  game.ids.get("startButton").click();
+  game.evaluate("StoryStaging.carryElapsed = 0; StoryStaging.renderSpecial(performance.now(), 0.8)");
+  const moving = game.value("StoryStaging.npc(MAPS.house_family.npcs.find(n => n.id === 'mother'))");
+  assert.ok(moving.walk > 0);
+  assert.ok(game.evaluate(`personGait({ walk: ${moving.walk}, dir: ${moving.dir} }, 'carry').phase`) >= 0);
+  game.evaluate("StoryStaging.renderSpecial(performance.now(), 5)");
+  assert.equal(game.value("StoryStaging.npc(MAPS.house_family.npcs.find(n => n.id === 'mother'))").walk || 0, 0);
+});
+
 let failed = 0;
 for (const [name, callback] of tests) {
   try { callback(); console.log(`PASS ${name}`); }

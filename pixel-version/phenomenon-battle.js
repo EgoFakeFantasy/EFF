@@ -222,8 +222,10 @@ const PhenomenonBattle = {
       return;
     }
     if (this.phase === "clash") {
-      c.fillStyle = "#0c111b"; c.fillRect(0, 0, VIEW_W, VIEW_H);
       const progress = this.cue.progress || 0, twilight = progress >= 4;
+      // The first line breaks the courtyard itself, in place.
+      if (Cutscenes.collapse(c, cam, progress)) return;
+      c.fillStyle = "#0c111b"; c.fillRect(0, 0, VIEW_W, VIEW_H);
       // The floor falls downward as the red/grey confusion falls upward.
       for (let i = 0; i < 36; i++) {
         const x = Math.floor(hash(i, 8, 7) * VIEW_W), y = (Math.floor(hash(i, 9, 1) * 150) + t * 24) % VIEW_H;
@@ -249,8 +251,8 @@ const PhenomenonBattle = {
         for (let row = -9; row <= 9; row++) { const width = Math.floor(Math.sqrt(81 - row * row)); c.fillStyle = Math.abs(row) > 6 ? "#3b2f40" : color; c.fillRect(Math.round(x - width), Math.round(y + row), width * 2, 1); }
         c.fillStyle = "#dfb2aa"; c.fillRect(Math.round(x - 3), Math.round(y - 5), 3, 2);
       }
+      Cutscenes.dissolve(c, cam, progress);
       if (twilight) { c.fillStyle = "#9d795456"; c.fillRect(0, 0, VIEW_W, VIEW_H); c.fillStyle = "#68503b"; c.fillRect(0, 90, VIEW_W, 102); }
-      if (!Expedition.prefs.motion && progress === 0) { c.fillStyle = "#8d9ba233"; for (let i = 0; i < 30; i++) c.fillRect(Math.floor(hash(i, Math.floor(t * 4), 2) * 320), i * 6, 2, 1); }
       return;
     }
     if (this.phase === "rain-rise") {
