@@ -396,6 +396,62 @@ const PixelArt = {
     c.fillStyle = '#172030'; c.fillRect(x, y, 1, 1);
   },
 
+  // 24×32 actor envelope, anchored to the existing 12×14 collision body.
+  // The drawing never changes position, story flags or ownership decisions.
+  actor(c, x, y, opt = {}) {
+    const pose=opt.pose||'stand', back=opt.dir===3||pose==='mirror';
+    const color=v=>v.length===4?'#'+[...v.slice(1)].map(a=>a+a).join(''):v;
+    const coat=color(opt.coat||'#3a4a6a'),hair=color(opt.hair||'#222222'),skin=color(opt.skin||'#e8c8a8');
+    const gait=personGait(opt,pose),bob=Expedition.prefs.motion?0:gait.bob;
+    const shake=pose==='pain'&&!Expedition.prefs.motion?Math.round(Math.sin(StoryStaging.time*8)):0;
+    c.save();c.translate(Math.round(x)+6+shake,Math.round(y)+8+bob);
+    if(pose==='sleep'||opt.reclined)c.rotate(-Math.PI/2);
+    const lowered=['kneel','eat','sit'].includes(pose)?6:0;
+    const r=(a,b,w,h,col)=>{c.fillStyle=col;c.fillRect(a,b,w,h);};
+    const line=(a,b,n,m,col,width=2)=>{const count=Math.max(1,Math.abs(n-a),Math.abs(m-b));for(let k=0;k<=count;k++)r(Math.round(a+(n-a)*k/count),Math.round(b+(m-b)*k/count),width,width,col);};
+    if(!opt.dead&&!opt.reclined&&pose!=='sleep')r(-7,5-bob,14,2,'#080c1480');
+    let left=[-8,-3+lowered],right=[6,-3+lowered];
+    if(pose==='bound'){left=[-12,-12];right=[10,-12];}
+    else if(pose==='wake'){left=[-10,-19];right=[8,-20];}
+    else if(pose==='pain'){left=[-8,-16];right=[5,-21];}
+    else if(['photo','carry','catch'].includes(pose)){left=[-9,-10+lowered];right=[7,-10+lowered];}
+    else if(pose==='search'){left=[-6,-18];right=[4,-18];}
+    else if(pose==='refuse'){left=[-9,-11];right=[8,-16];}
+    const heart=opt.blood&&opt.heldHeart!==false&&['stand','bound','kneel'].includes(pose);
+    if(heart&&pose!=='bound')right=[9,-7+lowered];
+    // Shoulder outline, jacket seams, collar and independently posed wrists.
+    line(-6,-14+lowered,...left,shade(coat,.42),3);line(4,-14+lowered,...right,shade(coat,.42),3);
+    line(-5,-14+lowered,...left,coat);line(4,-14+lowered,...right,shade(coat,1.1));
+    r(-7,-15+lowered,14,13-lowered,'#111825');r(-6,-14+lowered,12,12-lowered,coat);
+    r(-5,-13+lowered,2,7-lowered,shade(coat,1.5));r(4,-12+lowered,2,8-lowered,shade(coat,.65));
+    r(-2,-14+lowered,4,2,'#bcb4a1');r(-1,-11+lowered,1,8-lowered,shade(coat,.5));
+    r(1,-8+lowered,3,1,shade(coat,1.6));r(2,-7+lowered,2,1,shade(coat,.6));
+    if(lowered){r(-7,2,6,3,shade(coat,.7));r(2,2,6,3,shade(coat,.8));r(-8,5,7,1,'#141822');r(2,5,7,1,'#141822');}
+    else {for(const i of gait.far===1?[1,0]:[0,1]){const lx=gait.side?gait.legX[i]-6:i?2:-5,lift=Expedition.prefs.motion?0:gait.lift[i],dark=i===gait.far;
+      r(lx,-3,4,8-lift,dark?'#202c3c':i?'#313e52':'#263246');r(lx+1,-1,1,5-lift,shade(coat,dark?.9:1.4));r(lx-1,4-lift,5,2,'#101722');r(lx,4-lift,3,1,dark?'#465362':'#687482');}}
+    r(-6,-24+lowered,12,11,'#10131c');r(-5,-23+lowered,10,10,hair);
+    if(!opt.hood){
+      r(-4,-20+lowered,8,6,back?hair:skin);r(-6,-18+lowered,2,3,back?hair:shade(skin,.8));r(4,-18+lowered,2,3,back?hair:shade(skin,.75));
+      r(-4,-23+lowered,3,1,shade(hair,1.9));r(0,-22+lowered,3,1,shade(hair,1.6));r(-5,-21+lowered,4,2,hair);r(1,-21+lowered,3,1,hair);
+      if(!back){const side=opt.dir===1?-1:opt.dir===2?1:0;
+        if(side){r(side>0?-4:2,-20+lowered,3,5,hair);r(side>0?4:-5,-17+lowered,2,2,skin);this.eye(c,side>0?2:-3,-18+lowered,opt,pose);}else{this.eye(c,-3,-18+lowered,opt,pose);this.eye(c,2,-18+lowered,opt,pose);}
+        r(side,-17+lowered,1,1,'#b68b72');r(-1+side,-15+lowered,2,1,'#926958');r(3,-16+lowered,1,2,shade(skin,.8));
+      }else {r(-4,-18+lowered,2,3,shade(hair,1.5));r(-4,-14+lowered,8,1,shade(coat,.5));}
+    }else{r(-6,-23+lowered,12,8,'#465461');r(-4,-21+lowered,8,6,'#151f2b');r(-3,-18+lowered,6,1,'#87a49c');r(-6,-22+lowered,1,7,'#728991');}
+    if(opt.beard){r(-4,-16+lowered,8,2,'#a49c8d');r(-3,-14+lowered,6,1,'#6d695e');r(-4,-21+lowered,2,1,'#b2a79a');}
+    if(opt.bun){r(5,-23+lowered,3,4,hair);r(5,-23+lowered,2,1,shade(hair,1.8));}
+    r(...left,3,3,skin);r(...right,3,3,shade(skin,.9));r(left[0],left[1]+2,2,1,shade(skin,.7));
+    if(pose==='bound'){r(left[0]-1,left[1]+2,4,1,'#876479');r(right[0]-1,right[1]+2,4,1,'#876479');r(-6,-9,12,1,'#75536a');}
+    if(pose==='photo'){r(-5,-10,10,7,'#d1c9b0');r(-4,-9,8,5,'#626e78');r(-1,-8,2,2,'#bba68c');r(-2,-6,4,2,'#475262');r(-4,-6,1,2,'#9c8f7e');r(3,-6,1,2,'#9c8f7e');}
+    if(pose==='carry'){r(-9,-9,19,3,'#d5cdb5');r(-7,-11,14,2,'#70864e');for(const i of [-5,-1,4])r(i,-11,2,1,'#c1b579');}
+    if(pose==='eat'){r(-9,-4,7,3,'#b5bcb1');r(-8,-5,5,2,'#efe4c5');line(6,-5,2,-13,'#b2a27c',1);}
+    if(pose==='catch'){r(-9,-9,4,1,'#a8c9ce');r(6,-9,4,1,'#a8c9ce');r(-7,-8,1,1,'#e3eef1');r(8,-8,1,1,'#e3eef1');}
+    if(opt.blood){for(const [a,b,w,h] of [[2,-19+lowered,2,3],[-3,-16+lowered,1,2],[-4,-12+lowered,3,3],[2,-8+lowered,2,3],[-4,1,2,2],[4,2,1,2],[...left,2,2],[...right,2,2]])r(a,b,w,h,'#751e2e');r(3,-18+lowered,1,1,'#c65458');r(-3,-11+lowered,1,1,'#b94850');}
+    if(heart){const [hx,hy]=right,beat=Expedition.prefs.motion?0:Math.sin(StoryStaging.time*8)>.86?1:0;r(hx+2,hy-4,6,6,'#591628');r(hx+3,hy-5,2,5+beat,'#a93248');r(hx+5,hy-6,2,6+beat,'#b13c48');r(hx+4,hy,2,2,'#892036');r(hx+5,hy-5,1,2,'#d87b70');}
+    if(opt.glow){r(-8,-15+lowered,1,12-lowered,opt.glow);r(7,-15+lowered,1,12-lowered,opt.glow);r(-5,-25+lowered,10,1,opt.glow);}
+    c.restore();
+  },
+
   sceneProps(c, map, cam) {
     const r=(x,y,w,h,col)=>{c.fillStyle=col;c.fillRect(x-cam.x,y-cam.y,w,h);};
     // Connected wooden tiles form one container; no repeated cross-shaped lids.
@@ -419,6 +475,18 @@ const PixelArt = {
       // A rug and skirting organize the living room without blocking passage.
       r(9*16,4*16,6*16,27,warm?'#584631':'#2a2a29');r(9*16+2,4*16+2,6*16-4,23,warm?'#736048':'#393a35');
       for(let i=0;i<6;i++){r(9*16+5+i*14,4*16+4,7,1,warm?'#a68e65':'#555d58');r(9*16+5+i*14,4*16+22,7,1,warm?'#a68e65':'#555d58');}
+      // Living-room light has a source; furniture shares one hard pixel scale.
+      const light=warm?'#d4b985':'#85908b';
+      r(9*16+5,17,38,2,'#494638');r(9*16+6,19,36,12,warm?'#9c9e87':'#455a61');
+      r(9*16+22,19,2,12,'#303e43');r(9*16+6,24,36,1,'#525d59');r(9*16+4,31,40,2,'#766850');
+      this.polygon(c,[[151-cam.x,33-cam.y],[181-cam.x,33-cam.y],[221-cam.x,102-cam.y],[165-cam.x,102-cam.y]],warm?'#caaa5920':'#7f9bb318');
+      for(let y=43;y<94;y+=12)r(159+Math.floor((y-43)/12), y, 30,1,light+'20');
+      // The father's sofa sits behind his feet, while the breakfast table stays at f.
+      r(13*16-6,2*16-1,29,21,'#0c1317');r(13*16-5,2*16,27,13,warm?'#626154':'#3c4548');
+      r(13*16-4,2*16+2,11,7,warm?'#868272':'#515c5d');r(13*16+9,2*16+2,11,7,warm?'#797966':'#485256');
+      r(13*16-6,2*16+11,4,8,'#403f38');r(13*16+19,2*16+11,4,8,'#403f38');r(13*16-2,2*16+18,21,2,'#292b2b');
+      r(10*16-3,2*16+3,24,2,warm?'#bc9761':'#807566');r(10*16-3,2*16+5,24,11,warm?'#826340':'#544d43');r(10*16-2,2*16+7,22,1,warm?'#aa8755':'#6a6052');
+      r(10*16-1,2*16+16,2,6,'#302924');r(10*16+17,2*16+16,2,6,'#302924');
       // One double bed, matching the adjoining bedroom in chapter 054.
       r(5*16+2,8*16+2,27,2,'#776556');r(5*16+3,8*16+4,25,9,'#605c74');r(5*16+4,8*16+4,10,4,'#d0ccbb');r(5*16+17,8*16+4,10,4,'#d0ccbb');
       r(5*16+3,8*16+9,25,1,'#9691a0');r(5*16+3,8*16+13,25,1,'#39313c');
@@ -435,6 +503,17 @@ const PixelArt = {
     }
     if(map===MAPS.blood){
       for(const [x,y] of [[12,7],[12,12],[13,13]]){r(x*16+3,y*16+6,7,3,'#411d22');r(x*16+4,y*16+5,4,1,'#754039');r(x*16+9,y*16+8,3,2,'#231116');}
+      // A ruined courtyard has its own masonry; its link to the house is left open.
+      for(let x=16;x<map.grid[0].length*16-16;x+=32){
+        r(x+2,12,27,2,'#513432');r(x+3,14,25,1,'#291d21');
+        r(x+7,16,2,11,'#38282c');r(x+20,18,1,7,'#462b2a');
+      }
+      for(const [x,y] of [[4,4],[20,5],[24,8],[18,13]]){
+        const ox=x*16,oy=y*16;
+        r(ox-3,oy+5,19,4,'#110e14');r(ox,oy,11,6,'#38282d');r(ox,oy,10,1,'#664740');r(ox+4,oy+2,5,1,'#211a24');r(ox+12,oy+4,4,2,'#51403b');
+      }
+      for(let i=0;i<22;i++){const x=155+(i*17)%70,y=107+(i*11)%39;r(x,y,2+i%3,1,i%3?'#58242b':'#9b4744');}
+      r(13*16-23,15*16-27,2,32,'#1b141b');r(13*16-23,15*16-28,38,2,'#422b2e');r(13*16+14,15*16-27,2,29,'#2b1a21');
       // Burned joints and ash silhouettes emphasize the destroyed guest room.
       r(13*16-1,15*16-8,3,23,'#291721');r(13*16-8,15*16+13,27,2,'#0e0a0d');
     }

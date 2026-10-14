@@ -33,11 +33,13 @@ const PhenomenonBattle = {
     this.dom.phenomenonStage.hidden = true;
     this.dom.historyAnchors.hidden = true;
     delete ui.dialog.dataset.battle;
+    document.body.classList.remove('ownership-active');
   },
 
   onLine(line) {
     if (!this.dom) return;
     const cue = line.stage?.battle;
+    document.body.classList.toggle('ownership-active',cue?.phase==='ownership');
     this.pending = false;
     if (line.stage?.finale) {
       if (this.phase !== "history") this.time = 0;
@@ -98,6 +100,7 @@ const PhenomenonBattle = {
     for (const button of this.dom.battleTargets.children) button.disabled = true;
     this.dom.battleTargets.children[index].classList.add("written");
     NarrativeTrials.onCommit();
+    BattleEventAdapter.observeClaim(index);
     updateDialogStatus();
     return true;
   },
@@ -206,19 +209,31 @@ const PhenomenonBattle = {
       const x = G.px - cam.x + 6, y = G.py - cam.y + 8;
       const bound = !this.claimed[0];
       c.fillStyle = "rgba(18,8,17,.32)"; c.fillRect(0, 0, VIEW_W, VIEW_H);
-      if (bound) {
-        c.strokeStyle = "#a06270";
-        for (let i = 0; i < 7; i++) { c.beginPath(); c.moveTo(i % 2 ? 0 : VIEW_W, 25 + i * 15); c.lineTo(x + (i % 2 ? -7 : 7), y + i % 3 * 3); c.stroke(); }
+      const stroke=(sx,sy,tx,ty,color)=>{
+        c.fillStyle=color;const steps=Math.max(1,Math.ceil(Math.max(Math.abs(tx-sx),Math.abs(ty-sy))));
+        for(let k=0;k<=steps;k++)c.fillRect(Math.round(sx+(tx-sx)*k/steps),Math.round(sy+(ty-sy)*k/steps),1,1);
+      };
+      // Each response removes its own phenomenon rather than simply recoloring a label.
+      const forces=bound?7:this.claimed.every(Boolean)?0:2;
+      for(let i=0;i<forces;i++)stroke(i%2?0:VIEW_W,31+i*13,x+(i%2?-10:10),y-12+i%3*2,'#976779');
+      if(this.claimed[0]){
+        for(const side of [-1,1]){stroke(x+side*14,y-10,x+side*28,y-15,'#899d9c');c.fillStyle='#b8cab2';c.fillRect(Math.round(x+side*15),Math.round(y-11),2,2);}
       }
-      c.font = "9px sans-serif";
-      const claims = ["身体被牵引", "是你亲自杀害了家中的所有人", "陷入逃避而郁郁一生"];
-      const replies = ["不，我拒绝这一切。", "造下这一切的不是我。", "我否定这样的结局。"];
-      for (let i = 0; i < 3; i++) {
-        const bx = 9, by = 24 + i * 16;
-        c.fillStyle = "#140c16df"; c.fillRect(bx - 2, by - 10, 158, 14);
-        c.fillStyle = this.claimed[i] ? "#c7d1b8" : "#c68d91"; c.fillText(this.claimed[i] ? replies[i] : i === 2 && this.cue.progress < 5 ? "……" : claims[i], bx, by);
-        if (this.claimed[i]) { c.fillStyle = "#72a397"; c.fillRect(bx - 3, by - 10, 1, 13); }
-      }
+      // The outsider's pointing stroke assigns blame; it breaks only on the second act.
+      PixelArt.writingPresence(c,268,33);
+      const ax=Math.round(x+15),ay=Math.round(y-7);
+      if(!this.claimed[1]){stroke(263,42,ax,ay,'#b25d70');stroke(ax,ay,ax+7,ay-6,'#b25d70');stroke(ax,ay,ax+8,ay+1,'#b25d70');}
+      else {stroke(263,42,245,49,'#634455');stroke(ax,ay,ax+8,ay-2,'#749b93');c.fillStyle='#12121d';c.fillRect(224,46,16,12);}
+      // The imposed ending narrows a frame around the actual body. Refusal opens it.
+      c.fillStyle=this.claimed[2]?'#4e716c':'#5b3346';
+      const gap=this.claimed[2]?57:25;
+      c.fillRect(Math.round(x-gap),31,1,73);c.fillRect(Math.round(x+gap),31,1,73);
+      c.fillRect(Math.round(x-gap),104,gap*2,1);
+      if(!this.claimed[2])c.fillRect(Math.round(x-gap),31,gap*2,1);
+      else {stroke(x-14,31,x-25,22,'#9abdaa');stroke(x+14,31,x+25,22,'#9abdaa');}
+      c.font='9px sans-serif';
+      const states=['牵引','指认','封闭'];
+      for(let i=0;i<3;i++){const bx=8,by=43+i*19;c.fillStyle='#140c16df';c.fillRect(bx-2,by-10,67,14);c.fillStyle=this.claimed[i]?'#a9cbb8':'#c18b98';c.fillText((this.claimed[i]?'已拒绝 · ':'')+states[i],bx,by);}
       return;
     }
     if (this.phase === "clash") {
