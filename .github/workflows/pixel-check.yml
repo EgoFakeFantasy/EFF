@@ -44,4 +44,5 @@ jobs:
       - run: node --check pixel-version/narrative-trials.js
       - run: node --check pixel-version/narrative-agency.js
       - run: node tests/pixel-regression.cjs
-      - run: node --test tests/phenomenon-runtime.test.cjs tests/local-host.test.cjs
+      - run: node --test tests/phenomenon-runtime.test.cjs tests/local-host.test.cjs tests/local-agents.test.cjs
+      - run: for f in local-version/*.js desktop/*.cjs; do node --check "$f"; done

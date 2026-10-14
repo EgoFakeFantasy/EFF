@@ -1,4 +1,4 @@
-# EFF 本地版 0.2：现象战争原型
+# EFF 本地版 0.3：本地双代理现象战争
 
 以最新箱庭版为基础，提供可独立启动的 Windows x64 便携程序、文件存档和可重放的技术争夺。完整技术框架见 [实施文档](../docs/eff-local-implementation.md)。
 
@@ -20,9 +20,11 @@
 
 ## 模型状态
 
-默认不使用模型，两个策略侧均有确定性规则。可在主菜单填写**自己已安装**的 Ollama 模型名称并开启建议；游戏仅请求 `127.0.0.1:11434/api/chat`，不下载、不安装模型，不使用云服务。每次请求限制 8 秒、2048 上下文、320 输出 token 与 32 KiB 响应；停止 AI 后不接受旧结果。
+默认不使用模型，两侧均有确定性规则。启动自己已有的 Ollama，在 EFF 主菜单点击“检测服务与模型”，选择本地模型与预算，再点“启用双代理”。压抑侧与外来者共享权重、分别创建上下文并依次生成；外来者看不到玩家当前草案。模型不直接决定胜负，双方提案需玩家审阅，再由核心单次仲裁。
 
-此版本已经实现可选模型接口、schema 校验、超时和取消，但尚未使用真实权重进行硬件基准。不要把接口测试称为双生成模型的实际对战。外来者当前采用固定种子策略；完整双模型轮流生成、硬件选档和 Wasm 模块留待后续。
+每侧可选 8/20/45 秒预算；错误或超时单侧回退并显示来源，取消后丢弃旧结果。云模型不会启用，不下载或安装模型。游戏仅连接固定的本地 Ollama API。主菜单可以停止 AI；自己的 Ollama 服务仍由自己管理。
+
+已使用本机 qwen3.5:4b 完成真实六份双侧生成与实际窗口对战；不把这一台机器的测量作为所有硬件和模型的保证。实现、测量和范围见[本地 AI 说明](../docs/eff-local-ai.md)。本轮支持有限候选策略规划，Wasm 和引擎演化属于后续。
 
 ## 构建与测试
 
@@ -31,7 +33,7 @@
 ```sh
 node desktop/package-local.cjs ELECTRON_DIRECTORY NEW_OUTPUT_DIRECTORY
 node tests/pixel-regression.cjs
-node --test tests/phenomenon-runtime.test.cjs tests/local-host.test.cjs
+node --test tests/phenomenon-runtime.test.cjs tests/local-host.test.cjs tests/local-agents.test.cjs
 ```
 
 构建只复制受审计的前端和四个宿主模块，不复制小说原稿、用户存档或开发工具。输出目录必须是新目录，不自动删掉旧版本。`EFF-build-manifest.json` 记录随包源码 SHA256；摘要用于定位构建与意外损坏，不保证设备所有者无法修改游戏。
@@ -41,6 +43,9 @@ node --test tests/phenomenon-runtime.test.cjs tests/local-host.test.cjs
 ```sh
 node tests/local-native-smoke.cjs
 node tests/local-native-flow.cjs
+# 已有本地服务和权重时，设置 EFF_LIVE_MODEL 后：
+node tests/local-model-live.cjs
+node tests/local-native-ai.cjs
 ```
 
 测试使用独立的新数据目录，覆盖真实离线启动、渲染器 Node 隔离、文件存档、旧档、规划暂停与刷新、原拒绝段衔接、身份揭示和 BAD END 05。Node VM 仅用于原剧情回归，不用于执行研究规则。

@@ -27,8 +27,10 @@ async function start(){
    return new Response(await fs.readFile(real),{headers});
   }catch{return new Response('',{status:404});}
  });
- ipcMain.on('eff:bootstrap',(event)=>{try{checkSender(event);event.returnValue={...store.bootstrap(),model:{enabled:model.enabled,name:model.model}};}catch{event.returnValue={version:1,entries:{}};}});
+ ipcMain.on('eff:bootstrap',(event)=>{try{checkSender(event);event.returnValue={...store.bootstrap(),model:{...model.config(),name:model.model}};}catch{event.returnValue={version:1,entries:{}};}});
  handle('eff:persist',(entries,event)=>{const mode=new URL(event.senderFrame.url).searchParams.get('mode')==='tech'?'tech':'story';if(entries&&Object.keys(entries).some(key=>!key.startsWith(mode+':')))throw Error('PROFILE_NOT_ALLOWED');return store.commit(entries);});
+ handle('eff:model-status',()=>model.status());
+ handle('eff:model-plan',request=>model.plan(request));
  handle('eff:model-configure',config=>model.configure(config));
  handle('eff:model-propose',request=>model.propose(request));
  handle('eff:model-cancel',()=>{model.cancel();return {ok:true};});
