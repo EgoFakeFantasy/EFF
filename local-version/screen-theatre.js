@@ -7,15 +7,18 @@ const ScreenTheatre={dom:null,session:null,focused:true,serial:0,seen:new Set(),
  init(){
   if(!EFFLocal.enabled)return;
   const dialog=document.createElement('dialog');dialog.id='screenTheatre';dialog.className='screen-theatre';dialog.setAttribute('aria-label','现象争夺的全屏演出');
-  dialog.innerHTML=`<canvas class="theatre-code" width="640" height="360" aria-hidden="true"></canvas><div class="theatre-world" aria-hidden="true"></div><div class="theatre-new-world" aria-hidden="true"><div class="theatre-window-bar"><span>EFF / 无中归来者</span><span class="theatre-instance"></span></div><div class="theatre-restored"></div></div><div class="theatre-veil" aria-hidden="true"></div><section class="theatre-writing"><p class="theatre-kicker"></p><h2 class="theatre-title"></h2><p class="theatre-subtitle"></p><div class="theatre-verses"><del tabindex="0" aria-label="原先的完整语句"></del><ins tabindex="0" aria-label="改写后的完整语句"></ins><p></p></div></section><div class="theatre-boot"><span>EFF</span><strong>当前运行表面已断裂</strong><p></p></div><footer class="theatre-controls"><span class="theatre-beat" role="status" aria-live="polite"></span><button class="theatre-pause" type="button">暂停演出</button><button class="theatre-skip" type="button">略过演出</button></footer>`;
-  document.body.append(dialog);this.dom={dialog,code:dialog.querySelector('.theatre-code'),world:dialog.querySelector('.theatre-world'),newWorld:dialog.querySelector('.theatre-new-world'),restored:dialog.querySelector('.theatre-restored'),instance:dialog.querySelector('.theatre-instance'),kicker:dialog.querySelector('.theatre-kicker'),title:dialog.querySelector('.theatre-title'),subtitle:dialog.querySelector('.theatre-subtitle'),verses:dialog.querySelector('.theatre-verses'),boot:dialog.querySelector('.theatre-boot'),beat:dialog.querySelector('.theatre-beat'),pause:dialog.querySelector('.theatre-pause')};
+  dialog.innerHTML=`<canvas class="theatre-code" width="640" height="360" aria-hidden="true"></canvas><canvas class="theatre-live" width="640" height="384" aria-hidden="true"></canvas><div class="theatre-world" aria-hidden="true"></div><div class="theatre-new-world" aria-hidden="true"><div class="theatre-window-bar"><span>EFF / 无中归来者</span><span class="theatre-instance"></span></div><div class="theatre-restored"></div></div><div class="theatre-veil" aria-hidden="true"></div><section class="theatre-writing"><p class="theatre-kicker"></p><h2 class="theatre-title"></h2><p class="theatre-subtitle"></p><div class="theatre-verses"><del tabindex="0" aria-label="原先的完整语句"></del><ins tabindex="0" aria-label="改写后的完整语句"></ins><p></p></div></section><div class="theatre-boot"><span>EFF</span><strong>当前运行表面已断裂</strong><p></p></div><footer class="theatre-controls"><span class="theatre-beat" role="status" aria-live="polite"></span><button class="theatre-pause" type="button">暂停演出</button><button class="theatre-skip" type="button">略过演出</button></footer>`;
+  document.body.append(dialog);this.dom={dialog,code:dialog.querySelector('.theatre-code'),world:dialog.querySelector('.theatre-world'),live:dialog.querySelector('.theatre-live'),newWorld:dialog.querySelector('.theatre-new-world'),restored:dialog.querySelector('.theatre-restored'),instance:dialog.querySelector('.theatre-instance'),kicker:dialog.querySelector('.theatre-kicker'),title:dialog.querySelector('.theatre-title'),subtitle:dialog.querySelector('.theatre-subtitle'),verses:dialog.querySelector('.theatre-verses'),boot:dialog.querySelector('.theatre-boot'),beat:dialog.querySelector('.theatre-beat'),pause:dialog.querySelector('.theatre-pause')};
   dialog.querySelector('.theatre-skip').addEventListener('click',()=>this.finish('skip'));
-  this.dom.pause.addEventListener('click',()=>{if(!this.session)return;this.session.paused=!this.session.paused;this.dom.pause.textContent=this.session.paused?'继续演出':'暂停演出';});
+  this.dom.pause.addEventListener('click',()=>{if(!this.session)return;this.session.paused=!this.session.paused;WorldStage.input.clear();this.dom.pause.textContent=this.session.paused?'继续演出':'暂停演出';});
   dialog.addEventListener('cancel',event=>{event.preventDefault();this.finish('skip');});
   document.addEventListener('keydown',event=>{
    if(!this.active())return;
+   const reading=event.target?.closest?.('.theatre-verses');
+   if(reading&&event.key.startsWith('Arrow'))return;
    if(event.key==='Escape'){event.preventDefault();this.finish('skip');}
    else if(event.code==='Space'&&!event.repeat){event.preventDefault();this.dom.pause.click();}
+   else if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(event.key.toLowerCase())&&!this.session.paused&&!WorldStage.paused()){WorldStage.input.add(event.key.toLowerCase());event.preventDefault();}
    if(!['Tab','Shift','Control','Alt','Meta'].includes(event.key))event.stopImmediatePropagation();
   },true);
   window.addEventListener('blur',()=>{this.focused=false;});window.addEventListener('focus',()=>{this.focused=true;});
@@ -75,14 +78,15 @@ const ScreenTheatre={dom:null,session:null,focused:true,serial:0,seen:new Set(),
   this.session.frame=requestAnimationFrame(loop);return promise;
  },
  replace(s){
-  if(s.rebuilt||!s.plan.rebuild)return;s.rebuilt=true;
-  try{
-   const receipt=s.rebuild?s.rebuild():{generation:++this.projection};
-   this.projection=Math.max(this.projection,receipt?.generation||this.projection+1);
-   this.dom.instance.textContent='INSTANCE '+String(receipt?.generation||this.projection).padStart(2,'0')+' / RULE '+(receipt?.ruleset||1);
-   // Capture the rebuilt live surface, including its fresh runtime state.
-   this.dom.restored.replaceChildren(this.snapshot());this.dom.dialog.dataset.rebuilt='true';if(typeof Sfx!=='undefined')Sfx.play('shard');
-  }catch(error){s.rebuildError=error.message;this.dom.subtitle.textContent='检查点重建未通过；保留已确认的原运行状态。';}
+  if(s.rebuilt||!s.plan.rebuild)return s.rebuildTask;s.rebuilt=true;
+  s.rebuildTask=(async()=>{
+   try{
+    const receipt=s.rebuild?await s.rebuild():{generation:++this.projection};if(this.session!==s)return;
+    this.projection=Math.max(this.projection,receipt?.generation||this.projection+1);
+    this.dom.instance.textContent='INSTANCE '+String(receipt?.generation||this.projection).padStart(2,'0')+' / RULE '+(receipt?.ruleset||1);
+    this.dom.restored.replaceChildren(this.snapshot());this.dom.dialog.dataset.rebuilt='true';if(typeof Sfx!=='undefined')Sfx.play('shard');
+   }catch(error){s.rebuildError=error.message;if(this.session===s)this.dom.subtitle.textContent='检查点重建未通过；保留已确认的原运行状态。';}
+  })();return s.rebuildTask;
  },
  paint(s){
   const p=s.reduced?0.67:Math.min(1,s.elapsed/s.plan.duration),collapse=s.plan.rebuild||s.plan.kind==='occupation';
@@ -102,6 +106,8 @@ const ScreenTheatre={dom:null,session:null,focused:true,serial:0,seen:new Set(),
   this.dom.newWorld.style.opacity=String(recovery);this.dom.newWorld.style.transform=s.reduced?'none':`translateY(${Math.round((1-recovery)*h*.22)}px) scale(${(.24+recovery*.76).toFixed(4)})`;
   this.dom.world.style.opacity=collapse&&p>.62?'0':'1';
   this.dom.code.style.opacity=collapse&&p>=.48&&p<.62?'0':String(.32+Math.min(1,p/.3)*.68);
+  WorldStage.paintTheatre(this.dom.live,s.plan,p,s.reduced);this.dom.live.style.opacity=collapse&&p>=.48&&p<.62?'0':'1';
+  if(collapse&&p>.62)for(const c of this.dom.restored.querySelectorAll('canvas[data-world-viewport]'))WorldStage.blit(c,WorldStage.draw({reveal:.18,tear:0}));
   this.drawCode(s,p);this.dom.verses.style.opacity=collapse&&p>.46&&p<.9?'0':'1';
  },
  drawCode(s,p){
@@ -134,24 +140,31 @@ const ScreenTheatre={dom:null,session:null,focused:true,serial:0,seen:new Set(),
  },
  finish(reason='complete'){
   const s=this.session;if(!s)return;
-  if(reason!=='cancel')this.replace(s);
+  if(reason==='cancel'){this.closeSession(s,reason);return;}
+  if(s.finishing)return;s.finishing=true;if(s.frame!==null)cancelAnimationFrame(s.frame);
+  if(s.plan.rebuild){void Promise.resolve(this.replace(s)).then(()=>{if(this.session===s)this.closeSession(s,reason);});}
+  else this.closeSession(s,reason);
+ },
+ closeSession(s,reason){
   this.session=null;if(s.frame!==null)cancelAnimationFrame(s.frame);
   this.dom.dialog.close();delete this.dom.dialog.dataset.rebuilt;this.dom.world.replaceChildren();this.dom.restored.replaceChildren();document.body.style.overflow=this.oldOverflow||'';
-  clearInput();lastT=performance.now();s.resolve({cancelled:reason==='cancel',rebuilt:s.rebuilt&&!s.rebuildError,error:s.rebuildError||s.paintError});
+  WorldStage.input.clear();clearInput();lastT=performance.now();s.resolve({cancelled:reason==='cancel',rebuilt:s.rebuilt&&!s.rebuildError,error:s.rebuildError||s.paintError});
   if(typeof Expedition!=='undefined')Expedition.focusGameplay();
  },
  cancel(){this.finish('cancel');},
  reset(){this.cancel();this.seen.clear();this.projection=1;},
  async round(state,rebuild){return this.present(SpectaclePlan.round(state),{rebuild});},
- onFinaleLine(line){if(!this.enabled()||!line.stage?.finale)return;const plan=SpectaclePlan.finale(line,{node:Finale.node(),step:Finale.step(),intervening:Finale.intervening(),rewritten:F.finaleRewritten});if(plan)void this.present(plan,{key:'line:'+Finale.node()+':'+Finale.step()+':'+(F.finaleRewritten?'r':'p')+':'+Finale.offset+':'+dialogIndex});},
+ onFinaleLine(line){if(!this.enabled()||!line.stage?.finale)return;void WorldStage.finale();const plan=SpectaclePlan.finale(line,{node:Finale.node(),step:Finale.step(),intervening:Finale.intervening(),rewritten:F.finaleRewritten});if(plan)void this.present(plan,{key:'line:'+Finale.node()+':'+Finale.step()+':'+(F.finaleRewritten?'r':'p')+':'+Finale.offset+':'+dialogIndex});},
  onFinaleAction(option){
+  if(this.enabled()&&G.area==='meta')void WorldStage.finale();
   const plan=SpectaclePlan.action(option.action,{step:Finale.step(),quote:option.action==='summonUnconscious'?Finale.text(FinaleScenes.meta_state_3.text[Finale.requestIndex()]):''});
-  if(plan)void this.present(plan,{rebuild:option.action==='rewriteChapter'?()=>{buildTileCache();return {generation:++this.projection,ruleset:1};}:undefined});
+  if(plan)void this.present(plan,{rebuild:option.action==='rewriteChapter'?async()=>{await WorldStage.finale();const receipt=await WorldStage.rebuild();buildTileCache();return receipt;}:undefined});
  },
- preview(){
+ async preview(){
+  if(!this.enabled())return {skipped:true};
   const base=PhenomenonRuntime.initial({battleId:'court-preview',seed:42});let state=base;
   for(const target of ['body','attribution','bad_owned'])state=PhenomenonRuntime.resolveRound(state,AgentPolicies.make(state,target),AgentPolicies.intruder(state));
   let engine=VirtualEngine.instantiate(PhenomenonRuntime.checkpoint(state));
-  return this.present(SpectaclePlan.round(state),{preview:true,rebuild:()=>{engine=VirtualEngine.replace(engine,PhenomenonRuntime.checkpoint(state));return engine;}});
+  return WorldStage.preview(state,()=>this.present(SpectaclePlan.round(state),{preview:true,rebuild:async()=>{await WorldStage.rebuild();engine=VirtualEngine.replace(engine,PhenomenonRuntime.checkpoint(state));return engine;}}));
  }
 };

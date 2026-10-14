@@ -2,7 +2,8 @@
 const {contextBridge,ipcRenderer}=require('electron');
 const bootstrap=ipcRenderer.sendSync('eff:bootstrap');
 contextBridge.exposeInMainWorld('effDesktop',Object.freeze({
- version:'0.4.1',bootstrap,
+ version:'0.5.0',bootstrap,
+ worldCommand:request=>ipcRenderer.invoke('eff:world',request),
  persist:entries=>ipcRenderer.invoke('eff:persist',entries),
  exportSave:()=>ipcRenderer.invoke('eff:export'),
  importSave:profile=>ipcRenderer.invoke('eff:import',profile),

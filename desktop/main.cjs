@@ -3,6 +3,8 @@ const {app,BrowserWindow,ipcMain,protocol,session,dialog,Menu}=require('electron
 const path=require('node:path'),fs=require('node:fs/promises');
 const {SaveStore,importData}=require('./storage.cjs');
 const {ModelClient}=require('./model-client.cjs');
+const {WorldHost}=require('./world-host.cjs');
+const world=new WorldHost((...args)=>require('electron').utilityProcess.fork(...args));
 protocol.registerSchemesAsPrivileged([{scheme:'eff',privileges:{standard:true,secure:true,supportFetchAPI:true}}]);
 app.setName('EFF Local');
 if(process.env.EFF_DATA_DIR)app.setPath('userData',path.resolve(process.env.EFF_DATA_DIR));
@@ -29,6 +31,7 @@ async function start(){
  });
  ipcMain.on('eff:bootstrap',(event)=>{try{checkSender(event);event.returnValue={...store.bootstrap(),model:{...model.config(),name:model.model}};}catch{event.returnValue={version:1,entries:{}};}});
  handle('eff:persist',(entries,event)=>{const mode=new URL(event.senderFrame.url).searchParams.get('mode')==='tech'?'tech':'story';if(entries&&Object.keys(entries).some(key=>!key.startsWith(mode+':')))throw Error('PROFILE_NOT_ALLOWED');return store.commit(entries);});
+ handle('eff:world',request=>world.dispatch(request));
  handle('eff:model-status',()=>model.status());
  handle('eff:model-plan',request=>model.plan(request));
  handle('eff:model-configure',config=>model.configure(config));
@@ -48,13 +51,14 @@ async function start(){
  window=new BrowserWindow({width:1240,height:940,minWidth:760,minHeight:620,show:false,title:'EFF · 无中归来者 · 本地版',backgroundColor:'#0b101b',webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,sandbox:true,nodeIntegration:false,webSecurity:true,spellcheck:false}});
  Menu.setApplicationMenu(null);
  window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
- window.webContents.on('will-navigate',(event,url)=>{if(!trusted(url))event.preventDefault();});
+ window.webContents.on('will-navigate',(event,url)=>{if(!trusted(url))event.preventDefault();else void world.dispatch({operation:'dispose'}).catch(()=>{});});
+ window.webContents.on('render-process-gone',()=>{void world.dispatch({operation:'dispose'}).catch(()=>{});});
  window.webContents.on('will-attach-webview',event=>event.preventDefault());
  session.defaultSession.on('will-download',event=>event.preventDefault());
  window.on('close',event=>{
   if(closing)return;event.preventDefault();closing=true;model.close();
   const finish=async()=>{try{await Promise.race([window.webContents.executeJavaScript('window.EFFLocal ? window.EFFLocal.flush() : null'),new Promise(resolve=>setTimeout(resolve,2000))]);await store.flush();}catch{}finally{window.destroy();app.quit();}};
-  void finish();
+  void world.close().then(finish,finish);
  });
  window.once('ready-to-show',()=>window.show());
  await window.loadURL('eff://game/local-version/index.html');

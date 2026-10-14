@@ -10,7 +10,7 @@ const execFile=require('node:util').promisify(require('node:child_process').exec
  await fs.mkdir(dest,{recursive:true});await fs.cp(runtimeRoot,dest,{recursive:true});await fs.rename(path.join(dest,'electron.exe'),path.join(dest,'EFF.exe'));
  const appRoot=path.join(dest,'resources','app');await fs.mkdir(appRoot,{recursive:true});
  for(const dir of ['pixel-version','local-version'])await fs.cp(path.join(source,dir),path.join(appRoot,dir),{recursive:true});
- await fs.mkdir(path.join(appRoot,'desktop'));for(const name of ['main.cjs','preload.cjs','storage.cjs','model-client.cjs'])await fs.copyFile(path.join(__dirname,name),path.join(appRoot,'desktop',name));
+ await fs.mkdir(path.join(appRoot,'desktop'));for(const name of ['main.cjs','preload.cjs','storage.cjs','model-client.cjs','world-host.cjs','world-worker.cjs'])await fs.copyFile(path.join(__dirname,name),path.join(appRoot,'desktop',name));
  await fs.writeFile(path.join(appRoot,'package.json'),JSON.stringify({name:'eff-local',productName:'EFF Local',version,main:'desktop/main.cjs',private:true},null,2));
  let sourceRevision='unknown',sourceDirty=true;try{sourceRevision=(await execFile('git',['rev-parse','HEAD'],{cwd:source,timeout:5000})).stdout.trim();sourceDirty=Boolean((await execFile('git',['status','--porcelain'],{cwd:source,timeout:5000})).stdout.trim());}catch{}
  const files={};async function walk(dir){for(const entry of await fs.readdir(dir,{withFileTypes:true})){const p=path.join(dir,entry.name);if(entry.isDirectory())await walk(p);else files[path.relative(appRoot,p).replaceAll('\\','/')]=crypto.createHash('sha256').update(await fs.readFile(p)).digest('hex');}}await walk(appRoot);

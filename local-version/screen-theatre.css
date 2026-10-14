@@ -28,3 +28,5 @@
 @media(max-width:700px){.theatre-title{font-size:30px}.theatre-verses{margin-top:3vh}.theatre-verses del,.theatre-verses ins,.theatre-verses>p{font-size:21px}.theatre-controls{padding-inline:12px;gap:6px}.theatre-controls button{padding:8px 9px}.theatre-subtitle{font-size:11px}}
 
 .screen-theatre[data-tone="intruder"] .theatre-verses ins{color:#e5a8b5;border-color:#a05f76;box-shadow:inset 0 -2px #b86b80}
+
+.theatre-live{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;z-index:1;pointer-events:none}.theatre-world{z-index:2}.theatre-writing{z-index:5}.theatre-new-world{z-index:4}.theatre-veil{z-index:3}

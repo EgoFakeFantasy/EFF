@@ -1,4 +1,4 @@
-# EFF 本地版 0.4：本地双代理现象战争
+# EFF 本地版 0.5：本地双代理现象战争
 
 以最新箱庭版为基础，提供可独立启动的 Windows x64 便携程序、文件存档和可重放的技术争夺。完整技术框架见 [实施文档](../docs/eff-local-implementation.md)。
 
@@ -37,10 +37,10 @@
 ```sh
 node desktop/package-local.cjs ELECTRON_DIRECTORY NEW_OUTPUT_DIRECTORY
 node tests/pixel-regression.cjs
-node --test tests/phenomenon-runtime.test.cjs tests/local-host.test.cjs tests/local-agents.test.cjs tests/spectacle-plan.test.cjs
+node --test tests/phenomenon-runtime.test.cjs tests/local-host.test.cjs tests/local-agents.test.cjs tests/spectacle-plan.test.cjs tests/world-runtime.test.cjs
 ```
 
-构建只复制受审计的前端和四个宿主模块，不复制小说原稿、用户存档或开发工具。输出目录必须是新目录，不自动删掉旧版本。`EFF-build-manifest.json` 记录随包源码 SHA256；摘要用于定位构建与意外损坏，不保证设备所有者无法修改游戏。
+构建只复制受审计的前端和六个宿主模块，不复制小说原稿、用户存档或开发工具。输出目录必须是新目录，不自动删掉旧版本。`EFF-build-manifest.json` 记录随包源码 SHA256；摘要用于定位构建与意外损坏，不保证设备所有者无法修改游戏。
 
 真实窗口测试需已有 Playwright，设置 `EFF_ELECTRON_PATH` 后运行：
 
@@ -48,9 +48,12 @@ node --test tests/phenomenon-runtime.test.cjs tests/local-host.test.cjs tests/lo
 node tests/local-native-smoke.cjs
 node tests/local-native-flow.cjs
 node tests/local-native-spectacle.cjs
+node tests/local-native-world.cjs
 # 已有本地服务和权重时，设置 EFF_LIVE_MODEL 后：
 node tests/local-model-live.cjs
 node tests/local-native-ai.cjs
 ```
 
 测试使用独立的新数据目录，覆盖真实离线启动、渲染器 Node 隔离、文件存档、旧档、规划暂停与刷新、原拒绝段衔接、身份揭示和 BAD END 05。Node VM 仅用于原剧情回归，不用于执行研究规则。
+
+0.5 的[动态世界说明](../docs/eff-live-world.md)记录实际的操控链、结局碰撞边界、GPU 合成、原文衔接和子进程实例切换。原文庭院用 WASD 感受控制权；技术窗口点击庭院后可用 WASD／方向键，触屏可用移动按钮。
