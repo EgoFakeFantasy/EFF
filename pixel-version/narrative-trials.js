@@ -292,9 +292,12 @@ const NarrativeTrials = {
     PixelArt.moon(c, 268, 48, 23);
     c.fillStyle = "#251e2766"; c.fillRect(252, 25, 37, 45);
     c.fillStyle = "#9e805540"; c.fillRect(0, 147, 320, 2);
-    drawPerson(c, 153, 156, { coat: "#3b475a", hair: "#20232b", skin: "#d9b89b", dir: 3 });
-    c.fillStyle = "#dec29b"; c.fillRect(143, 154, 8, 3); c.fillRect(165, 154, 8, 3);
-    c.fillStyle = "#4c657c"; c.fillRect(143, 157, 10, 2); c.fillRect(163, 157, 10, 2);
+    drawPerson(c, 153, 145, { pose: 'catch', coat: "#3b475a", hair: "#20232b", skin: "#d9b89b", dir: 3 });
+    // Hands belong to the actor's catch pose. Visible water grows with retained keys.
+    const kept=this.keyNames.filter((_,i)=>this.rain.mask&1<<i).length;
+    c.fillStyle='#89b0b7';
+    for(let i=0;i<kept;i++){c.fillRect(151+i*4,143,2,1);c.fillRect(149+i*5,152,2,1);}
+    c.fillStyle='#dcbd7a';for(let i=0;i<kept;i++)c.fillRect(150+i*6,157,3,1);
     return true;
   },
 

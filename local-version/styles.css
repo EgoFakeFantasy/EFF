@@ -1,0 +1,32 @@
+/* Shared edition UI. No rules hide the original text. */
+.repression-panel { width: min(1000px, calc(100vw - 36px)); max-height: 90vh; padding: 24px; border: 1px solid #657b88; color: #dfd8c3; background: #0c1422; line-height: 1.65; overflow-y: auto; }
+.repression-panel::backdrop { background: #02060ddc; }
+.tech-head { display: flex; gap: 16px; align-items: center; justify-content: space-between; }
+.tech-head h2 { margin: 0; font-size: 24px; font-weight: 500; }
+.tech-kicker { margin: 0 0 4px; color: #a7c2b5; font-size: 11px; letter-spacing: .14em; }
+.tech-scope { font-size: 13px; color: #acb7c7; }
+#techCanvas { display: block; width: 640px; height: auto; max-width: none; margin: 12px auto; image-rendering: pixelated; }
+.tech-state { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
+.tech-state p { padding: 10px; margin: 0; background: #1a2635; font-size: 13px; }
+.tech-state strong { display: block; color: #cfb889; font-weight: 500; }
+.tech-controls { display: grid; grid-template-columns: 1fr 1.5fr .5fr; gap: 12px; margin: 18px 0; }
+.tech-controls label { display: flex; flex-direction: column; font-size: 12px; color: #a2b4c6; gap: 6px; }
+.tech-controls select { padding: 9px; background: #172334; color: #dedacb; border: 1px solid #415366; font: inherit; font-size: 13px; }
+.tech-draft { background: #101d2b; padding: 12px 16px; border-left: 2px solid #88b5a7; }
+.tech-draft p { margin: 4px 0; }
+#techSource { color: #a0b5b2; font-size: 12px; }
+#techEditor { display: block; width: 100%; background: #080f19; color: #bdd9cd; padding: 12px; border: 1px solid #43515e; margin: 8px 0; resize: vertical; font: 12px/1.55 Consolas, monospace; }
+.tech-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
+.tech-actions button { min-height: 42px; padding: 9px 15px; }
+.tech-status { color: #dfc18e; background: #1b2431; padding: 8px 12px; min-height: 36px; font-size: 13px; }
+.tech-trace { font-size: 12px; color: #aabcc6; }
+.tech-trace pre { overflow-x: auto; white-space: pre-wrap; }
+.tech-trace li { margin: 10px 0; white-space: pre-line; border-left: 2px solid #495f6b; padding-left: 12px; }
+.tech-result { color: #b2cbb8; font-size: 13px; border-top: 1px solid #42575a; margin-top: 16px; }
+.tech-foot { color: #7c8f9e; font-size: 11px; }
+@media (max-width: 700px) { .repression-panel { padding: 14px; } #techCanvas { width: 320px; } .tech-controls { grid-template-columns: 1fr; gap: 8px; } .tech-state p { font-size: 11px; } }
+
+.tech-budget { margin: 0; font-size: 12px; color: #ccbd95; }
+@media (max-height: 800px) { #techCanvas { width: 320px; margin: 8px auto; } .repression-panel { padding: 16px; } .tech-controls { margin-block: 10px; } }
+
+.local-save-status { margin: -14px 0 12px; color: #8ea69e; text-align: right; font-size: 10px; line-height: 1.5; }

@@ -73,13 +73,14 @@ python -m http.server 4179
 | `pixel-version/phenomenon-battle.js` | 现象争夺、过去锚点与过程改写 |
 | `pixel-version/narrative-agency.js` | 身体合一、自我归属、回写前提调查和研究院尾声 |
 | `pixel-version/narrative-trials.js` | 家庭停留概率、庭院反抗时间、黄昏接雨与对应检查点 |
-| `pixel-version/pixel-art.js` | 像素头像、人物细节、材质和舞台绘制 |
+| `pixel-version/pixel-art.js` | 像素演员、姿态、头像、材质和舞台绘制 |
 | `pixel-version/atmosphere.js` | 区域光源与抖动量化的光影层 |
 | `pixel-version/play-aids.js` | 调查标记与进度、碎片共鸣、脚步、自动与快进已读 |
 | `pixel-version/cutscenes.js` | 镜碎、棺盖、睁眼与庭院崩坏等转折演出 |
 | `pixel-version/music.js` | 程序化区域主题与转折音效 |
 | `pixel-version/ending-art.js` | 九种结局的像素插图 |
 | `tests/pixel-regression.cjs` | 箱庭版流程回归测试 |
+| `tests/pixel-art-browser.cjs` | 可选的真实 Edge 美术与操作布局检查 |
 
 安装 Node.js 后，从仓库根目录运行：
 
@@ -89,8 +90,17 @@ node tests/pixel-regression.cjs
 
 回归测试使用 Node VM 与模拟 DOM / Canvas，检查剧情互动、结局、存档和操作边界；它不能替代真实浏览器中的视觉、音频与触屏体验检查。GitHub Actions 的 `Check pixel game` 工作流负责自动检查。
 
+本轮人物动作、庭院夺权、接雨与身体合一的画面规则及可选浏览器验收，见[像素演出样段说明](./docs/pixel-art-slice.md)。
+
 ## 部署
 
 `main` 已包含当前箱庭版。推送到 `main` 后，GitHub Actions 的 `Deploy static game to GitHub Pages` 工作流发布仓库根目录；也可手动触发。三个版本分别保留各自路径。
 
 部署到其他静态托管服务时，上传完整仓库站点文件并保留目录结构即可。
+
+
+## 本地新版本：现象战争原型
+
+新增独立入口 [local-version](./local-version/README.md) 与 Electron Windows 宿主，复用当前箱庭剧情、美术、过场和音乐。普通模式保持原九种结局；技术模式增加数据式规则编辑、固定策略双侧提案、确定性仲裁与事件重放。模型是可选建议来源，默认离线、无模型也可游玩。
+
+实现框架、叙事边界和后续阶段见[本地版技术文档](./docs/eff-local-implementation.md)。此新增入口不改变网站根目录的原版入口。

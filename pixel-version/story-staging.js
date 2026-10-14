@@ -55,6 +55,12 @@ const StoryStaging = {
   },
 
   camera(map, fallback) {
+    // This close framing is exclusive to the stationary ownership act. The
+    // unused bottom of the map sits behind text; exploration keeps its bounds.
+    if (dialogActive && PhenomenonBattle.phase === 'ownership') return {
+      x: Math.max(0, Math.min(map.grid[0].length * TILE - VIEW_W, G.px + 6 - VIEW_W / 2)),
+      y: Math.max(0, G.py + 8 - 65),
+    };
     if (!this.focus) return fallback;
     return {
       x: Math.max(0, Math.min(Math.max(0, map.grid[0].length * TILE - VIEW_W), this.focus.x * TILE + TILE / 2 - VIEW_W / 2)),
@@ -64,7 +70,9 @@ const StoryStaging = {
 
   playerOptions() {
     const blood = G.area === "blood";
-    return { pose: dialogActive ? this.pose : "stand", blood, heldHeart: blood && !F.sister && !this.heartReleased, reclined: dialogActive && this.coffin };
+    const ownership = dialogActive && PhenomenonBattle.phase === "ownership";
+    const pose = ownership ? (PhenomenonBattle.claimed[0] ? "refuse" : "bound") : dialogActive ? this.pose : "stand";
+    return { pose, blood, heldHeart: blood && !F.sister && !this.heartReleased, reclined: dialogActive && this.coffin };
   },
 
   npc(n) {

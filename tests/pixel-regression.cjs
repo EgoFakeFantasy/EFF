@@ -15,7 +15,7 @@ const source = fs.readFileSync(path.join(root, "game.js"), "utf8");
 const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
 const enhancementPath = path.join(root, "enhancements.js");
 const enhancements = fs.existsSync(enhancementPath) ? fs.readFileSync(enhancementPath, "utf8") : "";
-const scriptOrder = [...html.matchAll(/<script\b[^>]*src=["']\.\/([^"']+)["'][^>]*>/g)].map((match) => match[1]);
+const scriptOrder = [...html.matchAll(/<script\b[^>]*src=["']((?:\.\/|\.\.\/)[^"']+)["'][^>]*>/g)].map((match) => match[1].replace(/^\.\//,""));
 
 class MockEvent {
   constructor(type, options = {}) {
@@ -1088,7 +1088,7 @@ test("the outsider takes over seven complete screens, escalates pressure, and pr
   assert.equal(game.ids.get("dialogText").textContent, offered.at(-1));
 });
 
-test("settings freeze takeover inputs and refusal restores ordinary dialogue and releases the bound protagonist", () => {
+test("settings freeze takeover inputs and the bodily act visibly releases the protagonist", () => {
   const game = harness(); beginAccusation(game);
   const dialog = game.ids.get("dialog");
   const frozen = game.value("[dialogIndex, currentFullText(), typeDone, typeTimer, StoryStaging.playerOptions().pose]");
@@ -1122,9 +1122,9 @@ test("settings freeze takeover inputs and refusal restores ordinary dialogue and
   assert.equal(game.evaluate("currentFullText()"), "不，我拒绝这一切。");
   assertOrdinaryDialog(game);
   assert.equal(game.evaluate("typeDone"), false, "the protagonist inherits the outsider's instant text presentation");
-  assert.equal(game.evaluate("StoryStaging.playerOptions().pose"), "stand");
+  assert.equal(game.evaluate("StoryStaging.playerOptions().pose"), "bound", "choosing refusal alone has not written the bodily act");
   nextLine(game);
-  assert.equal(game.evaluate("StoryStaging.playerOptions().pose"), "stand");
+  assert.equal(game.evaluate("StoryStaging.playerOptions().pose"), "refuse", "the committed bodily act breaks the wrist bindings");
   assertOrdinaryDialog(game);
   finishDialog(game); game.tick(); finishDialog(game);
   choose(game, "让世界崩坏"); completeTwilightRain(game); choose(game, "抵达雨塔");
@@ -1739,6 +1739,8 @@ test("ownership targets consume decision time, a correct act restores five secon
   assert.equal(game.evaluate("NarrativeTrials.court.remaining"), 19000);
   const written = harness(game.snapshot()); written.ids.get("startButton").click();
   assert.equal(written.evaluate("PhenomenonBattle.pending"), false);
+  assert.equal(written.evaluate("StoryStaging.playerOptions().pose"), "refuse", "refresh retains the released wrist pose");
+  assert.equal(written.document.body.classList.contains("ownership-active"), true);
   assert.ok(written.ids.get("battleTargets").children.every(button => button.disabled));
   assert.equal(written.ids.get("battleTargets").children[0].classList.contains("written"), true);
   advanceToText(game, "造下这一切的不是我"); game.evaluate("advanceDialog()"); game.frame(3000);
@@ -1914,6 +1916,8 @@ function startHistoryAct() {
 
 test('body shards resist imposed attribution and need a connected whole before the canonical reunion',()=>{
  const game=startBodyAct(),index=game.evaluate('dialogIndex');
+ assert.equal(game.ids.get('agencyCanvas').height,160);
+ assert.equal(game.document.body.classList.contains('body-agency-active'),true);
  agencyButton(game,'让枯手');assert.equal(game.evaluate('!!F.agencyBody'),false);
  assert.deepEqual(game.value('NarrativeAgency.body.held'),[false,false,false,false]);
  game.evaluate('advanceDialog();keys.add("d");movePlayer(1)');assert.equal(game.evaluate('dialogIndex'),index);
@@ -1923,6 +1927,7 @@ test('body shards resist imposed attribution and need a connected whole before t
  connect(2,3);connect(1,3);assert.equal(game.evaluate('NarrativeAgency.connected()'),false);connect(0,2);
  assert.equal(game.evaluate('NarrativeAgency.connected()'),true);agencyButton(game,'合而为一');
  assert.ok(game.evaluate('currentFullText()').includes('再度合而为一'));assert.equal(game.evaluate('!!F.rainMemory'),false);
+ assert.equal(game.document.body.classList.contains('body-agency-active'),false);
  finishDialog(game);choose(game,'继续追问黄昏');assert.equal(game.evaluate('!!F.rainMemory'),true);assert.equal(game.evaluate('NarrativeAgency.pending'),null);
 });
 

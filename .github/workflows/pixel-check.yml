@@ -5,11 +5,15 @@ on:
     paths:
       - 'pixel-version/**'
       - 'tests/**'
+      - 'local-version/**'
+      - 'desktop/**'
       - '.github/workflows/pixel-check.yml'
   push:
     paths:
       - 'pixel-version/**'
       - 'tests/**'
+      - 'local-version/**'
+      - 'desktop/**'
       - '.github/workflows/pixel-check.yml'
 
 permissions:
@@ -40,3 +44,4 @@ jobs:
       - run: node --check pixel-version/narrative-trials.js
       - run: node --check pixel-version/narrative-agency.js
       - run: node tests/pixel-regression.cjs
+      - run: node --test tests/phenomenon-runtime.test.cjs tests/local-host.test.cjs

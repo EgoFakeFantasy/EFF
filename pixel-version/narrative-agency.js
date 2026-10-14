@@ -71,7 +71,7 @@ const NarrativeAgency = {
     Expedition.sync();
   },
   dismiss() {
-    this.open=false;document.body.classList.remove('agency-active');
+    this.open=false;document.body.classList.remove('agency-active','body-agency-active');
     if(this.dom)this.dom.agencyPanel.hidden=true;
     ui.dialog.inert=false;ui.ending.inert=false;clearInput();Expedition.sync();
   },
@@ -99,7 +99,10 @@ const NarrativeAgency = {
   paint() {
     const kind=this.pending?.kind;if(!kind||!this.dom)return;
     this.revision=(this.revision||0)+1;this.dom.agencyPanel.dataset.kind=kind;
+    document.body.classList.toggle('body-agency-active',kind==='body');
     this.dom.agencyCards.replaceChildren();this.dom.agencyActions.replaceChildren();
+    const height=kind==='body'?160:128;
+    if(this.dom.agencyCanvas.height!==height){this.dom.agencyCanvas.height=height;this.brush.imageSmoothingEnabled=false;}
     this.dom.agencyQuote.textContent='';this.dom.agencyStatus.textContent='';
     this.dom.agencySource.textContent=kind==='body'?'正文 057 · 回答与合一':kind==='history'?'正文 058 · 无意识介入之后':kind==='self'?'正文 051、054–058 · 自己决定过往的归属':'正文 059 · 研究院档案';
     if(kind==='body')this.paintBody();else if(kind==='history')this.paintHistory();else if(kind==='self')this.paintSelf();else this.paintEpilogue();
@@ -131,7 +134,7 @@ const NarrativeAgency = {
     const held=this.body.held.filter(Boolean).length;
     this.dom.agencyHeading.textContent='裂开的身体 · '+(held<4?'牵回片段':'建立同一的联系');
     this.dom.agencyQuote.textContent='“这就是我的答案。”\n无数道裂痕贯穿了身体。枯手从黑暗中伸来，要抓向那些碎片。\n把散落的碎片牵回四组，再让它们重新相通。';
-    this.fragments.forEach((name,i)=>{const b=this.button((this.body.held[i]?'已牵回 · ':'未定 · ')+name,()=>this.selectFragment(i),this.dom.agencyCards);b.classList.toggle('selected',held<4?i===this.selected:this.pair.includes(i));b.setAttribute('aria-pressed',String(held<4?i===this.selected:this.pair.includes(i)));});
+    this.fragments.forEach((name,i)=>{const short=['面容','手臂','胸膛','双腿'][i];const b=this.button((this.body.held[i]?'已牵回 · ':'未定 · ')+short,()=>this.selectFragment(i),this.dom.agencyCards);b.setAttribute('aria-label',(this.body.held[i]?'已牵回，':'未牵回，')+name);b.classList.toggle('selected',held<4?i===this.selected:this.pair.includes(i));b.setAttribute('aria-pressed',String(held<4?i===this.selected:this.pair.includes(i)));});
     if(held<4){this.button('以自己的回答牵回这一组',()=>this.reclaim());this.button('让枯手替我决定去向',()=>{this.status('那会让归属重新落入他者之手。你仍可用自己的回答牵回这一组。');});this.status('选择一组，再以自己的回答将它牵回。无需抢读；片段可以按任意顺序取回。');}
     else if(!this.connected()){const b=this.button('连接选中的两组',()=>this.connect());b.disabled=this.pair.length!==2;this.status('选择两组建立联系。连接方式由你决定；每一组都需要与整体相通。');}
     else this.button('由我把这些片段合而为一',()=>{F.agencyBody=true;this.dismiss();this.checkpoint();advanceDialog();Expedition.focusGameplay();});
@@ -204,30 +207,36 @@ const NarrativeAgency = {
 
   draw(now) {
     if(!this.open||!this.brush)return;const c=this.brush,kind=this.pending.kind;
-    c.fillStyle='#0a1120';c.fillRect(0,0,320,128);
+    c.fillStyle='#0a1120';c.fillRect(0,0,320,this.dom.agencyCanvas.height);
     if(kind==='body'){
-      // Broken tower edges and rain mist frame a body that has no floor.
-      c.fillStyle='#141c29';c.fillRect(0,0,17,128);c.fillRect(303,0,17,128);
-      for(let y=0;y<128;y+=16){c.fillStyle='#253040';c.fillRect(1,y,14,1);c.fillRect(305,y+7,14,1);}
-      for(let y=3;y<128;y+=9)for(let x=23+(y%3)*7;x<300;x+=29){c.fillStyle=(x+y)%2?'#18232e':'#1b202d';c.fillRect(x,y,1,4);}
-      const positions=[[69,29],[238,28],[76,94],[236,94]];
-      for(const [a,b] of this.body.links)this.line(c,...positions[a],...positions[b],'#76b5a9');
+      const positions=[[64,42],[252,42],[64,120],[252,120]];
+      // All groups remain visible; native buttons occupy the exact drawn shards.
+      c.fillStyle='#141c29';c.fillRect(0,0,17,160);c.fillRect(303,0,17,160);
+      for(let y=0;y<160;y+=16){c.fillStyle='#253040';c.fillRect(1,y,14,1);c.fillRect(305,y+7,14,1);}
+      for(let y=3;y<160;y+=9)for(let x=23+(y%3)*7;x<300;x+=29){c.fillStyle=(x+y)%2?'#18232e':'#1b202d';c.fillRect(x,y,1,4);}
+      for(const [a,b] of this.body.links){const [x,y]=positions[a],[nx,ny]=positions[b];this.line(c,x,y,nx,ny,'#385e60');this.line(c,x,y-1,nx,ny-1,'#88b9a9');}
+      this.bodySprite ||= document.createElement('canvas');
+      if(!this.bodySpriteReady){this.bodySprite.width=40;this.bodySprite.height=40;const brush=this.bodySprite.getContext('2d');brush.imageSmoothingEnabled=false;drawPerson(brush,14,20,{pose:'bound',dir:0});this.bodySpriteReady=true;}
+      const crops=[[14,4,12,10],[7,13,26,9],[13,16,14,13],[14,26,13,10]];
       for(let i=0;i<4;i++){
-        const [x,y]=positions[i],held=this.body.held[i];
-        c.fillStyle=held?'#203b41':'#322232';c.fillRect(x-23,y-18,46,34);
-        c.fillStyle=held?'#9dd0bc':'#95637d';c.fillRect(x-24,y-19,48,1);
-        // These are four playable groups of the novel's innumerable shards.
-        // Every group displays a piece of the same detailed actor sprite.
-        this.bodySprite ||= document.createElement('canvas');
-        if(!this.bodySpriteReady){this.bodySprite.width=24;this.bodySprite.height=24;drawPerson(this.bodySprite.getContext('2d'),6,4,{pose:'wake',dir:0});this.bodySpriteReady=true;}
-        const crops=[[7,3,11,7],[0,9,24,5],[8,10,8,6],[8,15,8,5]],crop=crops[i];
-        c.drawImage(this.bodySprite,...crop,x-crop[2],y-crop[3],crop[2]*2,crop[3]*2);
-        c.fillStyle=held?'#acccba':'#92728b';
-        for(let j=0;j<4;j++)c.fillRect(x-17+j*9,y+14-(j%2),2,1);
-        if(!held){c.fillStyle='#777d80';c.fillRect(x+(i%2?-37:22),y+6,15,3);c.fillRect(x+(i%2?-25:18),y+2,3,10);}
+        const [x,y]=positions[i],held=this.body.held[i],selected=this.body.held.every(Boolean)?this.pair.includes(i):i===this.selected;
+        c.fillStyle=held?'#183035':'#211e2c';c.fillRect(x-44,y-24,88,46);
+        c.fillStyle=selected?'#d0c39c':held?'#87b8a4':'#65475e';c.fillRect(x-44,y-24,88,1);c.fillRect(x-44,y-24,1,46);c.fillRect(x+43,y-24,1,46);
+        const crop=crops[i];c.drawImage(this.bodySprite,...crop,x-crop[2],y-crop[3],crop[2]*2,crop[3]*2);
+        // Numerous loose shards make four groups distinguishable from four total fragments.
+        for(let j=0;j<7;j++){c.fillStyle=held?(j%2?'#709e99':'#bdc5b4'):(j%2?'#645c71':'#a5939b');c.fillRect(x-37+j*11,y+15-(j%3)*2,2,2);}
+        if(!held){const side=i%2?-1:1,hx=x+side*38;c.fillStyle='#535869';c.fillRect(hx,y-4,side<0?10:8,3);c.fillRect(hx+(side<0?8:-2),y-10,2,12);c.fillStyle='#9296a0';for(let k=0;k<3;k++)c.fillRect(hx+(side<0?8:-2)+k*2,y-10+k,1,6);}
       }
-      if(this.connected()){c.fillStyle='#97cfb5';c.fillRect(152,53,16,1);drawPerson(c,154,56,{glow:'#91cfb4'});}
-      this.dom.agencyCanvas.setAttribute('aria-label','身体碎片分为四组；已牵回 '+this.body.held.filter(Boolean).length+' 片，已建立 '+this.body.links.length+' 条联系。');
+      if(this.connected()){
+        c.fillStyle='#101e28';c.fillRect(144,57,32,49);
+        this.joinedSprite ||= document.createElement('canvas');
+        if(!this.joinedSpriteReady){this.joinedSprite.width=40;this.joinedSprite.height=40;const b=this.joinedSprite.getContext('2d');b.imageSmoothingEnabled=false;drawPerson(b,14,20,{glow:'#91cfb4',pose:'wake'});this.joinedSpriteReady=true;}
+        c.drawImage(this.joinedSprite,7,3,26,33,134,48,52,66);
+        this.line(c,141,79,146,79,'#9fcfba');this.line(c,174,79,179,79,'#9fcfba');
+      }else{
+        c.fillStyle='#879b9c';c.fillRect(157,78,6,1);c.fillRect(160,75,1,7);
+      }
+      this.dom.agencyCanvas.setAttribute('aria-label','身体碎片分为四组；已牵回 '+this.body.held.filter(Boolean).length+' 组，已建立 '+this.body.links.length+' 条联系。'+(this.connected()?'联系已经勾出身体的轮廓，等待你确认合一。':''));
     }else if(kind==='self'){
       this.drawMemory(c,this.selected);this.dom.agencyCanvas.setAttribute('aria-label','回看 '+this.memories[this.selected].title+' 的场景');
     }else if(kind==='history'){

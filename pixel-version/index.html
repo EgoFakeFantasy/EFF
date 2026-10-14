@@ -6,6 +6,8 @@
     <meta name="theme-color" content="#0b0b10" />
     <title>无中归来者 · 箱庭版</title>
     <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="../local-version/styles.css" />
+    <script src="../local-version/local-platform.js"></script>
   </head>
   <body>
     <div class="shell">
@@ -66,9 +68,11 @@
           </section>
           <section id="agencyPanel" class="agency-panel" hidden aria-labelledby="agencyHeading">
             <header><span id="agencySource" class="agency-source"></span><h2 id="agencyHeading"></h2></header>
-            <canvas id="agencyCanvas" width="320" height="128" aria-label="经历与联系"></canvas>
+            <div class="agency-visual">
+              <canvas id="agencyCanvas" width="320" height="128" aria-label="经历与联系"></canvas>
+              <div id="agencyCards" class="agency-cards" aria-label="选择片段或前提"></div>
+            </div>
             <p id="agencyQuote" class="agency-quote"></p>
-            <div id="agencyCards" class="agency-cards" aria-label="选择片段或前提"></div>
             <p id="agencyStatus" class="agency-status" role="status" aria-live="polite"></p>
             <div id="agencyActions" class="agency-actions" aria-label="完成当前操作"></div>
           </section>
@@ -157,6 +161,11 @@
       </form>
     </dialog>
 
+    <script src="../local-version/phenomenon-runtime.js"></script>
+    <script src="../local-version/agent-policies.js"></script>
+    <script src="../local-version/agent-bridge.js"></script>
+    <script src="../local-version/battle-event-adapter.js"></script>
+    <script src="../local-version/repression-ui.js"></script>
     <script src="./enhancements.js"></script>
     <script src="./storm-flight.js"></script>
     <script src="./story-staging.js"></script>

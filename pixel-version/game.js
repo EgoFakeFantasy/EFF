@@ -1308,6 +1308,7 @@ function showChoices(choices) {
     ui.dialogChoices.append(btn);
   }
   NarrativeTrials.onChoices(script);
+  BattleEventAdapter.onChoices(script);
   if (Finale.active()) PhenomenonBattle.history();
   updateDialogStatus();
   const first = ui.dialogChoices.querySelector("button");
@@ -1383,6 +1384,7 @@ function leaveEnding() {
 }
 
 function resetRun() {
+  BattleEventAdapter.reset();
   NarrativeAgency.reset();
   NarrativeTrials.reset();
   closeDialog();
@@ -1666,149 +1668,7 @@ function personGait(opt, pose) {
 }
 
 function drawPerson(c, x, y, opt = {}) {
-  const pose = opt.pose || "stand";
-  const gait = personGait(opt, pose);
-  const bob = gait.bob;
-  const coat = opt.coat || "#3a4a6a";
-  const hair = opt.hair || "#222";
-  const skin = opt.skin || "#e8c8a8";
-  c.save();
-  c.translate(Math.round(x) + (pose === "pain" && !Expedition.prefs.motion ? Math.round(Math.sin(StoryStaging.time * 8)) : 0) + 6, Math.round(y + bob) + 8);
-  if (pose === "sleep" || opt.reclined) c.rotate(-Math.PI / 2);
-  // Pain and searching use their arm poses; arbitrary rotations blur pixel edges.
-  const px = -6, py = -8;
-  const lowered = pose === "kneel" ? 4 : 0;
-  const arm = (x1, y1, x2, y2, color = coat) => {
-    c.fillStyle = color;
-    const steps = Math.max(1, Math.ceil(Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1))));
-    for (let i = 0; i <= steps; i++) c.fillRect(Math.round(x1 + (x2 - x1) * i / steps), Math.round(y1 + (y2 - y1) * i / steps), 2, 2);
-  };
-  // 影：贴地的椭圆，不随步伐上下
-  c.fillStyle = "rgba(0,0,0,0.3)";
-  c.fillRect(px + 2, py + 13 - bob, 8, 1);
-  c.fillRect(px + 1, py + 14 - bob, 10, 1);
-  c.fillStyle = "rgba(0,0,0,0.2)";
-  c.fillRect(px + 3, py + 15 - bob, 6, 1);
-  let leftHand = { x: px, y: py + 9 + lowered };
-  let rightHand = { x: px + 10, y: py + 9 + lowered };
-  if (pose === "bound") {
-    leftHand = { x: px - 4, y: py + 7 };
-    rightHand = { x: px + 14, y: py + 7 };
-  } else if (pose === "pain") rightHand = { x: px + 9, y: py + 2 };
-  else if (pose === "wake") {
-    leftHand = { x: px - 2, y: py + 1 };
-    rightHand = { x: px + 12, y: py + 1 };
-  } else if (pose === "search") rightHand = { x: px + 15, y: py + 10 };
-  else if (pose === "photo") {
-    leftHand = { x: px + 2, y: py + 8 };
-    rightHand = { x: px + 9, y: py + 8 };
-  } else if (pose === "eat") rightHand = { x: px + 8, y: py + 4 };
-  else if (pose === "carry") {
-    leftHand = { x: px + 1, y: py + 8 };
-    rightHand = { x: px + 10, y: py + 8 };
-  } else if (pose === "kneel") rightHand = { x: px + 13, y: py + 10 };
-  if (opt.blood && opt.heldHeart !== false && ["stand", "bound", "kneel"].includes(pose)) {
-    rightHand = { x: px + (pose === "bound" ? 14 : 12), y: py + (pose === "kneel" ? 10 : 7) };
-  }
-  const stagedArms = opt.blood || pose !== "stand";
-  if (stagedArms) {
-    arm(px + 2, py + 7 + lowered, leftHand.x, leftHand.y);
-    arm(px + 8, py + 7 + lowered, rightHand.x, rightHand.y);
-  }
-  // 身体：躯干与两条腿分开绘制，步行时抬脚、前后错开
-  const seated = pose === "kneel" || pose === "eat" || pose === "sit";
-  c.fillStyle = coat;
-  c.fillRect(px + 2, py + 6 + lowered, 8, 5);
-  c.fillStyle = shade(coat, 0.7);
-  if (seated) {
-    c.fillRect(px + 1, py + 13, 5, 2);
-    c.fillRect(px + 7, py + 13, 5, 2);
-  } else {
-    // The far leg of a profile is drawn first and darker.
-    for (const i of gait.far === 1 ? [1, 0] : [0, 1]) {
-      c.fillStyle = shade(coat, i === gait.far ? 0.5 : 0.7);
-      c.fillRect(px + gait.legX[i], py + 11, 3, 3 - gait.lift[i]);
-    }
-  }
-  // 头
-  c.fillStyle = skin;
-  c.fillRect(px + 3, py + 1 + lowered, 6, 5);
-  if (stagedArms) {
-    c.fillRect(leftHand.x, leftHand.y, 2, 2);
-    c.fillRect(rightHand.x, rightHand.y, 2, 2);
-  }
-  c.fillStyle = hair;
-  c.fillRect(px + 2, py + lowered, 8, 3);
-  c.fillRect(px + 2, py + 1 + lowered, 2, 4);
-  // 眼（按朝向偏移）
-  const eyeOff = opt.dir === 1 ? -1 : opt.dir === 2 ? 1 : 0;
-  if (opt.dir !== 3 && pose !== "mirror") {
-    c.fillStyle = "#1a1a1a";
-    c.fillRect(px + 4 + eyeOff, py + 3 + lowered, pose === "sleep" ? 2 : 1, 1);
-    c.fillRect(px + 7 + eyeOff, py + 3 + lowered, pose === "sleep" ? 2 : 1, 1);
-  }
-  if (opt.beard) {
-    c.fillStyle = "#b8b0a0";
-    c.fillRect(px + 3, py + 5 + lowered, 6, 2);
-  }
-  if (opt.bun) {
-    c.fillStyle = hair;
-    c.fillRect(px + 8, py - 1 + lowered, 3, 3);
-  }
-  if (opt.hood) {
-    c.fillStyle = "#555560";
-    c.fillRect(px + 2, py - 1 + lowered, 8, 4);
-    c.fillRect(px + 1, py + 1 + lowered, 3, 5);
-  }
-  if (pose === "bound") {
-    c.fillStyle = "#514052";
-    c.fillRect(leftHand.x + 1, leftHand.y, 2, 2); c.fillRect(rightHand.x - 1, rightHand.y, 2, 2);
-    c.fillRect(px + 2, py + 8, 8, 1);
-  } else if (pose === "photo") {
-    c.fillStyle = "#d8d0b9"; c.fillRect(px + 3, py + 7, 6, 4);
-    c.fillStyle = "#7d8583"; c.fillRect(px + 4, py + 8, 4, 2);
-  } else if (pose === "eat") {
-    c.fillStyle = "#c6c1ae"; c.fillRect(px - 1, py + 9, 6, 3);
-    c.fillStyle = "#eee8d3"; c.fillRect(px, py + 8, 4, 2);
-    arm(px + 8, py + 6, px + 7, py + 4, "#b9a681");
-  } else if (pose === "carry") {
-    c.fillStyle = "#c2baa6"; c.fillRect(px, py + 8, 12, 3);
-    c.fillStyle = "#748547"; c.fillRect(px + 1, py + 7, 10, 2);
-    c.fillStyle = "#b4b072"; c.fillRect(px + 3, py + 7, 2, 1); c.fillRect(px + 7, py + 8, 2, 1);
-  }
-  PixelArt.person(c, px, py, lowered, opt, pose, gait);
-  if (opt.blood) {
-    // Fixed splashes cover face, bare hands, shirt and both trouser legs.
-    c.fillStyle = "#751d2a";
-    c.fillRect(px + 7, py + 2 + lowered, 2, 2);
-    c.fillRect(px + 4, py + 4 + lowered, 1, 2);
-    c.fillRect(leftHand.x, leftHand.y, 2, 2);
-    c.fillRect(rightHand.x, rightHand.y, 2, 2);
-    c.fillRect(px + 3, py + 7 + lowered, 3, 2);
-    c.fillRect(px + 7, py + 9 + lowered, 2, 3);
-    c.fillRect(px + 2, py + 12, 2, 2);
-    c.fillRect(px + 8, py + 12, 2, 2);
-    c.fillStyle = "#b53a40";
-    c.fillRect(px + 8, py + 3 + lowered, 1, 1);
-    c.fillRect(px + 4, py + 8 + lowered, 1, 1);
-    c.fillRect(rightHand.x, rightHand.y, 1, 1);
-    if (opt.heldHeart !== false && ["stand", "bound", "kneel"].includes(pose)) {
-      // The heart is held by this actor's hand; it is not a prop on the corpse.
-      const hx = rightHand.x + 2, hy = rightHand.y - 3;
-      const beat = Expedition.prefs.motion ? 0 : Math.sin(performance.now() / 140) > 0.86 ? 1 : 0;
-      c.fillStyle = "#541020"; c.fillRect(hx - 1, hy + 1, 6, 5);
-      c.fillStyle = "#a62c3d"; c.fillRect(hx, hy, 2, 4 + beat); c.fillRect(hx + 2, hy - 1, 2, 5 + beat); c.fillRect(hx + 1, hy + 4, 2, 2);
-      c.fillStyle = "#d26867"; c.fillRect(hx + 2, hy, 1, 2);
-    }
-  }
-  if (opt.glow) {
-    const alpha = c.globalAlpha;
-    c.fillStyle = opt.glow;
-    c.globalAlpha = alpha * (Expedition.prefs.motion ? 0.25 : 0.25 + Math.sin(performance.now() / 300) * 0.1);
-    c.fillRect(px, py - 2, 12, 17);
-    c.globalAlpha = alpha;
-  }
-  c.restore();
+  PixelArt.actor(c, x, y, opt);
 }
 
 /* ============================== 粒子 ============================== */
@@ -2700,4 +2560,5 @@ PixelArt.init();
 PhenomenonBattle.init();
 NarrativeTrials.init();
 NarrativeAgency.init();
+RepressionUI.init();
 requestAnimationFrame(render);
