@@ -5,7 +5,7 @@
 .tech-head h2 { margin: 0; font-size: 24px; font-weight: 500; }
 .tech-kicker { margin: 0 0 4px; color: #a7c2b5; font-size: 11px; letter-spacing: .14em; }
 .tech-scope { font-size: 13px; color: #acb7c7; }
-#techCanvas { display: block; width: 640px; height: auto; max-width: none; margin: 12px auto; image-rendering: pixelated; }
+#techCanvas { display: block; width: 320px; height: auto; max-width: none; margin: 12px auto; image-rendering: pixelated; }
 .tech-state { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
 .tech-state p { padding: 10px; margin: 0; background: #1a2635; font-size: 13px; }
 .tech-state strong { display: block; color: #cfb889; font-weight: 500; }
@@ -30,3 +30,16 @@
 @media (max-height: 800px) { #techCanvas { width: 320px; margin: 8px auto; } .repression-panel { padding: 16px; } .tech-controls { margin-block: 10px; } }
 
 .local-save-status { margin: -14px 0 12px; color: #8ea69e; text-align: right; font-size: 10px; line-height: 1.5; }
+
+.tech-agents { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.tech-agents section { padding: 10px 12px; background: #142834; border-top: 1px solid #789f96; }
+.tech-agents section:last-child { background: #291b2b; border-color: #b87b8d; }
+.tech-agents strong { display: block; font-size: 12px; font-weight: 500; color: #d1c7ac; }
+.tech-agents p { font-size: 13px; }
+.tech-agents small { display: block; color: #9aacb7; font-size: 10px; overflow-wrap: anywhere; }
+@media (max-width: 700px) { .tech-agents { grid-template-columns: 1fr; } }
+
+.tech-head { position: sticky; top: -24px; z-index: 3; background: #0c1422f5; padding: 8px 0; }
+.tech-actions { position: sticky; bottom: -24px; z-index: 2; background: #0c1422f5; padding: 12px 0; border-top: 1px solid #425466; }
+@media (max-height: 800px) { .tech-head { top: -16px; } .tech-actions { bottom: -16px; } }
+@media (max-width: 700px) { .tech-head { top: -14px; } .tech-actions { bottom: -14px; } }

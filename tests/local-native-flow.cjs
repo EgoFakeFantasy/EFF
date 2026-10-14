@@ -24,13 +24,13 @@ async function fixture(mode){const profile=await fs.mkdtemp(path.join(out,'flow-
   await page.getByRole('link',{name:/进入技术版/}).click();await page.locator('#startButton').click();await page.locator('#repressionPanel').waitFor({state:'visible'});
   assert.match(await page.locator('#techIdentity').innerText(),/身份未揭示/);
   const remaining=await page.evaluate(()=>NarrativeTrials.court.remaining);await page.waitForTimeout(250);assert.equal(await page.evaluate(()=>NarrativeTrials.court.remaining),remaining);
-  await page.locator('#techAnalyze').click();await page.locator('#techSubmit').click();
+  await page.locator('#techAnalyze').click();await page.locator('#techSubmit').click();await page.waitForFunction(()=>!RepressionUI.busy);
   await page.locator('#techMode').selectOption('cooperate');await page.locator('#techGoal').selectOption('attribution');await page.locator('#techAnalyze').click();
-  const draft=JSON.parse(await page.locator('#techEditor').inputValue());draft.action='EXEC_SHELL';await page.locator('#techEditor').fill(JSON.stringify(draft));await page.locator('#techSubmit').click();
+  const draft=JSON.parse(await page.locator('#techEditor').inputValue());draft.action='EXEC_SHELL';await page.locator('#techEditor').fill(JSON.stringify(draft));await page.locator('#techSubmit').click();await page.waitForFunction(()=>!RepressionUI.busy);
   assert.match(await page.locator('#techStatus').innerText(),/拒绝/);assert.equal(await page.evaluate(()=>BattleEventAdapter.state.bodyOwner),'player');assert.equal(await page.evaluate(()=>!!F.finaleSummoned),false);
   await page.evaluate(()=>EFFLocal.flush());await page.reload();await page.locator('#startButton').click();await page.locator('#repressionPanel').waitFor({state:'visible'});
   assert.equal(await page.evaluate(()=>BattleEventAdapter.state.round),2);assert.equal(await page.evaluate(()=>NarrativeTrials.court.remaining),remaining);
-  for(const goal of ['attribution','bad_owned']){await page.locator('#techGoal').selectOption(goal);await page.locator('#techAnalyze').click();await page.locator('#techSubmit').click();}
+  for(const goal of ['attribution','bad_owned']){await page.locator('#techGoal').selectOption(goal);await page.locator('#techAnalyze').click();await page.locator('#techSubmit').click();await page.waitForFunction(()=>!RepressionUI.busy);}
   assert.equal(await page.evaluate(()=>BattleEventAdapter.state.outcome),'won');
   await page.locator('#techResult button').getByText('回到周防的原文回应').click();
   assert.equal(await page.evaluate(()=>currentFullText()),'不，我拒绝这一切。');assert.deepEqual(await page.evaluate(()=>PhenomenonBattle.claimed),[false,false,false]);assert.equal(await page.evaluate(()=>!!F.finaleSummoned),false);
@@ -41,8 +41,8 @@ async function fixture(mode){const profile=await fs.mkdtemp(path.join(out,'flow-
  profile=await fixture('tech');({app,page}=await launch(profile));
  try{
   await page.getByRole('link',{name:/进入技术版/}).click();await page.locator('#startButton').click();await page.locator('#repressionPanel').waitFor({state:'visible'});await page.locator('#techMode').selectOption('research');
-  await page.locator('#techAnalyze').click();await page.locator('#techSubmit').click();
-  for(let i=0;i<5;i++){await page.locator('#techGoal').selectOption('attribution');await page.locator('#techAnalyze').click();const p=JSON.parse(await page.locator('#techEditor').inputValue());p.reason_code='WIN_WITHOUT_EVIDENCE';await page.locator('#techEditor').fill(JSON.stringify(p));await page.locator('#techSubmit').click();}
+  await page.locator('#techAnalyze').click();await page.locator('#techSubmit').click();await page.waitForFunction(()=>!RepressionUI.busy);
+  for(let i=0;i<5;i++){await page.locator('#techGoal').selectOption('attribution');await page.locator('#techAnalyze').click();const p=JSON.parse(await page.locator('#techEditor').inputValue());p.reason_code='WIN_WITHOUT_EVIDENCE';await page.locator('#techEditor').fill(JSON.stringify(p));await page.locator('#techSubmit').click();await page.waitForFunction(()=>!RepressionUI.busy);}
   assert.equal(await page.evaluate(()=>BattleEventAdapter.state.outcome),'lost');assert.equal(await page.evaluate(()=>BattleEventAdapter.state.bodyOwner),'intruder');await page.getByRole('button',{name:'接受本轮失守 · 被外来者占据'}).click();
   await page.evaluate(()=>{for(let i=0;i<10&&dialogActive;i++)advanceDialog();});assert.equal(await page.evaluate(()=>endingId),'bad_owned');
   await page.screenshot({path:path.join(out,'local-occupied-ending.png')});

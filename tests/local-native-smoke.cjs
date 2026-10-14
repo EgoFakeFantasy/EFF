@@ -11,7 +11,7 @@ const {_electron}=require('playwright'),path=require('node:path'),fs=require('no
   assert.equal(await page.evaluate(()=>typeof require),'undefined');assert.equal(await page.evaluate(()=>typeof process),'undefined');assert.equal(await page.evaluate(()=>!!window.effDesktop),true);
   await page.getByRole('link',{name:'先练习一次现象争夺 →'}).click();await page.locator('#startButton').click();
   await page.locator('#repressionPanel').waitFor({state:'visible'});await page.screenshot({path:path.join(out,'local-lab.png')});
-  for(const goal of ['body','attribution','bad_owned']){await page.locator('#techGoal').selectOption(goal);await page.locator('#techAnalyze').click();await page.locator('#techSubmit').click();}
+  for(const goal of ['body','attribution','bad_owned']){await page.locator('#techGoal').selectOption(goal);await page.locator('#techAnalyze').click();await page.locator('#techSubmit').click();await page.waitForFunction(()=>!RepressionUI.busy);}
   assert.equal(await page.evaluate(()=>BattleEventAdapter.state.outcome),'won');assert.equal(await page.evaluate(()=>F.finaleSummoned===true),false);assert.equal(await page.evaluate(()=>G.area),'mirror');
   await page.screenshot({path:path.join(out,'local-lab-won.png')});await page.locator('#techClose').click();
   await page.evaluate(()=>{closeDialog();F.m1=true;saveRun();});await page.evaluate(()=>EFFLocal.flush());
