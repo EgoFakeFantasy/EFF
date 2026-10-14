@@ -1,4 +1,4 @@
-# EFF 本地版 0.3：本地双代理现象战争
+# EFF 本地版 0.4：本地双代理现象战争
 
 以最新箱庭版为基础，提供可独立启动的 Windows x64 便携程序、文件存档和可重放的技术争夺。完整技术框架见 [实施文档](../docs/eff-local-implementation.md)。
 
@@ -9,6 +9,10 @@
 意志模式选择目标并审阅模板；协作模式可编辑建议；研究模式输入五种数据式规则。每轮显示两方提案的受理结果和实际状态。三项目标完成后回到原文逐项回应，不能直接跳过拒绝段或终章。预算耗尽可以回到原场景，或明确接受既有占据结局。
 
 规划窗口明确暂停主线期限。正文回读、刷新与旧 v1 检查点保持；实验日志另存。雨塔的原介绍完成后，防御提示才署名压抑；终章的实际回写仍遵守无意识介入条件。
+
+## 全窗口演出
+
+每次确认后的身体、归责与结局争夺会撕裂整个窗口，并显露对应的执行轨迹；三项完成后经历黑场与运行实例重建。终章原句与替代句也会在全窗口交锋，过去回写仍须遵守原文请求。主菜单和技术窗口可直接预览。可暂停、略过，支持减少动态；演出期间主线期限不流逝。详见[演出说明](../docs/eff-screen-spectacle.md)。
 
 ## 存档迁移与退出
 
@@ -33,7 +37,7 @@
 ```sh
 node desktop/package-local.cjs ELECTRON_DIRECTORY NEW_OUTPUT_DIRECTORY
 node tests/pixel-regression.cjs
-node --test tests/phenomenon-runtime.test.cjs tests/local-host.test.cjs tests/local-agents.test.cjs
+node --test tests/phenomenon-runtime.test.cjs tests/local-host.test.cjs tests/local-agents.test.cjs tests/spectacle-plan.test.cjs
 ```
 
 构建只复制受审计的前端和四个宿主模块，不复制小说原稿、用户存档或开发工具。输出目录必须是新目录，不自动删掉旧版本。`EFF-build-manifest.json` 记录随包源码 SHA256；摘要用于定位构建与意外损坏，不保证设备所有者无法修改游戏。
@@ -43,6 +47,7 @@ node --test tests/phenomenon-runtime.test.cjs tests/local-host.test.cjs tests/lo
 ```sh
 node tests/local-native-smoke.cjs
 node tests/local-native-flow.cjs
+node tests/local-native-spectacle.cjs
 # 已有本地服务和权重时，设置 EFF_LIVE_MODEL 后：
 node tests/local-model-live.cjs
 node tests/local-native-ai.cjs

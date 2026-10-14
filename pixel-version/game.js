@@ -1202,6 +1202,7 @@ function renderLine() {
   if (G.area === "storm") StormFlight.onLine(line);
   updateDialogStatus();
   Expedition.sync();
+  ScreenTheatre.onFinaleLine(line);
 }
 
 function setDialogPresentation(line) {
@@ -1384,6 +1385,7 @@ function leaveEnding() {
 }
 
 function resetRun() {
+  ScreenTheatre.reset();
   BattleEventAdapter.reset();
   NarrativeAgency.reset();
   NarrativeTrials.reset();
@@ -2561,4 +2563,5 @@ PhenomenonBattle.init();
 NarrativeTrials.init();
 NarrativeAgency.init();
 RepressionUI.init();
+ScreenTheatre.init();
 requestAnimationFrame(render);

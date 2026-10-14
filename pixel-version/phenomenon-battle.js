@@ -102,6 +102,7 @@ const PhenomenonBattle = {
     NarrativeTrials.onCommit();
     BattleEventAdapter.observeClaim(index);
     updateDialogStatus();
+    void ScreenTheatre.present(SpectaclePlan.canonical(index,currentFullText()));
     return true;
   },
 

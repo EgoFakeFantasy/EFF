@@ -46,7 +46,7 @@ const NarrativeAgency = {
   },
 
   active() { return this.open; },
-  paused() { return !this.focused||document.hidden||Boolean(Expedition.dom?.journalDialog.open||Expedition.dom?.settingsDialog.open||document.getElementById('renameDialog')?.open||!ui.codex.hidden||!ui.start.hidden); },
+  paused() { return ScreenTheatre.active()||!this.focused||document.hidden||Boolean(Expedition.dom?.journalDialog.open||Expedition.dom?.settingsDialog.open||document.getElementById('renameDialog')?.open||!ui.codex.hidden||!ui.start.hidden); },
   beforeAdvance() {
     if(this.open)return true;
     if(currentDialogScript===SCRIPTS.rainMemory&&currentFullText().includes('这似乎是个死局')&&!F.agencyBody){this.pending={kind:'body'};this.show();this.checkpoint();return true;}

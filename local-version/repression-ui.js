@@ -1,12 +1,13 @@
 "use strict";
 const RepressionUI={open:false,focused:true,busy:false,operation:0,goal:'body',mode:'will',draft:null,pair:null,
  active(){return this.open;},
- paused(){return !this.focused||document.hidden||Boolean(Expedition.dom?.journalDialog.open||Expedition.dom?.settingsDialog.open||!ui.codex.hidden);},
+ paused(){return ScreenTheatre.active()||!this.focused||document.hidden||Boolean(Expedition.dom?.journalDialog.open||Expedition.dom?.settingsDialog.open||!ui.codex.hidden);},
  init(){
   EFFLocal.init();if(!BattleEventAdapter.available())return;
   const button=document.createElement('button');button.type='button';button.id='techButton';button.textContent='现象战争';button.addEventListener('click',()=>this.show());document.querySelector('.top-actions').append(button);
+  const preview=document.createElement('button');preview.id='spectaclePreview';preview.type='button';preview.textContent='撕裂演出预览';preview.addEventListener('click',()=>{if(!ScreenTheatre.active())void ScreenTheatre.preview();});document.querySelector('.top-actions').append(preview);
   const panel=document.createElement('dialog');panel.id='repressionPanel';panel.className='repression-panel';
-  panel.innerHTML=`<header class="tech-head"><div><p class="tech-kicker">EFF / 现象战争 · 实验解释</p><h2 id="techIdentity">防御提示</h2></div><button id="techClose" type="button">回到场景</button></header>
+  panel.innerHTML=`<header class="tech-head"><div><p class="tech-kicker">EFF / 现象战争 · 实验解释</p><h2 id="techIdentity">防御提示</h2></div><div class="tech-head-actions"><button id="techPreview" type="button">撕裂演出预览</button><button id="techClose" type="button">回到场景</button></div></header>
    <p id="techScope" class="tech-scope"></p><p id="techBudget" class="tech-budget"></p><canvas id="techCanvas" width="320" height="120" aria-label="身体、归责与结局的独立争夺"></canvas>
    <div id="techState" class="tech-state" aria-live="polite"></div>
    <div class="tech-controls"><label>参与方式<select id="techMode"><option value="will">意志 · 选择目标</option><option value="cooperate">协作 · 审阅提案</option><option value="research">研究 · 自写规则</option></select></label><label>希望保留的现实<select id="techGoal"></select></label><label>提案风险<select id="techRisk"><option value="low">低</option><option value="medium">中</option></select></label></div>
@@ -17,6 +18,7 @@ const RepressionUI={open:false,focused:true,busy:false,operation:0,goal:'body',m
    <div id="techResult" class="tech-result"></div><p class="tech-foot">最多六轮。模型仅提出建议；仲裁器决定状态。历史回写仍属于原文中的无意识。</p>`;
   document.body.append(panel);this.dom=Object.fromEntries(['repressionPanel','techIdentity','techScope','techBudget','techCanvas','techState','techMode','techGoal','techRisk','techEditorLabel','techEditor','techExplanation','techSource','techAgents','techAnalyze','techSubmit','techPreserve','techStop','techStatus','techEvents','techTrace','techResult'].map(id=>[id,document.getElementById(id)]));
   for(const [value,g] of Object.entries(AgentPolicies.goals)){const o=document.createElement('option');o.value=value;o.textContent=g.name;this.dom.techGoal.append(o);}
+  document.getElementById('techPreview').addEventListener('click',()=>{if(!this.busy&&!ScreenTheatre.active())void ScreenTheatre.preview();});
   document.getElementById('techClose').addEventListener('click',()=>this.dismiss());panel.addEventListener('cancel',event=>{event.preventDefault();this.dismiss();});
   this.dom.techGoal.addEventListener('change',()=>{this.goal=this.dom.techGoal.value;this.invalidate();if(this.mode==='research')this.prepare(AgentPolicies.make(BattleEventAdapter.state,this.goal),'手写规则起点');});
   this.dom.techRisk.addEventListener('change',()=>{this.invalidate();if(this.mode==='research')this.prepare(AgentPolicies.make(BattleEventAdapter.state,this.goal,'repression',this.dom.techRisk.value),'手写规则起点');});
@@ -29,7 +31,7 @@ const RepressionUI={open:false,focused:true,busy:false,operation:0,goal:'body',m
   window.addEventListener('pagehide',()=>{AgentBridge.cancel();if(this.open)BattleEventAdapter.save();});
   BattleEventAdapter.load();
   // Tools are available only in the separate edition. The normal game is untouched.
-  const start=()=>{try{if(new URLSearchParams(location.search).get('lab')==='training')this.show();}catch{}};
+  const start=()=>{try{if(['training','showcase'].includes(new URLSearchParams(location.search).get('lab')))this.show();}catch{}};
   ui.startButton.addEventListener('click',start);
  },
  canAct(){return this.open&&!this.paused()&&!this.busy&&BattleEventAdapter.state?.outcome==='pending';},
@@ -37,9 +39,10 @@ const RepressionUI={open:false,focused:true,busy:false,operation:0,goal:'body',m
   if(!this.dom||this.open||!ui.start.hidden||!ui.ending.hidden||transitionLock||NarrativeAgency.active()||NarrativeTrials.rainActive()||Expedition.paused())return;
   BattleEventAdapter.begin();this.open=true;clearInput();ui.dialog.inert=true;this.dom.repressionPanel.showModal();this.invalidate();this.paint();
   this.dom.techAnalyze.focus({preventScroll:true});
+  if(new URLSearchParams(location.search).get('lab')==='showcase'&&!this.showcased){this.showcased=true;void ScreenTheatre.preview();}
  },
- dismiss(){if(!this.dom)return;this.operation++;AgentBridge.cancel();if(this.open)BattleEventAdapter.save();this.open=false;this.busy=false;this.dom.repressionPanel.close();ui.dialog.inert=false;clearInput();lastT=performance.now();Expedition.focusGameplay();},
- invalidate(){this.operation++;AgentBridge.cancel();this.busy=false;this.draft=null;this.pair=null;this.dom.techAgents.replaceChildren();this.dom.techSubmit.disabled=true;this.dom.techExplanation.textContent=AgentPolicies.goals[this.goal].explain;this.dom.techSource.textContent='选择目标后提出方案，再审阅和执行。';this.dom.techEditorLabel.hidden=this.mode==='will';this.dom.techEditor.value='';this.status('选择目标后提出方案；实验打开期间主线时间暂停。');},
+ dismiss(){if(!this.dom)return;ScreenTheatre.cancel();this.operation++;AgentBridge.cancel();if(this.open)BattleEventAdapter.save();this.open=false;this.busy=false;this.dom.repressionPanel.close();ui.dialog.inert=false;clearInput();lastT=performance.now();Expedition.focusGameplay();},
+ invalidate(){ScreenTheatre.cancel();this.operation++;AgentBridge.cancel();this.busy=false;this.draft=null;this.pair=null;this.dom.techAgents.replaceChildren();this.dom.techSubmit.disabled=true;this.dom.techExplanation.textContent=AgentPolicies.goals[this.goal].explain;this.dom.techSource.textContent='选择目标后提出方案，再审阅和执行。';this.dom.techEditorLabel.hidden=this.mode==='will';this.dom.techEditor.value='';this.status('选择目标后提出方案；实验打开期间主线时间暂停。');},
  prepare(proposal,source,note=''){this.draft=proposal;this.dom.techEditor.value=JSON.stringify(proposal,null,2);this.dom.techSource.textContent='来源：'+source+'。'+note;this.dom.techSubmit.disabled=false;this.status('方案已准备。审阅后验证，不会自动执行。');},
  sourceLabel(side){return side?.source==='local-model'?'本地模型'+(side.model?' · '+side.model:''):side?.source==='manual'?'玩家规则':'规则模板';},
  showAgents(pair){
@@ -68,6 +71,8 @@ const RepressionUI={open:false,focused:true,busy:false,operation:0,goal:'body',m
    const player=pair.player&&JSON.stringify(pair.player.proposal)===JSON.stringify(proposal)?pair.player:{actor:'repression',source:'manual',model:'',elapsedMs:0,tokens:0,explanation:'玩家提交并审阅的有限规则。',proposal};
    const next=PhenomenonRuntime.resolveRound(s,proposal,pair.intruder.proposal);
    BattleEventAdapter.recordRound(next,player,pair.intruder);BattleEventAdapter.state=next;BattleEventAdapter.save();
+   const cinema=await ScreenTheatre.round(next,()=>{const engine=BattleEventAdapter.rebuildRuntime();this.draft=null;this.pair=null;this.dom.techEditor.value='';this.dom.techAgents.replaceChildren();this.dom.techSource.textContent='合法检查点已重放，新的运行实例继续承载本轮回应。';this.paint();return engine;});
+   if(!this.open||this.operation!==operation||cinema.cancelled)return;
    if(next.queue.length&&!next.queue.includes(this.goal)){this.goal=next.queue[0];this.dom.techGoal.value=this.goal;}this.invalidate();this.paint();const h=next.history.at(-1),p=h.verdicts[0];this.status((p.accepted?'受理：':'拒绝：')+(AgentPolicies.reasons[p.reason]||p.reason)+'。本轮双方：'+this.sourceLabel(player)+' / '+this.sourceLabel(pair.intruder));
   }catch(e){if(this.operation===operation)this.status('仲裁未提交：'+e.message);}
   finally{if(this.operation===operation){this.busy=false;if(this.open)this.paint();}}
@@ -83,7 +88,7 @@ const RepressionUI={open:false,focused:true,busy:false,operation:0,goal:'body',m
   this.dom.techEvents.textContent=s.events.slice(0,3).map(e=>e.id+' · '+e.payload.target+' · '+JSON.stringify(e.payload)).join('\n');this.dom.techTrace.replaceChildren();
   for(const h of s.history){const li=document.createElement('li'),receipt=BattleEventAdapter.receipts.find(r=>r.round===h.round);li.textContent=(receipt?'来源：'+this.sourceLabel(receipt.player)+' / '+this.sourceLabel(receipt.intruder)+'\n':'')+'第 '+h.round+' 轮 · '+h.verdicts.map(v=>(v.agent==='repression'?'守护侧':'外来者')+(v.accepted?'受理：':'拒绝：')+(AgentPolicies.reasons[v.reason]||v.reason)).join(' / ')+'\n身体 '+h.before.bodyOwner+' → '+h.after.bodyOwner+'；归责 '+h.before.attribution+' → '+h.after.attribution+'；结局 '+h.before.endingLock+' → '+h.after.endingLock;this.dom.techTrace.append(li);}
   this.dom.techResult.replaceChildren();
-  this.dom.techBudget.textContent='回合 '+s.round+' / '+s.maxRounds+' · 版本 '+s.revision+' · 未回应的压力 '+s.pressure;
+  this.dom.techBudget.textContent='回合 '+s.round+' / '+s.maxRounds+' · 版本 '+s.revision+' · 未回应的压力 '+s.pressure+' · 运行实例 '+BattleEventAdapter.engineGeneration;
   if(s.outcome!=='pending'){
    const text=document.createElement('p');text.textContent=s.outcome==='won'?'三项目标分别成立。实验记录：tech_court_guarded。回到原文继续逐项回应，不跳过正文。':'本轮预算耗尽或明确认输。实验记录：tech_court_occupied。它不会替你自动决定主线。';this.dom.techResult.append(text);
    if(!BattleEventAdapter.gate){const again=document.createElement('button');again.type='button';again.textContent='开始新的练习';again.addEventListener('click',()=>{if(this.paused())return;BattleEventAdapter.state=null;BattleEventAdapter.begin();this.invalidate();this.paint();});this.dom.techResult.append(again);}
