@@ -31,7 +31,7 @@ const RepressionUI={open:false,focused:true,busy:false,operation:0,goal:'body',m
   window.addEventListener('pagehide',()=>{AgentBridge.cancel();if(this.open)BattleEventAdapter.save();});
   BattleEventAdapter.load();
   // Tools are available only in the separate edition. The normal game is untouched.
-  const start=()=>{try{if(['training','showcase'].includes(new URLSearchParams(location.search).get('lab')))this.show();}catch{}};
+  const start=()=>{try{const lab=new URLSearchParams(location.search).get('lab');if(['training','showcase'].includes(lab))this.show();if(lab==='showcase'&&!this.showcased){this.showcased=true;void ScreenTheatre.preview();}}catch{}};
   ui.startButton.addEventListener('click',start);
  },
  canAct(){return this.open&&!this.paused()&&!this.busy&&BattleEventAdapter.state?.outcome==='pending';},

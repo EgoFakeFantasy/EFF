@@ -48,7 +48,15 @@ const {_electron}=require('playwright'),fs=require('node:fs/promises'),path=requ
   await page.evaluate(()=>{closeDialog();Expedition.prefs.motion=true;void ScreenTheatre.preview();});await page.waitForFunction(()=>ScreenTheatre.active());assert.equal(await page.evaluate(()=>ScreenTheatre.session.reduced),true);
   await page.screenshot({path:path.join(out,'reduced-motion.png')});await page.locator('.theatre-skip').click();
   await page.evaluate(()=>{Expedition.prefs.motion=false;void ScreenTheatre.preview();});await page.waitForFunction(()=>ScreenTheatre.active());await page.evaluate(()=>resetRun());assert.equal(await page.evaluate(()=>ScreenTheatre.active()),false);assert.equal(await page.evaluate(()=>G.area),'mirror');assert.equal(await page.evaluate(()=>document.body.style.overflow),'');
-  assert.deepEqual(errors,[]);console.log(JSON.stringify({errors,wholeViewport:true,modalInputIsolation:true,realRuntimeRebuild:true,refreshReplay:true,pauseAndBlur:true,originalFinaleRewrite:true,chapterRebuild:true,reducedMotion:true,resetCleanup:true}));
+  // A saved ending blocks laboratory entry; showcase must still work without resetting it.
+  await page.evaluate(()=>{G.area='blood';F.parents=true;F.sister=true;buildTileCache();showEnding('bad_owned');});await page.evaluate(()=>EFFLocal.flush());
+  await page.goto('eff://game/pixel-version/index.html?edition=local&mode=tech&lab=showcase');
+  const beforeShowcase=await page.evaluate(()=>JSON.stringify({area:G.area,flags:F,counters:G.counters,endingId,state:BattleEventAdapter.state}));
+  await page.locator('#startButton').click();await page.waitForFunction(()=>ScreenTheatre.active());
+  assert.equal(await page.evaluate(()=>RepressionUI.open),false);assert.equal(await page.evaluate(()=>ui.ending.hidden),false);
+  assert.equal(await page.evaluate(()=>JSON.stringify({area:G.area,flags:F,counters:G.counters,endingId,state:BattleEventAdapter.state})),beforeShowcase);
+  await page.locator('.theatre-skip').click();assert.equal(await page.evaluate(()=>endingId),'bad_owned');
+  assert.deepEqual(errors,[]);console.log(JSON.stringify({errors,wholeViewport:true,modalInputIsolation:true,realRuntimeRebuild:true,refreshReplay:true,pauseAndBlur:true,originalFinaleRewrite:true,chapterRebuild:true,reducedMotion:true,resetCleanup:true,savedEndingShowcase:true}));
  }finally{await app.close();}
  if(video)console.log('VIDEO '+await video.path());
 })().catch(e=>{console.error(e);process.exitCode=1;});
