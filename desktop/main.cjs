@@ -48,7 +48,7 @@ async function start(){
   const changes=importData(await fs.readFile(result.filePaths[0],'utf8'),profile);await store.commit(changes);return {ok:true,entries:store.entries};
  });
  handle('eff:quit',()=>{setImmediate(()=>window.close());return {ok:true};});
- window=new BrowserWindow({width:1240,height:940,minWidth:760,minHeight:620,show:false,title:'EFF · 无中归来者 · 本地版',backgroundColor:'#0b101b',webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,sandbox:true,nodeIntegration:false,webSecurity:true,spellcheck:false}});
+ window=new BrowserWindow({width:1240,height:940,minWidth:760,minHeight:620,show:false,title:'EFF · 无中归来者 · 第四版',backgroundColor:'#0b101b',webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,sandbox:true,nodeIntegration:false,webSecurity:true,spellcheck:false}});
  Menu.setApplicationMenu(null);
  window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
  window.webContents.on('will-navigate',(event,url)=>{if(!trusted(url))event.preventDefault();else void world.dispatch({operation:'dispose'}).catch(()=>{});});

@@ -3,3 +3,5 @@
 .model-budget{margin-top:10px}.option-actions{flex-wrap:wrap}#modelDiagnostics{min-height:18px}
 
 .showcase-link{margin-left:22px}
+
+.download-native{display:block;width:fit-content;margin-bottom:16px;padding:11px 16px;border:1px solid #61776e;background:#14282c;color:#d6d8bf!important}.download-native[hidden]{display:none}.download-native:hover{border-color:#d2bd90}

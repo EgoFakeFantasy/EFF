@@ -96,12 +96,12 @@ const WorldStage={context:null,serial:0,focused:true,input:new Set(),moving:fals
  },
  draw(options={}){
   const c=this.context;if(!c||!this.compositor)return null;const reduced=Expedition.prefs.motion||matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const layers=c.port.draw(c.frame,reduced);return this.compositor.draw(layers.scene,layers.skeleton,{...options,pressure:c.frame.pressure,time:c.frame.time,reduced,hostile:c.frame.bodyOwner!=='player'||c.frame.narrative.node==='meta_state_2'});
+  const layers=c.port.draw(c.frame,reduced,options);return this.compositor.draw(layers.scene,layers.skeleton,{...options,focus:[(c.frame.avatar.x-c.port.camera.x+6)/320,(c.frame.avatar.y-c.port.camera.y)/192],pressure:c.frame.pressure,time:c.frame.time,reduced,hostile:c.frame.bodyOwner!=='player'||c.frame.narrative.node==='meta_state_2'});
  },
  blit(canvas,source){if(!canvas||!source)return;const c=canvas.getContext('2d');c.imageSmoothingEnabled=false;c.clearRect(0,0,canvas.width,canvas.height);c.drawImage(source,0,0,canvas.width,canvas.height);},
  paintTheatre(canvas,plan,progress,reduced){
-  const tear=reduced?0:Math.min(1,Math.max(0,(progress-.12)*2.5)),reveal=reduced?.5:Math.min(.94,Math.max(.08,(progress-.14)*2));
-  this.blit(canvas,this.draw({tear:plan.rebuild&&progress>.62?0:tear,reveal:plan.rebuild&&progress>.62?.2:reveal}));
+  const tear=reduced?0:Math.min(1,Math.max(0,(progress-.12)*2.5)),reveal=reduced?.5:Math.min(.68,Math.max(.08,(progress-.14)*1.5));
+  this.blit(canvas,this.draw({kind:plan.kind,progress,tear:plan.rebuild&&progress>.62?0:tear,reveal:plan.rebuild&&progress>.62?.2:reveal}));
  },
  renderGameplay(now,dt){
   const c=this.context;if(!c||RepressionUI.open||NarrativeAgency.active()||NarrativeTrials.rainActive()||!ui.start.hidden||!ui.ending.hidden)return false;
