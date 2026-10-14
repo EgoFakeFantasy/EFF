@@ -847,3 +847,5 @@ h1 {
     font-size: clamp(1.72rem, 12vw, 3.2rem);
   }
 }
+
+.version-link{display:inline-block;padding:8px 12px;border:1px solid #60736a;color:#d6c89f;font-size:13px;text-decoration:none}.version-link:hover{border-color:#c6b083}.version-link:focus-visible{outline:2px solid #c6b083;outline-offset:3px}

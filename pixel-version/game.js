@@ -1202,6 +1202,7 @@ function renderLine() {
   if (G.area === "storm") StormFlight.onLine(line);
   updateDialogStatus();
   Expedition.sync();
+  ScreenTheatre.onFinaleLine(line);
 }
 
 function setDialogPresentation(line) {
@@ -1384,6 +1385,8 @@ function leaveEnding() {
 }
 
 function resetRun() {
+  ScreenTheatre.reset();
+  void WorldStage.close();
   BattleEventAdapter.reset();
   NarrativeAgency.reset();
   NarrativeTrials.reset();
@@ -2016,6 +2019,7 @@ function checkExitsAndShards() {
 
 function gotoArea(area, fadeText) {
   if (transitionLock || !MAPS[area]) return;
+  if(WorldStage.context&&!WorldStage.context.preview&&WorldStage.context.config.scene!==area)void WorldStage.close();
   Expedition.cancelTransition();
   clearInput();
   transitionLock = true;
@@ -2155,8 +2159,8 @@ function renderStorm(now, dt) {
 
 /* ============================== 区域专属演出 ============================== */
 
-function renderAreaFx(map, cam, t) {
-  const id = G.area;
+function renderAreaFx(map, cam, t, surface = ctx, area = G.area) {
+  const id = area;
   if (id === "mirror") {
     // 镜中倒影：站在镜前时，镜内出现一个不会动的你；读过的镜子裂开
     const read = { 2: F.m1, 6: F.m2, 11: F.m3 };
@@ -2167,91 +2171,91 @@ function renderAreaFx(map, cam, t) {
       const near = Math.abs(G.px + 6 - (mx * TILE + 8)) < 13 && G.py > 1 * TILE && G.py < 5 * TILE;
       if (near) {
         // 倒影比本体更深、更安静——像是镜子先认出了你
-        ctx.globalAlpha = 0.6 + Math.sin(t * 2) * 0.1;
-        drawPerson(ctx, sx + 2, sy + 1, { coat: "#3a4468", hair: "#141824", skin: "#7e8aa8", dir: 3 });
-        ctx.globalAlpha = 1;
+        surface.globalAlpha = 0.6 + Math.sin(t * 2) * 0.1;
+        drawPerson(surface, sx + 2, sy + 1, { coat: "#3a4468", hair: "#141824", skin: "#7e8aa8", dir: 3 });
+        surface.globalAlpha = 1;
       }
       if (read[mx]) {
-        ctx.strokeStyle = "rgba(225,225,245,0.75)";
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(sx + 4, sy + 2);
-        ctx.lineTo(sx + 8, sy + 7);
-        ctx.lineTo(sx + 5, sy + 12);
-        ctx.moveTo(sx + 8, sy + 7);
-        ctx.lineTo(sx + 12, sy + 10);
-        ctx.stroke();
+        surface.strokeStyle = "rgba(225,225,245,0.75)";
+        surface.lineWidth = 1;
+        surface.beginPath();
+        surface.moveTo(sx + 4, sy + 2);
+        surface.lineTo(sx + 8, sy + 7);
+        surface.lineTo(sx + 5, sy + 12);
+        surface.moveTo(sx + 8, sy + 7);
+        surface.lineTo(sx + 12, sy + 10);
+        surface.stroke();
       }
     }
   } else if (id === "garden") {
     // 世界边界：距离不再产生的雾缘
     for (let i = 0; i < VIEW_W; i += 4) {
       const a = 0.08 + 0.05 * Math.sin(t * 1.4 + i * 0.25);
-      ctx.fillStyle = `rgba(160,200,170,${a})`;
-      ctx.fillRect(i, 0, 2, 7);
-      ctx.fillRect(i, VIEW_H - 7, 2, 7);
+      surface.fillStyle = `rgba(160,200,170,${a})`;
+      surface.fillRect(i, 0, 2, 7);
+      surface.fillRect(i, VIEW_H - 7, 2, 7);
     }
     for (let i = 0; i < VIEW_H; i += 4) {
       const a = 0.08 + 0.05 * Math.sin(t * 1.4 + i * 0.25);
-      ctx.fillStyle = `rgba(160,200,170,${a})`;
-      ctx.fillRect(0, i, 7, 2);
-      ctx.fillRect(VIEW_W - 7, i, 7, 2);
+      surface.fillStyle = `rgba(160,200,170,${a})`;
+      surface.fillRect(0, i, 7, 2);
+      surface.fillRect(VIEW_W - 7, i, 7, 2);
     }
     // 棺材铭文微光
     const cx = 12 * TILE - cam.x;
     const cy = 8 * TILE - cam.y;
     const g = 0.2 + Math.sin(t * 2) * 0.12;
-    ctx.fillStyle = `rgba(201,168,106,${g})`;
-    ctx.fillRect(cx - 9, cy - 3, 19, 1);
-    ctx.fillRect(cx - 7, cy, 15, 1);
+    surface.fillStyle = `rgba(201,168,106,${g})`;
+    surface.fillRect(cx - 9, cy - 3, 19, 1);
+    surface.fillRect(cx - 7, cy, 15, 1);
   } else if (id === "house_empty") {
     // 斜窗光
-    ctx.fillStyle = `rgba(200,198,175,${0.05 + 0.015 * Math.sin(t * 0.7)})`;
+    surface.fillStyle = `rgba(200,198,175,${0.05 + 0.015 * Math.sin(t * 0.7)})`;
     for (const bx of [4, 12, 25]) {
       const x0 = bx * TILE - cam.x;
-      ctx.beginPath();
-      ctx.moveTo(x0, 16 - cam.y);
-      ctx.lineTo(x0 + 18, 16 - cam.y);
-      ctx.lineTo(x0 - 26, 220 - cam.y);
-      ctx.lineTo(x0 - 44, 220 - cam.y);
-      ctx.fill();
+      surface.beginPath();
+      surface.moveTo(x0, 16 - cam.y);
+      surface.lineTo(x0 + 18, 16 - cam.y);
+      surface.lineTo(x0 - 26, 220 - cam.y);
+      surface.lineTo(x0 - 44, 220 - cam.y);
+      surface.fill();
     }
     // 卫生间镜子里的倒影
     const sx = 23 * TILE - cam.x;
     const sy = 2 * TILE - cam.y;
     if (Math.abs(G.px + 6 - (23 * TILE + 8)) < 13 && G.py > 2 * TILE && G.py < 5 * TILE) {
-      ctx.globalAlpha = 0.55;
-      drawPerson(ctx, sx + 2, sy + 1, { coat: "#3a4468", hair: "#141824", skin: "#7e8aa8", dir: 3 });
-      ctx.globalAlpha = 1;
+      surface.globalAlpha = 0.55;
+      drawPerson(surface, sx + 2, sy + 1, { coat: "#3a4468", hair: "#141824", skin: "#7e8aa8", dir: 3 });
+      surface.globalAlpha = 1;
     }
   } else if (id === "house_family") {
     // 新闻联播的蓝白闪光，落在沙发一带
     const a = StoryStaging.family === "table" || StoryStaging.family === "gone" ? 0 : 0.05 + hash(Math.floor(t * 8), 1, 1) * 0.08;
-    ctx.fillStyle = `rgba(160,190,230,${a})`;
-    ctx.fillRect(12 * TILE - cam.x, 1 * TILE - cam.y, 44, 28);
+    surface.fillStyle = `rgba(160,190,230,${a})`;
+    surface.fillRect(12 * TILE - cam.x, 1 * TILE - cam.y, 44, 28);
     const tvX = 14 * TILE - cam.x, tvY = TILE - cam.y;
-    ctx.fillStyle = "#101018"; ctx.fillRect(tvX, tvY, 17, 12);
-    ctx.fillStyle = a ? "#617f9a" : "#171c24"; ctx.fillRect(tvX + 2, tvY + 2, 13, 7);
-    if (a) { ctx.fillStyle = "#abbac4"; ctx.fillRect(tvX + 4, tvY + 6, 8, 1); }
-    ctx.fillStyle = "#18161a"; ctx.fillRect(tvX + 7, tvY + 12, 3, 2);
+    surface.fillStyle = "#101018"; surface.fillRect(tvX, tvY, 17, 12);
+    surface.fillStyle = a ? "#617f9a" : "#171c24"; surface.fillRect(tvX + 2, tvY + 2, 13, 7);
+    if (a) { surface.fillStyle = "#abbac4"; surface.fillRect(tvX + 4, tvY + 6, 8, 1); }
+    surface.fillStyle = "#18161a"; surface.fillRect(tvX + 7, tvY + 12, 3, 2);
   } else if (id === "blood") {
     // The hand and heart, then two charred remains: the objects described in the scene.
     const sx = 13 * TILE + 8 - cam.x, sy = 7 * TILE + 8 - cam.y;
-    ctx.save(); ctx.translate(sx, sy); ctx.rotate(Math.PI / 2);
-    drawPerson(ctx, -6, -8, { coat: "#603345", hair: "#211318", skin: "#aa8278", dir: 0, dead: true });
-    ctx.restore();
-    if (F.sister || StoryStaging.heartReleased) { ctx.fillStyle = "#511425"; ctx.fillRect(sx - 1, sy - 2, 6, 4); ctx.fillStyle = "#aa3744"; ctx.fillRect(sx, sy - 2, 3, 2); }
+    surface.save(); surface.translate(sx, sy); surface.rotate(Math.PI / 2);
+    drawPerson(surface, -6, -8, { coat: "#603345", hair: "#211318", skin: "#aa8278", dir: 0, dead: true });
+    surface.restore();
+    if (F.sister || StoryStaging.heartReleased) { surface.fillStyle = "#511425"; surface.fillRect(sx - 1, sy - 2, 6, 4); surface.fillStyle = "#aa3744"; surface.fillRect(sx, sy - 2, 3, 2); }
     const px = 13 * TILE - cam.x, py = 15 * TILE - cam.y;
-    ctx.fillStyle = "#09080a"; ctx.fillRect(px - 3, py + 1, 8, 13); ctx.fillRect(px + 5, py + 2, 8, 12);
-    ctx.strokeStyle = "#bc6739"; ctx.beginPath(); ctx.moveTo(px - 1, py - 3); ctx.lineTo(px + 12, py + 12); ctx.stroke();
+    surface.fillStyle = "#09080a"; surface.fillRect(px - 3, py + 1, 8, 13); surface.fillRect(px + 5, py + 2, 8, 12);
+    surface.strokeStyle = "#bc6739"; surface.beginPath(); surface.moveTo(px - 1, py - 3); surface.lineTo(px + 12, py + 12); surface.stroke();
     // 看清她之后，视野边缘随心跳收缩
     if (F.sister) {
       const beat = Math.pow(Math.max(0, Math.sin(t * 3.6)), 10) + Math.pow(Math.max(0, Math.sin(t * 3.6 + 0.5)), 18) * 0.6;
-      ctx.fillStyle = `rgba(120,10,10,${0.1 * beat})`;
-      ctx.fillRect(0, 0, VIEW_W, 10);
-      ctx.fillRect(0, VIEW_H - 10, VIEW_W, 10);
-      ctx.fillRect(0, 0, 10, VIEW_H);
-      ctx.fillRect(VIEW_W - 10, 0, 10, VIEW_H);
+      surface.fillStyle = `rgba(120,10,10,${0.1 * beat})`;
+      surface.fillRect(0, 0, VIEW_W, 10);
+      surface.fillRect(0, VIEW_H - 10, VIEW_W, 10);
+      surface.fillRect(0, 0, 10, VIEW_H);
+      surface.fillRect(VIEW_W - 10, 0, 10, VIEW_H);
     }
   } else if (id === "meta") {
     // 读过的石碑亮起
@@ -2260,8 +2264,8 @@ function renderAreaFx(map, cam, t) {
       if (!done) continue;
       const sx = sx0 * TILE - cam.x;
       const sy = 4 * TILE - cam.y;
-      ctx.fillStyle = `rgba(184,168,232,${0.2 + Math.sin(t * 2.4) * 0.1})`;
-      ctx.fillRect(sx + 2, sy - 2, TILE - 4, 2);
+      surface.fillStyle = `rgba(184,168,232,${0.2 + Math.sin(t * 2.4) * 0.1})`;
+      surface.fillRect(sx + 2, sy - 2, TILE - 4, 2);
     }
   }
 }
@@ -2283,6 +2287,7 @@ function renderFrame(now) {
   const dt = Math.min(0.05, elapsed);
   lastT = now;
   NarrativeTrials.update(elapsed);
+  WorldStage.frame(now);
 
   if (!Expedition.paused()) {
     movePlayer(dt);
@@ -2312,6 +2317,11 @@ function renderFrame(now) {
 
   if (NarrativeTrials.render()) {
     Expedition.render(dt, { x: 0, y: 0 }, now);
+    return;
+  }
+
+  if (WorldStage.renderGameplay(now,dt)) {
+    Expedition.render(dt, WorldStage.context.port.camera, now);
     return;
   }
 
@@ -2561,4 +2571,6 @@ PhenomenonBattle.init();
 NarrativeTrials.init();
 NarrativeAgency.init();
 RepressionUI.init();
+ScreenTheatre.init();
+WorldStage.init();
 requestAnimationFrame(render);

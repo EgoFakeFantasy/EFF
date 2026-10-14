@@ -59,6 +59,7 @@ const PhenomenonBattle = {
       this.time = 0;
     }
     this.cue = cue;
+    if(cue.phase==="ownership"&&EFFLocal.enabled)void WorldStage.court();
     ui.dialog.dataset.battle = cue.phase;
     if (cue.phase === "clash") ui.areaName.textContent = ["崩坏的庭院", "红灰光团的碰撞", "场地消解 · 无色雨水", "圣塔底部 · 向上坠落", "黄昏的海", "显意识的边缘"][cue.progress];
     if (cue.phase === "rain-rise") ui.areaName.textContent = "圣塔底部 · 向上坠落";
@@ -96,12 +97,14 @@ const PhenomenonBattle = {
     }
     this.pending = false;
     this.claimed[index] = true;
+    if(EFFLocal.enabled)void WorldStage.court();
     this.dom.battleStatus.textContent = ["撕扯的力道突然消失了一点。", "造下这一切的不是我。我否定这样的事情。", "这样的结局绝不可能发生！"][index];
     for (const button of this.dom.battleTargets.children) button.disabled = true;
     this.dom.battleTargets.children[index].classList.add("written");
     NarrativeTrials.onCommit();
     BattleEventAdapter.observeClaim(index);
     updateDialogStatus();
+    void ScreenTheatre.present(SpectaclePlan.canonical(index,currentFullText()));
     return true;
   },
 

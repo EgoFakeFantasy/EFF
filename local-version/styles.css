@@ -43,3 +43,7 @@
 .tech-actions { position: sticky; bottom: -24px; z-index: 2; background: #0c1422f5; padding: 12px 0; border-top: 1px solid #425466; }
 @media (max-height: 800px) { .tech-head { top: -16px; } .tech-actions { bottom: -16px; } }
 @media (max-width: 700px) { .tech-head { top: -14px; } .tech-actions { bottom: -14px; } }
+
+.tech-head-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+
+#techCanvas{width:min(640px,100%);height:auto;max-height:384px;object-fit:contain;background:#100d16;image-rendering:pixelated;cursor:crosshair}#techCanvas:focus-visible{outline:2px solid #b2d9ba;outline-offset:3px}.world-input{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0}.world-input p{font-size:12px;line-height:1.7;color:#acbdae;margin:0}.world-pad{display:flex;gap:4px}.world-pad button{min-width:31px;height:31px;border:1px solid #61776f;background:#17212a;color:#c3d6ba;touch-action:none;cursor:pointer}

@@ -2,6 +2,7 @@
 EFFLocal.notify();
 const feedback=text=>document.getElementById('homeFeedback').textContent=text;
 const native=EFFLocal.native;
+document.getElementById('downloadNative').hidden=!!native;
 if(native?.bootstrap.model?.enabled){document.getElementById('modelName').value=native.bootstrap.model.name;document.getElementById('modelBudget').value=native.bootstrap.model.profile||'balanced';feedback('本次游戏已启用双代理；点击停止 AI 可立即关闭。');}
 for(const id of ['importSave','checkModel','enableModel','stopModel','quitGame'])document.getElementById(id).disabled=!native;
 if(!native)feedback('浏览器预览使用独立的本地存储；原生文件存档和模型连接在 EFF.exe 中可用。');

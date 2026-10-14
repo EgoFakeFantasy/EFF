@@ -1,20 +1,21 @@
 # 无中归来者
 
-《无中归来者》是一款改编自 SF 小说网《混沌树海》周防篇、以原文叙事为核心的网页游戏。当前主要开发版本为 **像素箱庭版（pixel-version）**：通过区域探索、人物对话、记忆收集与直接作用于文字和现象的互动，呈现周防的经历。
+《无中归来者》是一款改编自 SF 小说网《混沌树海》周防篇、以原文叙事为核心的网页游戏。当前主要开发版本为 **第四版 · 现象战争（local-version，v0.6.0）**，以像素箱庭版为基础，增加本地双代理、可操控的运行世界与全窗口现象演出。像素箱庭版通过区域探索、人物对话、记忆收集与直接作用于文字和现象的互动，呈现周防的经历。
 
-**[在线游玩像素箱庭版](https://egofakefantasy.github.io/EFF/pixel-version/)** · [箱庭版详细说明（含剧透）](./pixel-version/README.md)
+**[进入第四版](https://egofakefantasy.github.io/EFF/local-version/)** · **[下载 Windows 本地版](https://github.com/EgoFakeFantasy/EFF/releases/tag/v0.6.0)** · [在线游玩像素箱庭版](https://egofakefantasy.github.io/EFF/pixel-version/) · [箱庭版详细说明（含剧透）](./pixel-version/README.md)
 
 ## 版本与入口
 
-仓库保留三个版本，存档互相独立：
+仓库保留四个版本；第四版的原文之旅与现象战争也使用独立存档：
 
 | 版本 | 内容 | 在线入口 | 本地入口 |
 | --- | --- | --- | --- |
-| 像素箱庭版（当前主要版本） | 区域探索、像素人物与场景、分场演出、现象与过程争夺 | [开始游戏](https://egofakefantasy.github.io/EFF/pixel-version/) | `pixel-version/index.html` |
+| 第四版 · 现象战争（当前主要版本） | 原文之旅、现象攻防、双代理、世界实例重建 | [浏览器预览](https://egofakefantasy.github.io/EFF/local-version/) | [Windows 下载](https://github.com/EgoFakeFantasy/EFF/releases/tag/v0.6.0)，解压后双击 EFF.exe |
+| 像素箱庭版 | 区域探索、像素人物与场景、分场演出、现象与过程争夺 | [开始游戏](https://egofakefantasy.github.io/EFF/pixel-version/) | `pixel-version/index.html` |
 | 文字演出版 | 文字演出与雨水玩法 | [文字演出版](https://egofakefantasy.github.io/EFF/new-version/) | `new-version/index.html` |
 | 原版 | 原始文字网页游戏 | [原版](https://egofakefantasy.github.io/EFF/) | `index.html` |
 
-**网站根地址仍然进入原版文字游戏。** 最新箱庭版的地址包含 `/pixel-version/`；合并到 `main` 不会自动改变首页入口。
+**网站根地址仍然进入原版文字游戏。** 第四版的地址包含 `/local-version/`；合并到 `main` 不会自动改变首页入口。
 
 ## 像素箱庭版体验
 
@@ -94,13 +95,23 @@ node tests/pixel-regression.cjs
 
 ## 部署
 
-`main` 已包含当前箱庭版。推送到 `main` 后，GitHub Actions 的 `Deploy static game to GitHub Pages` 工作流发布仓库根目录；也可手动触发。三个版本分别保留各自路径。
+`main` 已包含当前箱庭版。推送到 `main` 后，GitHub Actions 的 `Deploy static game to GitHub Pages` 工作流发布仓库根目录；也可手动触发。四个版本分别保留各自路径。
 
 部署到其他静态托管服务时，上传完整仓库站点文件并保留目录结构即可。
 
 
-## 本地新版本 0.3：双代理现象战争
+## 第四版 v0.6.0：双代理现象战争
 
 新增独立入口 [local-version](./local-version/README.md) 与 Electron Windows 宿主，复用当前箱庭剧情、美术、过场和音乐。普通模式保持原九种结局；技术模式增加数据式规则编辑、本地模型双代理提案、确定性仲裁与事件重放。守护侧与外来者共享一套本地权重、分别规划，玩家审阅后才执行；模型关闭或单侧失败时分别回退规则模板。默认离线、无模型也可游玩。
 
 实现框架、叙事边界和后续阶段见[本地版技术文档](./docs/eff-local-implementation.md)。双代理接口与实际模型验收见[本地 AI 说明](./docs/eff-local-ai.md)。此新增入口不改变网站根目录的原版入口。
+
+0.4 增加[全窗口现象演出](./docs/eff-screen-spectacle.md)：窗口撕裂、执行轨迹显露、视觉崩溃与虚拟运行实例重建，并在终章呈现原句覆盖与获授权的过去回写。主菜单可直接预览。
+
+0.5 增加[动态世界与原生实例](./docs/eff-live-world.md)：血色庭院的身体输入、结局碰撞边界、归责链与终章过去锚点由同一状态驱动；WebGL2 统一合成像素场景和运行骨架，重建实际切换世界子进程。
+
+第四版精修三种回应的画面：身体牵引回缩并断开，强加的指认剥离，结局封印裂解。运行层只显露实际碰撞轮廓与控制连接；全窗口碎片随争夺对象变化。终章保留完整原句和替代句，授权后的回溯沿同一条历史呈现。重建画面等待原生世界的成功回执，身体位置与已确认的回应接续。
+
+浏览器可预览剧情、规则争夺和视觉演出，使用同一世界规则的浏览器实例；Windows 程序另有文件存档、本地模型连接及实际世界子进程的退出／生成。模型权重需由玩家自行准备，默认关闭，无模型时可用规则模板完整游玩。演出可暂停、略过，并支持减少动态。
+
+第四版的演出与实际操控关系见[第四版说明](./docs/eff-fourth-edition.md)。

@@ -22,7 +22,7 @@ const {_electron}=require('playwright'),path=require('node:path'),fs=require('no
    const pair=await page.evaluate(()=>RepressionUI.pair);assert.equal(pair.player.source,'local-model',pair.player.reason);assert.equal(pair.intruder.source,'local-model',pair.intruder.reason);generated.push(pair);
    assert.equal(await page.evaluate(()=>BattleEventAdapter.state.round),index); // Generation never commits on its own.
    if(index===0)await page.screenshot({path:path.join(out,'ai-dual-proposals.png')});
-   await page.locator('#techSubmit').click();await page.waitForFunction(round=>BattleEventAdapter.state.round===round,index+1);
+   await page.locator('#techSubmit').click();await page.waitForFunction(round=>BattleEventAdapter.state.round===round,index+1);await page.waitForFunction(()=>!ScreenTheatre.active()&&!RepressionUI.busy,{},{timeout:25000});
   }
   assert.equal(await page.evaluate(()=>BattleEventAdapter.state.outcome),'won');assert.equal(await page.evaluate(()=>!!F.finaleSummoned),false);
   await page.evaluate(()=>EFFLocal.flush());await page.reload();await page.locator('#startButton').click();await page.locator('#repressionPanel').waitFor({state:'visible'});

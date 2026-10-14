@@ -152,7 +152,7 @@ const Expedition = {
   },
 
   paused() {
-    return document.hidden || RepressionUI.active() || NarrativeAgency.active() || Boolean(this.dom?.journalDialog.open || this.dom?.settingsDialog.open || document.getElementById("renameDialog")?.open || !ui.codex.hidden);
+    return document.hidden || ScreenTheatre.active() || RepressionUI.active() || NarrativeAgency.active() || Boolean(this.dom?.journalDialog.open || this.dom?.settingsDialog.open || document.getElementById("renameDialog")?.open || !ui.codex.hidden);
   },
 
   focusGameplay() {

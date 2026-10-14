@@ -41,6 +41,7 @@ const Finale = {
   requesting() { return !this.intervening() && this.node() === "meta_state_3" && this.raw[this.offset + dialogIndex] === FinaleScenes.meta_state_3.text[this.requestIndex()]; },
 
   reset() {
+    ScreenTheatre.cancel();
     if (this.timer !== null) clearTimeout(this.timer);
     this.timer = null;
     this.renameResume = false;
@@ -184,6 +185,7 @@ const Finale = {
     else if (option.action === "researchEpilogue") NarrativeAgency.openEpilogue();
     else if (option.action === "renameProtagonist") this.rename(true);
     else if (option.to) this.to(option.to);
+    ScreenTheatre.onFinaleAction(option);
   },
 
   answer() {
