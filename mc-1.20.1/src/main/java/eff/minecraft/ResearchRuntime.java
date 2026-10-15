@@ -13,7 +13,7 @@ import net.minecraft.world.phys.Vec3;
  * Real server-side executors, observed entities, a replaceable event/control instance and disk
  * checkpoints.
  */
-public final class ResearchRuntime implements AutoCloseable {
+public final class ResearchRuntime implements ResearchSession {
   private final EffArena arena;
   private final Path directory;
   private final Map<String, Saved> checkpoints = new LinkedHashMap<>();
@@ -374,6 +374,8 @@ public final class ResearchRuntime implements AutoCloseable {
 
   private boolean apply(ResearchProgram.Step s, String actor) throws Exception {
     String op = s.op(), target = s.target();
+    if (op.equals("rebuild") && target.startsWith("runtime."))
+      throw new IllegalArgumentException("MANAGED_RUNTIME_REQUIRED");
     if (op.equals("assert")) {
       if (value(s.field()) != s.expected()) throw new IllegalArgumentException("ASSERTION_FAILED");
       return false;

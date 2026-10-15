@@ -95,7 +95,7 @@ async function inferResearch(model, s, actor, goal = "") {
       "Compose up to 3 instructions. These are primitive operations, not complete prewritten strategies.",
       "To install a conditional instruction, optionally include watch_name, condition_field, condition_value. It fires once.",
       "Restore/rebuild recover a valid checkpoint WITHOUT first disabling anything. Seal alone requires control and event disabled.",
-      "A checkpoint cannot regrant revoked recovery authority. Choose inspect when no recovery capability exists.",
+      "A checkpoint cannot regrant revoked recovery authority. Managed runtime.* commands replace real JVM processes and preserve committed revocations; they do NOT restore a checkpoint. Replace a worker when its actual receipts show a process failure; do not repeatedly restart a healthy host. Choose inspect when no recovery capability exists.",
       "Only actual server execution determines success. Explanations are one short Chinese sentence, not a victory claim.",
     ].join(" ");
     const f = s.fields,
@@ -144,6 +144,10 @@ async function inferResearch(model, s, actor, goal = "") {
         !f["authority.recovery.active"]
       )
         available.push("refuse ending.owned");
+    }
+    if (s.runtime && (actor === "repression" || f["authority.recovery.active"] &&
+      s.runtime.events?.some(e => e.type === "worker-replaced" && /TIMEOUT|EXITED|PIPE/.test(e.reason || "")))) {
+      available.push("rebuild runtime.execution", "rebuild runtime.policy", "rebuild runtime.host");
     }
     const commands = new Set(available);
     // Forward composition: restore can supply the entity needed by a following callback.
@@ -200,6 +204,7 @@ async function inferResearch(model, s, actor, goal = "") {
       journal: s.journal,
       currently_valid_primitive_commands: available,
     };
+    if (s.runtime) observation.runtime = s.runtime;
     if (actor === "repression") observation.player_intent = goal;
     const budget = {
       quick: [8000, 2048, 256],

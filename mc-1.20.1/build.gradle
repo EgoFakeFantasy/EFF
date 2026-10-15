@@ -1,5 +1,5 @@
 plugins { id 'fabric-loom' version '1.10.5' }
-version = '0.2.0+mc1.20.1'
+version = '0.3.0+mc1.20.1'
 group = 'eff.minecraft'
 base { archivesName = 'eff-minecraft-runtime-1.20.1' }
 repositories { mavenCentral() }
@@ -80,5 +80,60 @@ tasks.named('runClient').configure {
    if (result.ok != true) throw new GradleException('Native QA failed: ' + result.error)
    logger.lifecycle('Native QA passed: ' + result.checks.size() + ' checks')
   }
+ }
+}
+
+
+// The replacement workers have no Minecraft classes or native hooks in their classpath.
+sourceSets {
+ runtimeKernel {
+  java.srcDirs = ['src/runtime/java', 'src/main/java']
+  java.include 'eff/runtime/**', 'eff/minecraft/ResearchProgram.java', 'eff/minecraft/Jsons.java'
+ }
+}
+configurations { runtimeKernelImplementation }
+dependencies { runtimeKernelImplementation 'com.google.code.gson:gson:2.10' }
+tasks.register('runtimeKernelJar', Jar) {
+ dependsOn runtimeKernelClasses
+ archiveFileName = 'eff-runtime-workers.jar'
+ destinationDirectory = layout.buildDirectory.dir('runtime')
+ duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+ from sourceSets.runtimeKernel.output
+ from('runtime/GSON-LICENSE.txt') { into 'META-INF/licenses/gson' }
+ from { configurations.runtimeKernelRuntimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+ exclude 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA'
+ preserveFileTimestamps = false; reproducibleFileOrder = true
+}
+tasks.register('managedRuntimeTest', Exec) {
+ dependsOn runtimeKernelJar
+ environment 'EFF_TEST_JAVA', javaToolchains.launcherFor(java.toolchain).get().executablePath.asFile.absolutePath
+ environment 'EFF_TEST_WORKERS', tasks.named('runtimeKernelJar').get().archiveFile.get().asFile.absolutePath
+ commandLine 'node', '--test', 'runtime/controller.test.cjs'
+}
+check { dependsOn managedRuntimeTest }
+// Export the fixed Loom launch configuration; no access tokens or paths go into tracked files.
+tasks.register('exportManagedLaunch') {
+ dependsOn runtimeKernelJar
+ dependsOn { def t=tasks.named('runClient').get(); t.taskDependencies.getDependencies(t) }
+ doLast {
+  def run = tasks.named('runClient').get()
+  def directory = project.hasProperty('effManagedDir') ? file(project.property('effManagedDir')) : file('run-managed')
+  directory.mkdirs()
+  def game = new File(directory, 'mc-host'); game.mkdirs()
+  run.useArgFile.set(false)
+  def args = new ArrayList<String>(run.allJvmArgs)
+  args.addAll(run.jvmArguments.get())
+  args += ['-XX:+DisableAttachMechanism', '-XX:+ExitOnOutOfMemoryError', '-Xmx2G', '-Deff.preview=true', '-Deff.previewResearch=true']
+  if(project.hasProperty('effManagedTest')) args += '-Deff.managedSelftest=true'
+  args += ['-cp', run.internalClasspath.asPath, run.mainClass.get()]
+  args += run.args
+  run.argumentProviders.each { args.addAll(it.asArguments()) }
+  def command = javaToolchains.launcherFor(java.toolchain).get().executablePath.asFile.absolutePath
+  def config = [java:command, workerJar:tasks.named('runtimeKernelJar').get().archiveFile.get().asFile.absolutePath,
+    directory:new File(directory,'authority').absolutePath,
+    host:[command:command,args:args,cwd:game.absolutePath,env:run.internalEnvironmentVars.get(),useArgFile:true]]
+  def target = new File(directory,'private-launch.json')
+  target.setText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(config)), 'UTF-8')
+  logger.lifecycle('Managed launch manifest: ' + target)
  }
 }

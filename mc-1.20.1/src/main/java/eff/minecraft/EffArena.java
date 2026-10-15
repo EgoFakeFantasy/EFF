@@ -54,7 +54,7 @@ public final class EffArena {
   private Vec3 bound = Vec3.ZERO;
   private JsonObject state = new JsonObject();
   private ArmorStand body;
-  public ResearchRuntime research;
+  public ResearchSession research;
 
   private record Placement(BlockPos pos, BlockState block) {}
 

@@ -11,3 +11,7 @@ run-research/
 run-research-qa/
 
 run-story-qa/
+
+run-managed*/
+
+private-launch.json

@@ -159,3 +159,23 @@ test("typed instruction output cannot turn natural-language explanations into ex
   assert.equal(p.source, "rule-template");
   assert.equal(p.reason, "MODEL_INVALID_RESEARCH_PROGRAM");
 });
+
+
+test("runtime intervention proposals require real managed faults and unrevoked recovery", async () => {
+  for (const [managed, faulted, authorized, expected] of [
+    [false, false, true, false],
+    [true, false, true, false],
+    [true, true, false, false],
+    [true, true, true, true],
+  ]) {
+    const s = base();
+    s.fields["authority.recovery.active"] = authorized;
+    if (managed) s.runtime = { events: faulted ? [{ type: "worker-replaced", reason: "WORKER_PROGRESS_TIMEOUT", role: "execution" }] : [] };
+    const m = model({ statements: [{ op: "rebuild", target: "runtime.execution" }], explanation: "依据实际故障替换执行进程。" });
+    const result = await inferResearch(m, s, "intruder");
+    assert.equal(result.source === "local-model", expected);
+    const observed = JSON.parse(m.calls[0].messages[1].content);
+    assert.equal(observed.currently_valid_primitive_commands.includes("rebuild runtime.execution"), expected);
+    if (managed) assert.deepEqual(observed.runtime, s.runtime);
+  }
+});

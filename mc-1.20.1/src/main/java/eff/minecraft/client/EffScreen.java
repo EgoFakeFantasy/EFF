@@ -196,6 +196,19 @@ public final class EffScreen extends Screen {
                 .append("\n条件：assert control.tether.active == false")
                 .append(
                     "\n触发器：watch guard when entity.avatar.alive == false -> disable event.possess");
+        if (r.has("runtime")) {
+          JsonObject rt = Jsons.o(r, "runtime");
+          text.append("\n真实 JVM：MC #")
+              .append(Jsons.i(rt, "hostPid"))
+              .append(" / 判定 #")
+              .append(Jsons.i(Jsons.o(rt, "policy"), "pid"))
+              .append(" / 执行 #")
+              .append(Jsons.i(Jsons.o(rt, "execution"), "pid"))
+              .append(" / 已提交 ")
+              .append(Jsons.i(rt, "commit"))
+              .append(
+                  "\n跨进程：rebuild runtime.policy; rebuild runtime.execution; rebuild runtime.host");
+        }
         lines = font.split(Component.literal(text.toString()), w);
         textBottom = height - 138;
         researchEditor =

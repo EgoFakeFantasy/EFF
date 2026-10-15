@@ -1,13 +1,13 @@
 # EFF · Minecraft 1.20.1 特供版
 
-基于运行层研究场 0.2，适配 **Minecraft Java 1.20.1 / Fabric Loader 0.19.5 / Fabric API 0.92.12+1.20.1 / Java 17**。这是独立的 Fabric 构建，与 [26.3 版本](../mc-version/README.md) 共用原文脚本和本地 AI 桥接。
+运行层研究场 0.3，适配 **Minecraft Java 1.20.1 / Fabric Loader 0.19.5 / Fabric API 0.92.12+1.20.1 / Java 17**。这是独立的 Fabric 构建，与 [26.3 版本](../mc-version/README.md) 共用原文脚本和本地 AI 桥接。
 
 保留原文之旅、血色庭院争夺练习、运行层研究场、本地双代理、真实实体/控制/事件/磁盘检查点/实例迁移/出口判定，以及真实游戏帧撕裂与重新构成演出。原文、说话者和终章过去介入节点仍由同一套脚本决定。
 
 ## 安装
 
 1. 在启动器中建立 **1.20.1 + Fabric** 独立实例，安装 Fabric Loader **0.19.5**；游戏运行 Java 使用 **17**。
-2. 将本版 `eff-minecraft-runtime-1.20.1-0.2.0+mc1.20.1.jar` 与 **Fabric API 0.92.12+1.20.1** 放进该实例的 `mods`。
+2. 将本版 `eff-minecraft-runtime-1.20.1-0.3.0+mc1.20.1.jar` 与 **Fabric API 0.92.12+1.20.1** 放进该实例的 `mods`。
 3. 安装 **Node.js 22+**；若启动器找不到 Node，增加 JVM 参数 `-Deff.node=C:/实际路径/node.exe`。
 4. 进入单人世界，按 **R**。研究场入口为 `/eff research`，原文之旅为 `/eff play`，独立练习为 `/eff duel`。
 5. 本地 AI 使用已有的 **Ollama** 服务 `127.0.0.1:11434`。在“本地模型”页检测并启用已安装的模型；不会自动下载权重。推荐先用本机已有的 `qwen3.5:4b`。
@@ -54,7 +54,7 @@ refuse ending.owned;
 | 维度 | 1.20.1 数据包格式；场地独立于主世界。 |
 | 执行器 | Java 17 字节码；受限程序、真实实体观测、原子检查点与本地 AI 均保留。 |
 
-“运行层替换”仍指同一 MC JVM 中创建新执行实例和场地，不会替换或故意崩溃 MC 进程。其他模组自己的服务器事件仍可能运行，EFF 冻结不承诺冻结任意第三方代码。Sodium、Iris 和大型整合包须分别验证。
+普通模组入口中的 `rebuild instance.world` 仍在同一 MC JVM 内重建实例。0.3 的 [托管入口](./MULTI_JVM.md) 另提供三个独立 JVM 的实际替换，包括 MC 整体重启。其他模组自己的服务器事件仍可能运行，EFF 冻结不承诺冻结任意第三方代码。Sodium、Iris 和大型整合包须分别验证。
 
 ## 开发与检查
 
@@ -76,3 +76,7 @@ Gradle Wrapper 固定 8.14.3 并校验 SHA-256；Fabric Loom 固定 1.10.5。构
 原生验收使用独立测试世界，检查真实实体删除与本地模型反制、冻结和恢复、检查点与实例替换、结局出口、退出恢复。原生验收命令会读取本轮结果；缺少新回执或验收失败时返回失败，不把游戏正常退出当作通过。代码编译及脚本检查不能代替实际 MC 通关或整合包兼容验收。
 
 原著说明见 [仓库 README](../README.md)，依赖许可见 [THIRD_PARTY.md](./THIRD_PARTY.md)。
+
+## 0.3 多 JVM 托管研究场
+
+新增判定 JVM、执行 JVM、MC JVM 的独立替换和进程外战果提交。通过 `start-managed.ps1` 启动；普通模组入口仍为单 JVM 研究场。启动、指令、恢复边界和验收方法见 [MULTI_JVM.md](MULTI_JVM.md)。

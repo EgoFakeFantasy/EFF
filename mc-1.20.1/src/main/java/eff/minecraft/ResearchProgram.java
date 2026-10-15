@@ -54,6 +54,9 @@ public final class ResearchProgram {
       throw new IllegalArgumentException("PROGRAM_SYNTAX");
     String op = parts[0], target = parts[1];
     boolean valid = TARGETS.containsKey(op) && TARGETS.get(op).equals(target);
+    if (op.equals("rebuild")
+        && Set.of("runtime.policy", "runtime.execution", "runtime.host").contains(target))
+      valid = true;
     if (op.equals("disable"))
       valid = Set.of("control.tether", "event.possess", "authority.recovery").contains(target);
     if (Set.of("seal", "restore", "save").contains(op))

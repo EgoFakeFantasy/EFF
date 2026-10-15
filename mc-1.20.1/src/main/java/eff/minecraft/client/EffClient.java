@@ -21,6 +21,15 @@ public final class EffClient implements ClientModInitializer {
   private static boolean pauseSent = false;
 
   public void onInitializeClient() {
+    net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents.CLIENT_STOPPING
+        .register(
+            mc -> {
+              if (RuntimeLink.enabled())
+                try {
+                  RuntimeLink.call(Jsons.obj("op", "goodbye"));
+                } catch (Exception ignored) {
+                }
+            });
     menu =
         KeyBindingHelper.registerKeyBinding(
             new KeyMapping("key.eff.menu", InputConstants.KEY_R, "key.categories.gameplay"));
@@ -94,7 +103,9 @@ public final class EffClient implements ClientModInitializer {
         });
     ClientTickEvents.END_CLIENT_TICK.register(
         mc -> {
+          RuntimeLink.clientTick(mc.isPaused(), mc.level != null);
           LegacyDev.prepare(mc);
+          ManagedSelfTest.tick(mc);
           EffSelfTest.tick(mc);
           ResearchSelfTest.tick(mc);
           EffPreview.tick(mc);

@@ -28,7 +28,7 @@ public final class EffServer {
     JsonObject last;
     boolean polling = false, active = true;
     long sequence;
-    ResearchRuntime research;
+    ResearchSession research;
     boolean researchBusy;
     long researchToken;
     Path save;
@@ -216,7 +216,10 @@ public final class EffServer {
       }
       run.arena.apply(state);
       if (wantsResearch && run.research == null) {
-        run.research = new ResearchRuntime(run.arena, run.save);
+        run.research =
+            RuntimeLink.enabled()
+                ? new ManagedResearchRuntime(run.arena)
+                : new ResearchRuntime(run.arena, run.save);
         run.arena.research = run.research;
         run.research.project();
       }
@@ -247,6 +250,7 @@ public final class EffServer {
   }
 
   public static void tick(MinecraftServer server) {
+    RuntimeLink.serverTick();
     ticks++;
     for (Run run : List.copyOf(RUNS.values())) {
       if (run.arena.server != server) continue;
@@ -289,7 +293,7 @@ public final class EffServer {
   }
 
   private static void researchPlan(Run run, String actor, String goal) {
-    ResearchRuntime runtime = run.research;
+    ResearchSession runtime = run.research;
     if (runtime == null || run.researchBusy) return;
     JsonObject observed = runtime.observation();
     int revision = runtime.revision();

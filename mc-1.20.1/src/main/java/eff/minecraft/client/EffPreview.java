@@ -31,6 +31,8 @@ public final class EffPreview {
         mc.options.pauseOnLostFocus =
             false; // Isolated opt-in development preview; EFF still pauses on lost focus.
         mc.getTutorial().setStep(TutorialSteps.NONE);
+        if (RuntimeLink.enabled())
+          name = "eff-managed-" + System.getenv("EFF_RUNTIME_SESSION") + "-" + RuntimeLink.EPOCH;
         Path saves = mc.gameDirectory.toPath().resolve("saves"), world = saves.resolve(name);
         if (Files.isRegularFile(world.resolve("eff-preview.marker"))) {
           mc.createWorldOpenFlows().loadLevel(new TitleScreen(), name);
