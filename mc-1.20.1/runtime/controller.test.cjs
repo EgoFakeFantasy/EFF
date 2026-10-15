@@ -1,8 +1,10 @@
 "use strict";
 const {test}=require("node:test"), assert=require("node:assert/strict"), fs=require("node:fs"), os=require("node:os"), path=require("node:path");
-const {Controller,cleanEnv}=require("./controller.cjs");
+const {Controller,cleanEnv,monotonic}=require("./controller.cjs");
 const java=process.env.EFF_TEST_JAVA,workerJar=process.env.EFF_TEST_WORKERS;
 if(!java||!workerJar)throw Error("Run Gradle managedRuntimeTest to supply the actual Java worker jar");
+const {createHmac,randomUUID}=require("node:crypto");
+function signed(c,body){const raw=JSON.stringify({session:c.session,epoch:c.hostEpoch,requestId:randomUUID(),...body});return {method:"POST",headers:{"X-EFF-Auth":createHmac("sha256",c.token).update("request:"+raw).digest("hex")},body:raw};}
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 test("independent JVMs, durable authority and fenced replacement",async t=>{
  const directory=fs.mkdtempSync(path.join(os.tmpdir(),"eff-multi-jvm-"));
@@ -72,8 +74,13 @@ test("independent JVMs, durable authority and fenced replacement",async t=>{
  });
  await t.test("an authenticated old host write loses its lease while waiting in the transaction queue",async()=>{
   let release;const block=new Promise(resolve=>release=resolve);c.queue(()=>block);
-  const response=fetch(c.endpoint+"/v1/host",{method:"POST",headers:{"X-EFF-Lease":c.token},body:JSON.stringify({session:c.session,epoch:c.hostEpoch,op:"execute",source:"inspect instance.world",actor:"player",revision:c.durable.state.revision})});
+  const response=fetch(c.endpoint+"/v1/host",signed(c,{op:"execute",source:"inspect instance.world",actor:"player",revision:c.durable.state.revision}));
   await wait(100);c.token="f".repeat(64);release();const reply=await response;assert.equal(reply.status,409);assert.equal((await reply.json()).error,"STALE_HOST_EPOCH");
+ });
+ await t.test("a valid signed request cannot be replayed or have its payload changed",async()=>{
+  const request=signed(c,{op:"snapshot"});let response=await fetch(c.endpoint+"/v1/host",request);assert.equal(response.status,200);const raw=await response.text();assert.equal(response.headers.get("x-eff-auth"),createHmac("sha256",c.token).update("reply:"+raw).digest("hex"));
+  response=await fetch(c.endpoint+"/v1/host",request);assert.equal((await response.json()).error,"REQUEST_REPLAY");
+  response=await fetch(c.endpoint+"/v1/host",{...request,body:request.body.replace("snapshot","goodbye")});assert.equal((await response.json()).error,"INVALID_HOST_SIGNATURE");assert.equal(c.userStopped,undefined);
  });
  await t.test("a new controller process lifetime reloads durable revocation and sealed checkpoints",async()=>{
   await execute("seal checkpoint.origin");const rev=c.durable.state.revision;await c.close();
@@ -90,18 +97,30 @@ test("independent JVMs, durable authority and fenced replacement",async t=>{
  });
  await t.test("world loading and deliberate pause are distinct from a stalled active loop",async()=>{
   const oldReplace=c.replaceHost;c.replaceHost=async reason=>{c.detected=reason;};
-  c.host={pid:1};c.hostReady=false;c.hostStarted=Date.now();c.lastContact=Date.now();c.clientProgress=0;c.serverProgress=0;
+  c.host={pid:1};c.hostReady=false;c.hostStarted=monotonic();c.lastContact=monotonic();c.clientProgress=0;c.serverProgress=0;
   await c.monitor();assert.equal(c.detected,undefined);
-  c.hostReady=true;c.clientProgress=Date.now();c.progress={active:true,paused:true};
+  c.hostReady=true;c.clientProgress=monotonic();c.progress={active:true,paused:true};
   await c.monitor();assert.equal(c.detected,undefined);
   c.progress.paused=false;await c.monitor();assert.equal(c.detected,"HOST_PROGRESS_TIMEOUT");
   c.host=null;c.hostReady=false;c.replaceHost=oldReplace;
  });
+ await t.test("replayed or decreasing progress never refreshes the watchdog",async()=>{
+  c.progress=null;c.lastHeartbeatSequence=0;
+  await c.dispatch({op:"heartbeat",sequence:1,clientTick:20,serverTick:40,active:true,paused:false});const stamp=c.lastContact;
+  await assert.rejects(c.dispatch({op:"heartbeat",sequence:1,clientTick:20,serverTick:40}),/HEARTBEAT_REPLAY/);assert.equal(c.lastContact,stamp);
+  await assert.rejects(c.dispatch({op:"heartbeat",sequence:2,clientTick:19,serverTick:41}),/HEARTBEAT_REPLAY/);assert.equal(c.lastContact,stamp);
+  await c.dispatch({op:"heartbeat",sequence:3,clientTick:21,serverTick:41,active:true,paused:false});
+ });
+ await t.test("clock rollback cannot extend a dead active host's progress deadline",async()=>{
+  const original=Date.now,replace=c.replaceHost;c.replaceHost=async reason=>{c.detected=reason;};c.detected=undefined;
+  c.host={pid:1};c.hostReady=true;c.lastContact=monotonic()-30000;c.clientProgress=monotonic()-30000;c.serverProgress=monotonic()-30000;
+  Date.now=()=>1;try{await c.monitor();assert.equal(c.detected,"HOST_PROGRESS_TIMEOUT");}finally{Date.now=original;c.replaceHost=replace;c.host=null;}
+ });
  await t.test("launch environment excludes JVM option injection",async()=>{
-  const before=process.env.JAVA_TOOL_OPTIONS;process.env.JAVA_TOOL_OPTIONS="-agentpath:unexpected";assert.equal(cleanEnv().JAVA_TOOL_OPTIONS,undefined);if(before===undefined)delete process.env.JAVA_TOOL_OPTIONS;else process.env.JAVA_TOOL_OPTIONS=before;
+  const before=process.env.JAVA_TOOL_OPTIONS;process.env.JAVA_TOOL_OPTIONS="-agentpath:unexpected";const oldNode=process.env.NODE_OPTIONS;process.env.NODE_OPTIONS="--require unexpected.cjs";assert.equal(cleanEnv().NODE_OPTIONS,undefined);if(oldNode===undefined)delete process.env.NODE_OPTIONS;else process.env.NODE_OPTIONS=oldNode;assert.equal(cleanEnv().JAVA_TOOL_OPTIONS,undefined);if(before===undefined)delete process.env.JAVA_TOOL_OPTIONS;else process.env.JAVA_TOOL_OPTIONS=before;
  });
  await t.test("a tripped worker circuit cannot be bypassed by another snapshot request",async()=>{
-  const slot=c.workers.execution;slot.failures=Array(4).fill(Date.now());
+  const slot=c.workers.execution;slot.failures=Array(4).fill(monotonic());
   await assert.rejects(slot.replace("fault-budget-exhausted"),/WORKER_CIRCUIT_OPEN/);assert.equal(slot.child,null);
   await assert.rejects(slot.rpc({op:"snapshot",state:c.durable.state}),/WORKER_CIRCUIT_OPEN/);assert.equal(slot.child,null);
  });

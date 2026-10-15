@@ -3,9 +3,13 @@ package eff.minecraft;
 import com.google.gson.*;
 import java.net.*;
 import java.net.http.*;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 /** Loopback owned-host lease. Deliberately independent of simulated world time and entities. */
 public final class RuntimeLink {
@@ -16,7 +20,9 @@ public final class RuntimeLink {
       enabled() ? Integer.parseInt(System.getenv("EFF_RUNTIME_EPOCH")) : 0;
   private static final HttpClient HTTP =
       HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(1)).build();
-  private static final AtomicLong CLIENT = new AtomicLong(), SERVER = new AtomicLong();
+  private static final AtomicLong CLIENT = new AtomicLong(),
+      SERVER = new AtomicLong(),
+      HEARTBEAT = new AtomicLong();
   private static volatile boolean paused, active, started;
 
   public static boolean enabled() {
@@ -44,6 +50,8 @@ public final class RuntimeLink {
                   Jsons.obj(
                       "op",
                       "heartbeat",
+                      "sequence",
+                      HEARTBEAT.incrementAndGet(),
                       "clientTick",
                       CLIENT.get(),
                       "serverTick",
@@ -75,16 +83,22 @@ public final class RuntimeLink {
       body = body.deepCopy();
       body.addProperty("session", SESSION);
       body.addProperty("epoch", EPOCH);
+      body.addProperty("requestId", UUID.randomUUID().toString());
+      String encoded = body.toString();
       var req =
           HttpRequest.newBuilder(uri)
               .timeout(Duration.ofSeconds(5))
               .header("Content-Type", "application/json")
-              .header("X-EFF-Lease", LEASE)
-              .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
+              .header("X-EFF-Auth", signature("request:" + encoded))
+              .POST(HttpRequest.BodyPublishers.ofString(encoded))
               .build();
       var response = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
       if (response.body().length() > 262144)
         throw new IllegalStateException("RUNTIME_REPLY_BUDGET");
+      if (!java.security.MessageDigest.isEqual(
+          signature("reply:" + response.body()).getBytes(StandardCharsets.UTF_8),
+          response.headers().firstValue("X-EFF-Auth").orElse("").getBytes(StandardCharsets.UTF_8)))
+        throw new IllegalStateException("RUNTIME_REPLY_AUTHENTICATION_FAILED");
       JsonObject reply = JsonParser.parseString(response.body()).getAsJsonObject();
       if (!Jsons.b(reply, "ok")) throw new IllegalArgumentException(Jsons.s(reply, "error"));
       if (!SESSION.equals(Jsons.s(reply, "session")) || Jsons.i(reply, "epoch") != EPOCH)
@@ -95,6 +109,16 @@ public final class RuntimeLink {
       throw new IllegalStateException("RUNTIME_INTERRUPTED");
     } catch (java.io.IOException e) {
       throw new IllegalStateException("RUNTIME_UNAVAILABLE");
+    }
+  }
+
+  private static String signature(String body) {
+    try {
+      Mac mac = Mac.getInstance("HmacSHA256");
+      mac.init(new SecretKeySpec(LEASE.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+      return HexFormat.of().formatHex(mac.doFinal(body.getBytes(StandardCharsets.UTF_8)));
+    } catch (java.security.GeneralSecurityException e) {
+      throw new IllegalStateException("HMAC_UNAVAILABLE");
     }
   }
 

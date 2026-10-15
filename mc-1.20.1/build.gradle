@@ -1,5 +1,5 @@
 plugins { id 'fabric-loom' version '1.10.5' }
-version = '0.3.0+mc1.20.1'
+version = '0.4.0+mc1.20.1'
 group = 'eff.minecraft'
 base { archivesName = 'eff-minecraft-runtime-1.20.1' }
 repositories { mavenCentral() }
@@ -125,6 +125,7 @@ tasks.register('exportManagedLaunch') {
   args.addAll(run.jvmArguments.get())
   args += ['-XX:+DisableAttachMechanism', '-XX:+ExitOnOutOfMemoryError', '-Xmx2G', '-Deff.preview=true', '-Deff.previewResearch=true']
   if(project.hasProperty('effManagedTest')) args += '-Deff.managedSelftest=true'
+  if(project.hasProperty('effGuardedTest')) args += '-Deff.guardedSelftest=true'
   args += ['-cp', run.internalClasspath.asPath, run.mainClass.get()]
   args += run.args
   run.argumentProviders.each { args.addAll(it.asArguments()) }
@@ -136,4 +137,28 @@ tasks.register('exportManagedLaunch') {
   target.setText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(config)), 'UTF-8')
   logger.lifecycle('Managed launch manifest: ' + target)
  }
+}
+
+
+// Code and ledger protection is Windows-specific; ordinary Fabric builds remain cross-platform.
+if (System.getProperty('os.name').toLowerCase().contains('windows')) {
+ tasks.register('guardianBuild', Exec) {
+  def exe = layout.buildDirectory.file('guard/eff-guard.exe')
+  inputs.files('runtime/guard/WindowsGuard.cs', 'runtime/guard/WindowsGuard.exe.config')
+  outputs.file(exe)
+  outputs.file(layout.buildDirectory.file('guard/eff-guard.exe.config'))
+  doFirst { exe.get().asFile.parentFile.mkdirs() }
+  commandLine new File(System.getenv('SystemRoot'), 'Microsoft.NET/Framework64/v4.0.30319/csc.exe').absolutePath,
+    '/nologo', '/platform:x64', '/target:exe', '/r:System.Web.Extensions.dll', '/r:System.Security.dll',
+    '/out:' + exe.get().asFile.absolutePath, file('runtime/guard/WindowsGuard.cs').absolutePath
+  doLast { copy { from 'runtime/guard/WindowsGuard.exe.config'; into exe.get().asFile.parentFile; rename { 'eff-guard.exe.config' } } }
+ }
+ tasks.register('guardianTest', Exec) {
+  dependsOn guardianBuild, runtimeKernelJar
+  environment 'EFF_TEST_JAVA', javaToolchains.launcherFor(java.toolchain).get().executablePath.asFile.absolutePath
+  environment 'EFF_TEST_WORKERS', tasks.named('runtimeKernelJar').get().archiveFile.get().asFile.absolutePath
+  environment 'EFF_TEST_GUARD', layout.buildDirectory.file('guard/eff-guard.exe').get().asFile.absolutePath
+  commandLine 'node', '--test', 'runtime/guard/guard.test.cjs'
+ }
+ check { dependsOn guardianTest }
 }

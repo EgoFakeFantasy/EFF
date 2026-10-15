@@ -15,3 +15,9 @@ run-story-qa/
 run-managed*/
 
 private-launch.json
+
+run-protected*/
+sealed-runtime.json
+ledger.bin
+ledger-head.bin
+ledger-key.dpapi

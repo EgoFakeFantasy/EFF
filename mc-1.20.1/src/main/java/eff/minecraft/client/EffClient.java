@@ -106,6 +106,7 @@ public final class EffClient implements ClientModInitializer {
           RuntimeLink.clientTick(mc.isPaused(), mc.level != null);
           LegacyDev.prepare(mc);
           ManagedSelfTest.tick(mc);
+          GuardedSelfTest.tick(mc);
           EffSelfTest.tick(mc);
           ResearchSelfTest.tick(mc);
           EffPreview.tick(mc);

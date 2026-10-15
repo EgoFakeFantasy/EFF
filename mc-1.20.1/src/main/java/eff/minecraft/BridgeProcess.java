@@ -30,41 +30,53 @@ public final class BridgeProcess implements AutoCloseable {
       zip = in.readAllBytes();
     }
     String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(zip));
+    String sealedRuntime = System.getenv("EFF_STORY_RUNTIME");
     Path runtime =
-        FabricLoader.getInstance()
-            .getConfigDir()
-            .resolve("eff/runtime")
-            .resolve(hash)
-            .toAbsolutePath()
-            .normalize();
-    Files.createDirectories(runtime);
-    int total = 0;
-    try (ZipInputStream in = new ZipInputStream(new ByteArrayInputStream(zip))) {
-      ZipEntry e;
-      while ((e = in.getNextEntry()) != null) {
-        if (e.isDirectory()) continue;
-        Path target = runtime.resolve(e.getName()).normalize();
-        if (!target.startsWith(runtime) || e.getName().contains("\\"))
-          throw new IOException("INVALID_BUNDLE_PATH");
-        byte[] data = in.readNBytes(4000001);
-        total += data.length;
-        if (data.length > 4000000 || total > 32000000) throw new IOException("BUNDLE_TOO_LARGE");
-        Files.createDirectories(target.getParent());
-        for (Path p = target; p != null && p.startsWith(runtime); p = p.getParent())
-          if (Files.isSymbolicLink(p)) throw new IOException("BUNDLE_SYMLINK");
-        Files.write(target, data);
+        sealedRuntime != null
+            ? Path.of(sealedRuntime).toAbsolutePath().normalize()
+            : FabricLoader.getInstance()
+                .getConfigDir()
+                .resolve("eff/runtime")
+                .resolve(hash)
+                .toAbsolutePath()
+                .normalize();
+    if (sealedRuntime == null) {
+      Files.createDirectories(runtime);
+      int total = 0;
+      try (ZipInputStream in = new ZipInputStream(new ByteArrayInputStream(zip))) {
+        ZipEntry e;
+        while ((e = in.getNextEntry()) != null) {
+          if (e.isDirectory()) continue;
+          Path target = runtime.resolve(e.getName()).normalize();
+          if (!target.startsWith(runtime) || e.getName().contains("\\"))
+            throw new IOException("INVALID_BUNDLE_PATH");
+          byte[] data = in.readNBytes(4000001);
+          total += data.length;
+          if (data.length > 4000000 || total > 32000000) throw new IOException("BUNDLE_TOO_LARGE");
+          Files.createDirectories(target.getParent());
+          for (Path p = target; p != null && p.startsWith(runtime); p = p.getParent())
+            if (Files.isSymbolicLink(p)) throw new IOException("BUNDLE_SYMLINK");
+          Files.write(target, data);
+        }
       }
     }
+    if (!Files.isRegularFile(runtime.resolve("bridge/server.cjs")))
+      throw new IOException("STORY_RUNTIME_MISSING");
     Files.createDirectories(saveDir);
     String node = System.getProperty("eff.node", "node");
-    child =
+    ProcessBuilder builder =
         new ProcessBuilder(
                 node,
                 runtime.resolve("bridge/server.cjs").toString(),
                 saveDir.toAbsolutePath().toString())
             .directory(runtime.toFile())
-            .redirectError(ProcessBuilder.Redirect.appendTo(saveDir.resolve("bridge.log").toFile()))
-            .start();
+            .redirectError(
+                ProcessBuilder.Redirect.appendTo(saveDir.resolve("bridge.log").toFile()));
+    builder
+        .environment()
+        .keySet()
+        .removeIf(k -> k.toUpperCase(java.util.Locale.ROOT).startsWith("EFF_RUNTIME_"));
+    child = builder.start();
     writer =
         new BufferedWriter(new OutputStreamWriter(child.getOutputStream(), StandardCharsets.UTF_8));
     Thread reader =
