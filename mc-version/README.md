@@ -1,17 +1,21 @@
 # EFF · Minecraft 表象融合旁支
 
-版本：**0.1.0 原型**。针对 **Minecraft Java 26.3 / Fabric Loader 0.19.5 / Fabric API 0.163.0+26.3 / Java 25**。
+版本：**0.2.0 原型**。针对 **Minecraft Java 26.3 / Fabric Loader 0.19.5 / Fabric API 0.163.0+26.3 / Java 25**。
 
 这次将 EFF 的规则与剧情接入 MC 原生世界：玩家和两个本地策略代理争夺身体控制、归责与结局的提交条件。MC 的实体约束、世界时间、场地方块和出口实际参与判定。屏幕撕裂使用 MC 当前渲染目标的真实画面，随后显示已提交的运行状态并重建场景。
 
-当前主要验收入口是**血色庭院争夺练习**；另有从镜像回廊开始的原文之旅。后者加载仓库现有的完整剧情脚本、场景与选择，包括终章的文字操作和介入时序。MC 中的场景美术与全篇逐章通关仍需继续打磨和验收，不能把原脚本回归通过当成完整 MC 通关记录。
+可先从**血色庭院争夺练习**熟悉三项回应，再到**运行层研究场**编写干预程序；另有从镜像回廊开始的原文之旅。后者加载仓库现有的完整剧情脚本、场景与选择，包括终章的文字操作和介入时序。MC 中的场景美术与全篇逐章通关仍需继续打磨和验收，不能把原脚本回归通过当成完整 MC 通关记录。
+
+## 运行层研究场（0.2 新增）
+
+新增独立的 **[运行层研究场](./RESEARCH.md)**：玩家可写组合程序、断言和条件触发器，也可用原生 MC 行为或 Fabric 扩展移除真实投影。外来者读取实际回执后，由本地模型组合恢复、重绑与实例迁移程序，再交给服务器执行。面向建议需要玩家确认。入口为 `/eff research` 或 R → 运行层，与下述原文之旅、旧练习分开。
 
 ## 安装与试玩
 
 普通玩家：
 
 1. 在 Minecraft Java **26.3** 中安装 [Fabric Loader](https://fabricmc.net/use/installer/)。
-2. 将 `eff-minecraft-runtime-0.1.0.jar` 与 **0.163.0+26.3** 的 Fabric API 放入该实例的 `mods` 目录。
+2. 将 `eff-minecraft-runtime-0.2.0.jar` 与 **0.163.0+26.3** 的 Fabric API 放入该实例的 `mods` 目录。
 3. 安装 **Node.js 22 或更新版**，使 `node` 可在 PATH 中运行；剧情宿主与本地模型桥接随模组打包，不需要 `npm install`。
 4. 进入单人世界，按 **R** 打开 EFF 菜单。首次可选择“进入争夺练习”，再用正文入口体验剧情。
 
@@ -23,6 +27,8 @@
 cd mc-version
 # JAVA_HOME 指向 JDK 25；需要 Node.js 22+
 .\start-dev.ps1 -Preview
+# 运行层研究场试玩
+.\start-dev.ps1 -Research
 ```
 
 该入口在独立 `run/` 目录创建或重开 `eff-playground` 试玩世界，使用固定开发身份保存进度，不会打开启动器里的其他存档。进入庭院后先暂停，按 **P** 开始。首次运行会由 Loom 从官方源下载开发所需的 MC 资源；发行包不包含 MC 本体。
@@ -89,13 +95,19 @@ node --test tests/bridge.test.cjs
 .\gradlew.bat runClient -PeffPreview
 ```
 
-Gradle Wrapper 固定为 **9.8.1** 并校验分发包 SHA-256。`build` 会运行桥接检查，然后生成 `build/libs/eff-minecraft-runtime-0.1.0.jar`。
+Gradle Wrapper 固定为 **9.8.1** 并校验分发包 SHA-256。`build` 会运行桥接检查，然后生成 `build/libs/eff-minecraft-runtime-0.2.0.jar`。
 
 当前验证覆盖：桥接协议、过期请求拒绝、独立存档、雨滴身份、原文回应顺序与头像；既有剧情和规则检查；原生 MC 中的进入与返回、真实 tick 冻结与释放、双代理推理、结局拒绝后的新场地、超时占据，以及自有桥接进程异常后恢复原世界。测试世界、截图、模型证据与运行日志留在本地 `run/` 或工作区输出，不进入发行源文件。
 
 目前只接受**单人模式**。有其他玩家加入时会退出并恢复冻结状态。渲染采用当前 MC 的 RenderPearl / GUI 提取接口；本机 OpenGL 路径已验证，Vulkan 与其他渲染模组的组合尚未验收。
 
 ## 工程结构
+
+- `ResearchProgram` / `ResearchRuntime`：组合干预语言、原生执行器、回调实例、磁盘检查点与服务端观测。
+- `EffResearchAPI`：面向本版原生扩展的服务器线程入口。
+- `bridge/research-agent.cjs`：读取实际回执，生成可组合程序。
+- `ResearchSelfTest`：独立世界中的本地模型与跨层干预验收。
+
 
 - `bridge/headless-story.cjs`：原有脚本的文档和时钟适配；仅执行打包的可信源码。
 - `bridge/story-host.cjs`：原文状态、可见交互、头像整数像素与存档投影。

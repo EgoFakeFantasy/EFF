@@ -56,6 +56,7 @@ public final class NativeTheatre {
       began = System.nanoTime();
     }
     EffSelfTest.captureFrame(source);
+    ResearchSelfTest.captureFrame(source);
   }
 
   public static void clear() {

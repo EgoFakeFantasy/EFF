@@ -5,3 +5,5 @@ logs/
 *.log
 
 .gradle-user-home/
+
+run-research/

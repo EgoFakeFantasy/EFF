@@ -56,6 +56,7 @@ public final class EffArena {
   private Vec3 bound = Vec3.ZERO;
   private JsonObject state = new JsonObject();
   private ArmorStand body;
+  public ResearchRuntime research;
 
   private record Placement(BlockPos pos, BlockState block) {}
 
@@ -136,6 +137,10 @@ public final class EffArena {
       area = next;
       stage = special;
       build(story);
+    }
+    if (research != null) {
+      research.project();
+      return;
     }
     JsonObject battle = Jsons.o(state, "battle");
     boolean hasBattle = state.has("battle") && !state.get("battle").isJsonNull();
@@ -442,6 +447,10 @@ public final class EffArena {
       populate();
     }
     if (player.level() != world) return;
+    if (research != null) {
+      research.tick();
+      return;
+    }
     if ((area.equals("storm") || area.equals("rain") || stage.equals("tower")) && ticks % 3 == 0)
       world.sendParticles(
           net.minecraft.core.particles.ParticleTypes.RAIN,
@@ -537,6 +546,39 @@ public final class EffArena {
     }
   }
 
+  public Vec3 researchAnchor() {
+    return bound;
+  }
+
+  public void researchContain() {
+    if (player.getY() < 60
+        || player.getX() < origin
+        || player.getX() > origin + cols * 2
+        || player.getZ() < 0
+        || player.getZ() > rows * 2) teleport(bound);
+  }
+
+  public boolean researchAtExit() {
+    return player.getZ() > rows * 2 - 4 && Math.abs(player.getX() - (origin + cols + 1)) < 2;
+  }
+
+  public void researchProject(boolean free, boolean open) {
+    boolean changed = bodyFree != free || exitOpen != open;
+    bodyFree = free;
+    exitOpen = open;
+    attributionRejected = open;
+    if (changed) writeClaims();
+    server
+        .tickRateManager()
+        .setFrozen(
+            previousFrozen || !free || Jsons.b(state, "paused") || Jsons.b(state, "pending"));
+  }
+
+  public void researchRebuild() {
+    build(Jsons.o(state, "story"));
+    entered = false;
+  }
+
   public JsonObject facts() {
     return Jsons.obj(
         "generation",
@@ -544,7 +586,9 @@ public final class EffArena {
         "frozen",
         server.tickRateManager().isFrozen(),
         "controller",
-        bodyFree ? "player" : Jsons.s(Jsons.o(state, "battle"), "bodyOwner"),
+        bodyFree
+            ? "player"
+            : research != null ? "intruder" : Jsons.s(Jsons.o(state, "battle"), "bodyOwner"),
         "exitOpen",
         exitOpen && world.getBlockState(new BlockPos(origin + cols, 65, rows * 2 - 3)).isAir(),
         "attribution",

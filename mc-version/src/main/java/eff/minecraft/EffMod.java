@@ -1,6 +1,7 @@
 package eff.minecraft;
 
 import com.google.gson.JsonParser;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.*;
@@ -45,6 +46,27 @@ public final class EffMod implements ModInitializer {
                                   EffServer.enter(c.getSource().getPlayerOrException(), "practice");
                                   return 1;
                                 }))
+                    .then(
+                        Commands.literal("research")
+                            .executes(
+                                c -> {
+                                  EffServer.enter(c.getSource().getPlayerOrException(), "research");
+                                  return 1;
+                                }))
+                    .then(
+                        Commands.literal("code")
+                            .then(
+                                Commands.argument("program", StringArgumentType.greedyString())
+                                    .executes(
+                                        c -> {
+                                          var player = c.getSource().getPlayerOrException();
+                                          var observation = EffResearchAPI.observe(player);
+                                          EffResearchAPI.submit(
+                                              player,
+                                              StringArgumentType.getString(c, "program"),
+                                              Jsons.i(observation, "revision"));
+                                          return 1;
+                                        })))
                     .then(
                         Commands.literal("leave")
                             .executes(

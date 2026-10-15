@@ -1,5 +1,5 @@
 plugins { id 'net.fabricmc.fabric-loom' version '1.18.4' }
-version = '0.1.0'
+version = '0.2.0'
 group = 'eff.minecraft'
 base { archivesName = 'eff-minecraft-runtime' }
 repositories { mavenCentral() }
@@ -28,6 +28,9 @@ processResources { dependsOn 'storyBundle'; from(tasks.named('storyBundle').map 
 loom {
  runs {
   client {
+   if (project.hasProperty('effResearchpreview')) { vmArg '-Deff.preview=true'; vmArg '-Deff.previewResearch=true' }
+   if (project.hasProperty('effResearchtest')) { vmArg '-Deff.researchSelftest=true' }
+   if (project.hasProperty('effRunDir')) { runDir project.property('effRunDir').toString() }
    if (project.hasProperty('effPreview')) { vmArg '-Deff.preview=true' }
    if (project.hasProperty('effSelftest')) { vmArg '-Deff.selftest=true' }
    if (project.hasProperty('effKeepPreview')) { vmArg '-Deff.keepPreview=true' }
@@ -40,6 +43,20 @@ loom {
 
 tasks.register('bridgeTest', Exec) {
  workingDir projectDir
- commandLine 'node', '--test', 'tests/bridge.test.cjs'
+ commandLine 'node', '--test', 'tests/bridge.test.cjs', 'tests/research.test.cjs'
 }
 check { dependsOn 'bridgeTest' }
+
+sourceSets {
+ researchCheck {
+  java.srcDir 'src/researchCheck/java'
+  compileClasspath += sourceSets.main.output
+  runtimeClasspath += sourceSets.main.output
+ }
+}
+tasks.register('researchJavaTest', JavaExec) {
+ dependsOn researchCheckClasses
+ classpath = sourceSets.researchCheck.runtimeClasspath
+ mainClass = 'eff.minecraft.ResearchProgramCheck'
+}
+check { dependsOn 'researchJavaTest' }

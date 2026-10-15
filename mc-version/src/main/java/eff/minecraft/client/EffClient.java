@@ -59,7 +59,10 @@ public final class EffClient implements ClientModInitializer {
           state = next;
           if (!oldMode.equals(Jsons.s(next, "mode")) && mc.gui.screen() instanceof EffScreen)
             mc.gui.setScreen(
-                new EffScreen(Jsons.s(next, "mode").equals("practice") ? "battle" : "story"));
+                new EffScreen(
+                    Jsons.s(next, "mode").equals("research")
+                        ? "research"
+                        : Jsons.s(next, "mode").equals("practice") ? "battle" : "story"));
           error = "";
           NativeTheatre.offer(Jsons.o(next, "cinema"));
           String key = Jsons.i(Jsons.o(next, "story"), "revision") + ":" + Jsons.s(next, "mode");
@@ -72,11 +75,15 @@ public final class EffClient implements ClientModInitializer {
                   || agency
                   || rain
                   || ending
-                  || Jsons.s(next, "mode").equals("practice"))) {
+                  || Jsons.s(next, "mode").equals("practice")
+                  || Jsons.s(next, "mode").equals("research"))) {
             if (mc.gui.screen() == null) {
               opened = key;
               mc.gui.setScreen(
-                  new EffScreen(Jsons.s(next, "mode").equals("practice") ? "battle" : "story"));
+                  new EffScreen(
+                      Jsons.s(next, "mode").equals("research")
+                          ? "research"
+                          : Jsons.s(next, "mode").equals("practice") ? "battle" : "story"));
             }
           }
           if (mc.gui.screen() instanceof EffScreen screen) screen.refresh();
@@ -84,6 +91,7 @@ public final class EffClient implements ClientModInitializer {
     ClientTickEvents.END_CLIENT_TICK.register(
         mc -> {
           EffSelfTest.tick(mc);
+          ResearchSelfTest.tick(mc);
           EffPreview.tick(mc);
           if (mc.player == null) {
             state = new JsonObject();
@@ -96,13 +104,17 @@ public final class EffClient implements ClientModInitializer {
                 new EffScreen(
                     state.isEmpty()
                         ? "menu"
-                        : Jsons.s(state, "mode").equals("practice") ? "battle" : "story"));
+                        : Jsons.s(state, "mode").equals("research")
+                            ? "research"
+                            : Jsons.s(state, "mode").equals("practice") ? "battle" : "story"));
           while (interact.consumeClick())
             send(Jsons.obj("op", "story", "input", Jsons.obj("action", "advance")));
           if (!state.isEmpty()) {
             boolean pause =
                 manualPause
                     || !mc.isWindowActive()
+                        && !Boolean.getBoolean("eff.researchSelftest")
+                        && !Boolean.getBoolean("eff.selftest")
                     || mc.isPaused() && !(mc.gui.screen() instanceof EffScreen);
             if (pause != pauseSent) {
               pauseSent = pause;

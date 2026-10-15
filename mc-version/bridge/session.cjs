@@ -10,6 +10,7 @@ const base = fs.existsSync(
 const Runtime = require(path.join(base, "local-version/phenomenon-runtime.js"));
 const Policies = require(path.join(base, "local-version/agent-policies.js"));
 const { ModelClient } = require(path.join(base, "desktop/model-client.cjs"));
+const { inferResearch } = require("./research-agent.cjs");
 const TARGETS = ["body", "attribution", "bad_owned"];
 const record = (v) => v && typeof v === "object" && !Array.isArray(v);
 function shape(v, keys) {
@@ -162,6 +163,7 @@ class Session {
       protocol: 1,
       sequence: ++this.sequence,
       mode: this.mode,
+      researchPlan: this.researchPlan || null,
       story,
       battle: this.battle
         ? {
@@ -193,6 +195,7 @@ class Session {
   }
   async handle(req) {
     const shapes = {
+      researchPlan: ["op", "snapshot", "actor", "goal"],
       state: ["op"],
       enter: ["op", "mode"],
       tick: ["op", "dt", "x", "z", "world"],
@@ -209,24 +212,46 @@ class Session {
     if (!record(req) || !shapes[req.op]) throw Error("OP_NOT_ALLOWED");
     shape(req, shapes[req.op]);
     switch (req.op) {
+      case "researchPlan": {
+        if (this.mode !== "research" || this.pending)
+          throw Error("RESEARCH_NOT_READY");
+        this.pending = true;
+        try {
+          this.researchPlan = await inferResearch(
+            this.model,
+            req.snapshot,
+            req.actor,
+            req.goal || "",
+          );
+        } finally {
+          this.pending = false;
+        }
+        break;
+      }
       case "state":
         break;
       case "enter": {
-        if (!["story", "practice"].includes(req.mode))
+        if (!["story", "practice", "research"].includes(req.mode))
           throw Error("INVALID_MODE");
         this.save();
         this.model.cancel();
         this.pending = false;
         this.plan = null;
+        this.researchPlan = null;
         this.battle = null;
         this.mode = req.mode;
         this.elapsed = 0;
         this.paused = false;
         this.story.input({ action: "pause", paused: false });
-        if (req.mode === "practice") {
+        if (req.mode === "practice" || req.mode === "research") {
           this.story = new StoryHost();
           this.story.practice();
-          this.battleStart();
+          if (req.mode === "practice") this.battleStart();
+          else
+            this.cue(
+              "arrive",
+              "研究场：寻找维持现象的实体、连接、事件与恢复来源。",
+            );
         } else {
           this.story = new StoryHost(this.load());
           this.cue("arrive", "……睁开眼睛的时候，首先看到的是自己的手。");
@@ -292,7 +317,7 @@ class Session {
       }
       case "story": {
         if (this.pending) throw Error("MODEL_BUSY");
-        if (this.mode === "practice")
+        if (this.mode === "practice" || this.mode === "research")
           throw Error("PRACTICE_HAS_NO_CANONICAL_ADVANCE");
         if (
           this.battle?.outcome === "pending" &&

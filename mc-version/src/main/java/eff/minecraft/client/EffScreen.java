@@ -14,6 +14,18 @@ import net.minecraft.util.FormattedCharSequence;
 public final class EffScreen extends Screen {
   private String view, signature = "", goal = "body", readKey = "";
   private int offset = 0, page = 0;
+  private MultiLineEditBox researchEditor;
+  private static String researchDraft =
+      "inspect entity.avatar;\n"
+          + "inspect control.tether;\n"
+          + "inspect event.possess;\n"
+          + "inspect checkpoint.origin;";
+
+  private boolean typing() {
+    return researchEditor != null && researchEditor.isFocused()
+        || fields.values().stream().anyMatch(EditBox::isFocused);
+  }
+
   private List<FormattedCharSequence> lines = List.of();
   private int textTop = 65, textBottom = 160;
   private final Map<String, EditBox> fields = new HashMap<>();
@@ -68,6 +80,7 @@ public final class EffScreen extends Screen {
   protected void init() {
     clearWidgets();
     fields.clear();
+    researchEditor = null;
     JsonObject state = EffClient.state,
         story = Jsons.o(state, "story"),
         battle = Jsons.o(state, "battle");
@@ -91,6 +104,7 @@ public final class EffScreen extends Screen {
     tab("争夺", 90, "battle");
     tab("选择与操作", 162, "controls");
     tab("本地模型", 234, "models");
+    tab("运行层", 306, "research");
     button("×", width - 38, 9, 20, this::onClose, true);
     if (state.isEmpty() || view.equals("menu")) {
       lines =
@@ -115,6 +129,137 @@ public final class EffScreen extends Screen {
           w / 2 - 4,
           () -> EffClient.send(Jsons.obj("op", "enter", "mode", "practice")),
           true);
+      button(
+          "进入运行层研究场",
+          left,
+          height - 94,
+          w,
+          () -> EffClient.send(Jsons.obj("op", "enter", "mode", "research")),
+          true);
+      textBottom = height - 101;
+    } else if (view.equals("research")) {
+      JsonObject r = Jsons.o(state, "research");
+      if (r.isEmpty()) {
+        lines =
+            font.split(
+                Component.literal(
+                    "运行层研究场：编写真实干预程序，或用原生伤害、命令与扩展移除标记投影。AI 根据实际回执反制。\n独立于正文存档，不开放提前回写过去。"),
+                w);
+        button(
+            "进入运行层研究场",
+            left,
+            height - 55,
+            w,
+            () -> EffClient.send(Jsons.obj("op", "enter", "mode", "research")),
+            true);
+      } else {
+        boolean busy = Jsons.b(state, "researchBusy");
+        JsonObject f = Jsons.o(r, "fields"),
+            counter = Jsons.o(r, "counter"),
+            helper = Jsons.o(r, "advice");
+        StringBuilder text =
+            new StringBuilder("实际实体：" + (Jsons.b(f, "entity.avatar.alive") ? "存在" : "已移除"))
+                .append(" · 牵引：")
+                .append(Jsons.b(f, "control.tether.active"))
+                .append(" · 事件：")
+                .append(Jsons.b(f, "event.possess.active"))
+                .append(" · 恢复：")
+                .append(Jsons.b(f, "authority.recovery.active"))
+                .append("\n第 ")
+                .append(Jsons.i(r, "generation"))
+                .append(" 代 / v")
+                .append(Jsons.i(r, "revision"))
+                .append(" / ")
+                .append(Jsons.s(r, "outcome"))
+                .append(busy ? " / AI 正在反制" : " / 每次最多 3 次干预")
+                .append("\n外来者 [")
+                .append(Jsons.s(counter, "source"))
+                .append("] ")
+                .append(Jsons.s(counter, "program"))
+                .append("\n检查点：")
+                .append(researchSources(r))
+                .append("\n触发器：")
+                .append(researchWatches(r))
+                .append("\n执行回执：")
+                .append(researchReceipts(r))
+                .append("\n外来者 [")
+                .append(Jsons.s(counter, "source"))
+                .append("] ")
+                .append(Jsons.s(counter, "explanation"))
+                .append("\n")
+                .append(Jsons.s(counter, "program"))
+                .append("\n面向建议（未执行）[")
+                .append(Jsons.s(helper, "source"))
+                .append("] ")
+                .append(Jsons.s(helper, "explanation"))
+                .append("\n")
+                .append(Jsons.s(helper, "program"))
+                .append("\n提示：")
+                .append(Jsons.a(r, "notes"))
+                .append(
+                    "\n语法：disable control.tether; disable event.possess; seal checkpoint.origin;")
+                .append("\n恢复来源处理后：erase entity.avatar; refuse ending.owned;")
+                .append("\n条件：assert control.tether.active == false")
+                .append(
+                    "\n触发器：watch guard when entity.avatar.alive == false -> disable event.possess");
+        lines = font.split(Component.literal(text.toString()), w);
+        textBottom = height - 138;
+        researchEditor =
+            MultiLineEditBox.builder()
+                .setX(left)
+                .setY(height - 131)
+                .setShowBackground(true)
+                .setShowDecorations(false)
+                .build(font, w, 70, Component.literal("干预程序（每次最多 3 次修改）"));
+        researchEditor.setCharacterLimit(4096);
+        researchEditor.setLineLimit(16);
+        researchEditor.setValue(researchDraft);
+        researchEditor.setValueListener(value -> researchDraft = value);
+        addRenderableWidget(researchEditor);
+        int bw = (w - 8) / 3;
+        button(
+            "执行程序",
+            left,
+            height - 55,
+            bw,
+            () -> {
+              researchEditor.setFocused(false);
+              EffClient.send(
+                  Jsons.obj(
+                      "op",
+                      "researchSubmit",
+                      "source",
+                      researchDraft,
+                      "revision",
+                      Jsons.i(r, "revision")));
+            },
+            !busy
+                && Jsons.s(r, "outcome").equals("pending")
+                && Jsons.b(Jsons.o(state, "native"), "ready"));
+        button(
+            busy ? "取消推理" : "面向分析",
+            left + bw + 4,
+            height - 55,
+            bw,
+            () -> {
+              researchEditor.setFocused(false);
+              if (busy) EffClient.send(Jsons.obj("op", "cancel"));
+              else
+                EffClient.send(
+                    Jsons.obj("op", "researchAdvice", "goal", "夺回身体，保留已有遭遇，查找并切断占据的持续来源。"));
+            },
+            true);
+        button(
+            "载入建议",
+            left + 2 * (bw + 4),
+            height - 55,
+            bw,
+            () -> {
+              researchDraft = Jsons.s(helper, "program");
+              init();
+            },
+            !helper.isEmpty() && !busy);
+      }
     } else if (view.equals("battle")) {
       boolean
           pending = EffClient.state.has("battle") && Jsons.s(battle, "outcome").equals("pending"),
@@ -418,6 +563,51 @@ public final class EffScreen extends Screen {
     signature = signature();
   }
 
+  private String researchSources(JsonObject state) {
+    StringBuilder out = new StringBuilder();
+    for (JsonElement e : Jsons.a(state, "checkpoints")) {
+      JsonObject c = e.getAsJsonObject();
+      out.append("\n  ")
+          .append(Jsons.s(c, "handle"))
+          .append(" / ")
+          .append(Jsons.s(c, "owner"))
+          .append(Jsons.b(c, "usable") ? " / 可恢复" : " / 授权已撤销");
+    }
+    return out.length() == 0 ? "无" : out.toString();
+  }
+
+  private String researchWatches(JsonObject state) {
+    StringBuilder out = new StringBuilder();
+    for (JsonElement e : Jsons.a(state, "watches")) {
+      JsonObject c = e.getAsJsonObject();
+      out.append("\n  ")
+          .append(Jsons.s(c, "name"))
+          .append(Jsons.b(c, "fired") ? " / 已触发" : " / 等待条件");
+    }
+    return out.length() == 0 ? "无" : out.toString();
+  }
+
+  private String researchReceipts(JsonObject state) {
+    StringBuilder out = new StringBuilder();
+    for (JsonElement e : Jsons.a(state, "journal")) {
+      JsonObject receipt = e.getAsJsonObject();
+      out.append("\n[")
+          .append(Jsons.s(receipt, "actor"))
+          .append(" / v")
+          .append(Jsons.i(receipt, "revision"))
+          .append("]");
+      if (Jsons.s(receipt, "actor").equals("native-observer")) out.append(" MC 检测到真实实体移除");
+      for (JsonElement step : Jsons.a(receipt, "steps")) {
+        JsonObject c = step.getAsJsonObject();
+        out.append("\n  ")
+            .append(Jsons.b(c, "accepted") ? "成立：" : "拒绝：")
+            .append(Jsons.s(c, "statement"));
+        if (!Jsons.b(c, "accepted")) out.append(" / ").append(Jsons.s(c, "reason"));
+      }
+    }
+    return out.toString();
+  }
+
   private List<JsonObject> controls(JsonObject story) {
     List<JsonObject> c = new ArrayList<>();
     for (JsonElement e : Jsons.a(story, "controls")) {
@@ -436,6 +626,9 @@ public final class EffScreen extends Screen {
         + "|"
         + Jsons.i(Jsons.o(s, "story"), "revision")
         + "|"
+        + Jsons.o(s, "research")
+        + "|"
+        + Jsons.b(s, "researchBusy")
         + Jsons.o(s, "battle")
         + "|"
         + Jsons.b(s, "pending")
@@ -450,8 +643,7 @@ public final class EffScreen extends Screen {
   }
 
   public void refresh() {
-    if (!signature.equals(signature()) && fields.values().stream().noneMatch(EditBox::isFocused))
-      init();
+    if (!signature.equals(signature()) && !typing()) init();
   }
 
   @Override
@@ -465,6 +657,8 @@ public final class EffScreen extends Screen {
 
   @Override
   public boolean mouseScrolled(double x, double y, double horizontal, double vertical) {
+    if (researchEditor != null && researchEditor.isMouseOver(x, y))
+      return super.mouseScrolled(x, y, horizontal, vertical);
     offset =
         Math.max(
             0, Math.min(Math.max(0, lines.size() - 3), offset - (int) Math.signum(vertical) * 3));
@@ -473,7 +667,8 @@ public final class EffScreen extends Screen {
 
   @Override
   public boolean keyPressed(KeyEvent e) {
-    if (e.key() == InputConstants.KEY_P && fields.values().stream().noneMatch(EditBox::isFocused)) {
+    if (typing()) return super.keyPressed(e);
+    if (e.key() == InputConstants.KEY_P && !typing()) {
       EffClient.manualPause = !EffClient.manualPause;
       return true;
     }
@@ -489,8 +684,7 @@ public final class EffScreen extends Screen {
       NativeTheatre.skip();
       return true;
     }
-    if ((e.key() == InputConstants.KEY_SPACE || e.key() == InputConstants.KEY_V)
-        && fields.values().stream().noneMatch(EditBox::isFocused)) {
+    if ((e.key() == InputConstants.KEY_SPACE || e.key() == InputConstants.KEY_V) && !typing()) {
       EffClient.send(Jsons.obj("op", "story", "input", Jsons.obj("action", "advance")));
       return true;
     }

@@ -13,16 +13,21 @@ import net.minecraft.world.level.levelgen.presets.WorldPresets;
 /** Explicit development preview; only opens a world created in this isolated run directory. */
 public final class EffPreview {
   private static final boolean ENABLED =
-      Boolean.getBoolean("eff.preview") && !Boolean.getBoolean("eff.selftest");
+      Boolean.getBoolean("eff.preview")
+          && !Boolean.getBoolean("eff.selftest")
+          && !Boolean.getBoolean("eff.researchSelftest");
   private static int phase;
   private static long requestedAt;
   private static boolean wantsModel;
-  private static String name = "eff-playground";
+  private static String name =
+      Boolean.getBoolean("eff.previewResearch") ? "eff-research-playground" : "eff-playground";
 
   public static void tick(Minecraft mc) {
     if (!ENABLED || phase >= 5) return;
     try {
       if (phase == 0 && mc.isGameLoadFinished() && mc.level == null) {
+        mc.options.pauseOnLostFocus =
+            false; // Isolated opt-in development preview; EFF still pauses on lost focus.
         mc.getTutorial().setStep(TutorialSteps.NONE);
         Path saves = mc.gameDirectory.toPath().resolve("saves"), world = saves.resolve(name);
         if (Files.isRegularFile(world.resolve("eff-preview.marker"))) {
@@ -47,7 +52,12 @@ public final class EffPreview {
         Files.writeString(
             mc.gameDirectory.toPath().resolve("saves").resolve(name).resolve("eff-preview.marker"),
             "EFF owned development preview");
-        EffClient.send(Jsons.obj("op", "enter", "mode", "practice"));
+        EffClient.send(
+            Jsons.obj(
+                "op",
+                "enter",
+                "mode",
+                Boolean.getBoolean("eff.previewResearch") ? "research" : "practice"));
         phase = 2;
       } else if (phase == 2 && Jsons.b(Jsons.o(EffClient.state, "native"), "ready")) {
         EffClient.manualPause = true;
@@ -89,7 +99,8 @@ public final class EffPreview {
                     "paused",
                     true)
                 .toString());
-        mc.gui.setScreen(new EffScreen("battle"));
+        mc.gui.setScreen(
+            new EffScreen(Boolean.getBoolean("eff.previewResearch") ? "research" : "battle"));
         phase = 5;
       }
     } catch (Exception e) {

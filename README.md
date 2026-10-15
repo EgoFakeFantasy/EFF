@@ -15,7 +15,7 @@
 | 文字演出版 | 文字演出与雨水玩法 | [文字演出版](https://egofakefantasy.github.io/EFF/new-version/) | `new-version/index.html` |
 | 原版 | 原始文字网页游戏 | [原版](https://egofakefantasy.github.io/EFF/) | `index.html` |
 
-另有独立的 **[Minecraft 表象融合旁支原型（mc-version）](./mc-version/README.md)**：针对 MC Java 26.3 的 Fabric 模组，让现象攻防作用于 MC 的身体控制、时间、场地与出口。该旁支需要本地 MC，单独开发，不改变以上入口。
+另有独立的 **[Minecraft 表象融合旁支原型（mc-version）](./mc-version/README.md)**：针对 MC Java 26.3 的 Fabric 模组，让现象攻防作用于 MC 的身体控制、时间、场地与出口。0.2 增加[运行层研究场](./mc-version/RESEARCH.md)，支持组合干预程序、原生实体观测与本地 AI 反制。该旁支需要本地 MC，单独开发，不改变以上入口。
 
 **网站根地址仍然进入原版文字游戏。** 第四版的地址包含 `/local-version/`；合并到 `main` 不会自动改变首页入口。
 
