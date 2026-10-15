@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "eff",
+  "version": "${version}",
+  "name": "EFF · MC 现象战争",
+  "description": "EFF 与 Minecraft 的表象融合旁支。",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "eff.minecraft.EffMod"
+    ],
+    "client": [
+      "eff.minecraft.client.EffClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "26.3",
+    "java": ">=25",
+    "fabric-api": "*"
+  },
+  "license": "All Rights Reserved",
+  "mixins": [
+    {
+      "config": "eff.client.mixins.json",
+      "environment": "client"
+    }
+  ]
+}

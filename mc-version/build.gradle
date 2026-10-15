@@ -1,0 +1,45 @@
+plugins { id 'net.fabricmc.fabric-loom' version '1.18.4' }
+version = '0.1.0'
+group = 'eff.minecraft'
+base { archivesName = 'eff-minecraft-runtime' }
+repositories { mavenCentral() }
+dependencies {
+ minecraft 'com.mojang:minecraft:26.3'
+ implementation 'net.fabricmc:fabric-loader:0.19.5'
+ implementation 'net.fabricmc.fabric-api:fabric-api:0.163.0+26.3'
+}
+java { toolchain.languageVersion = JavaLanguageVersion.of(25); withSourcesJar() }
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8'; options.release = 25 }
+processResources { inputs.property 'version', project.version; filesMatching('fabric.mod.json') { expand 'version':project.version } }
+
+// Bundle only the existing game runtime, never manuscripts, profiles or model weights.
+tasks.register('storyBundle', Zip) {
+ archiveFileName = 'eff-story-runtime.zip'
+ destinationDirectory = layout.buildDirectory.dir('generated/story')
+ preserveFileTimestamps = false
+ reproducibleFileOrder = true
+ from('bridge') { into 'bridge'; include '*.cjs' }
+ from('../pixel-version') { into 'pixel-version'; include '*.js', 'index.html' }
+ from('../local-version') { into 'local-version'; include '*.js' }
+ from('../desktop') { into 'desktop'; include 'model-client.cjs' }
+}
+processResources { dependsOn 'storyBundle'; from(tasks.named('storyBundle').map { it.archiveFile }) }
+
+loom {
+ runs {
+  client {
+   if (project.hasProperty('effPreview')) { vmArg '-Deff.preview=true' }
+   if (project.hasProperty('effSelftest')) { vmArg '-Deff.selftest=true' }
+   if (project.hasProperty('effKeepPreview')) { vmArg '-Deff.keepPreview=true' }
+   programArg '--username'; programArg 'EFF_Traveler'
+   programArg '--width'; programArg '1280'
+   programArg '--height'; programArg '720'
+  }
+ }
+}
+
+tasks.register('bridgeTest', Exec) {
+ workingDir projectDir
+ commandLine 'node', '--test', 'tests/bridge.test.cjs'
+}
+check { dependsOn 'bridgeTest' }
