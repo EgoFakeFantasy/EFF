@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "package": "eff.minecraft.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "eff-1201-refmap.json",
+  "mixins": [
+    "ServerLevelMixin",
+    "ChunkMapAccessor"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

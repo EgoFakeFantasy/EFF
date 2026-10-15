@@ -1,0 +1,84 @@
+plugins { id 'fabric-loom' version '1.10.5' }
+version = '0.2.0+mc1.20.1'
+group = 'eff.minecraft'
+base { archivesName = 'eff-minecraft-runtime-1.20.1' }
+repositories { mavenCentral() }
+dependencies {
+ minecraft 'com.mojang:minecraft:1.20.1'
+ mappings loom.officialMojangMappings()
+ modImplementation 'net.fabricmc:fabric-loader:0.19.5'
+ modImplementation 'net.fabricmc.fabric-api:fabric-api:0.92.12+1.20.1'
+}
+java { toolchain.languageVersion = JavaLanguageVersion.of(17); withSourcesJar() }
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8'; options.release = 17 }
+processResources { inputs.property 'version', project.version; filesMatching('fabric.mod.json') { expand 'version':project.version } }
+
+// Bundle only the existing game runtime, never manuscripts, profiles or model weights.
+tasks.register('storyBundle', Zip) {
+ archiveFileName = 'eff-story-runtime.zip'
+ destinationDirectory = layout.buildDirectory.dir('generated/story')
+ preserveFileTimestamps = false
+ reproducibleFileOrder = true
+ from('../mc-version/bridge') { into 'bridge'; include '*.cjs' }
+ from('../pixel-version') { into 'pixel-version'; include '*.js', 'index.html' }
+ from('../local-version') { into 'local-version'; include '*.js' }
+ from('../desktop') { into 'desktop'; include 'model-client.cjs' }
+}
+processResources { dependsOn 'storyBundle'; from(tasks.named('storyBundle').map { it.archiveFile }) }
+
+loom {
+ mixin { defaultRefmapName = "eff-1201-refmap.json" }
+ runs {
+  client {
+   if (project.hasProperty('effResearchpreview')) { vmArg '-Deff.preview=true'; vmArg '-Deff.previewResearch=true' }
+   if (project.hasProperty('effResearchtest')) { vmArg '-Deff.researchSelftest=true' }
+   if (project.hasProperty('effRunDir')) { runDir project.relativePath(file(project.property('effRunDir').toString())) }
+   if (project.hasProperty('effPreview')) { vmArg '-Deff.preview=true' }
+   if (project.hasProperty('effSelftest')) { vmArg '-Deff.selftest=true' }
+   if (project.hasProperty('effKeepPreview')) { vmArg '-Deff.keepPreview=true' }
+   programArg '--username'; programArg 'EFF_Traveler'
+   programArg '--width'; programArg '1280'
+   programArg '--height'; programArg '720'
+  }
+ }
+}
+
+tasks.register('bridgeTest', Exec) {
+ workingDir file('../mc-version')
+ commandLine 'node', '--test', 'tests/bridge.test.cjs', 'tests/research.test.cjs'
+}
+check { dependsOn 'bridgeTest' }
+
+sourceSets {
+ researchCheck {
+  java.srcDir 'src/researchCheck/java'
+  compileClasspath += sourceSets.main.output
+  runtimeClasspath += sourceSets.main.output
+ }
+}
+tasks.register('researchJavaTest', JavaExec) {
+ dependsOn researchCheckClasses
+ classpath = sourceSets.researchCheck.runtimeClasspath
+ mainClass = 'eff.minecraft.ResearchProgramCheck'
+}
+check { dependsOn 'researchJavaTest' }
+
+// A normal MC shutdown has exit code zero even when the opt-in harness fails.
+// Treat the fresh native receipt as the test result instead of reporting a false Gradle success.
+def nativeQaStartedAt = 0L
+tasks.named('runClient').configure {
+ doFirst { nativeQaStartedAt = System.currentTimeMillis() }
+ doLast {
+  def research = project.hasProperty('effResearchtest')
+  if (research || project.hasProperty('effSelftest')) {
+   def runPath = project.hasProperty('effRunDir') ? file(project.property('effRunDir')) : file('run')
+   def receipt = new File(runPath, research ? 'eff-research-qa/result.json' : 'eff-qa/result.json')
+   if (!receipt.isFile() || receipt.lastModified() < nativeQaStartedAt) {
+    throw new GradleException('No fresh native QA result: ' + receipt)
+   }
+   def result = new groovy.json.JsonSlurper().parse(receipt, 'UTF-8')
+   if (result.ok != true) throw new GradleException('Native QA failed: ' + result.error)
+   logger.lifecycle('Native QA passed: ' + result.checks.size() + ' checks')
+  }
+ }
+}

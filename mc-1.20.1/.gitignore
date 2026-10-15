@@ -1,0 +1,13 @@
+.gradle/
+build/
+run/
+logs/
+*.log
+
+.gradle-user-home/
+
+run-research/
+
+run-research-qa/
+
+run-story-qa/
