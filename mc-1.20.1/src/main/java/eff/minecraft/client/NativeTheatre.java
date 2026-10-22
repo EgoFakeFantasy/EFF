@@ -18,10 +18,16 @@ public final class NativeTheatre {
   private static volatile int requested = -1, captured = -2;
   private static volatile long began;
   private static TextureTarget capture;
+  private static volatile boolean releaseRequested;
   private static int frame;
   private static final ArrayDeque<Retired> retired = new ArrayDeque<>();
 
   private record Retired(TextureTarget target, int after) {}
+
+  static {
+    net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents.CLIENT_STOPPING
+        .register(mc -> close());
+  }
 
   public static void offer(JsonObject next) {
     int serial = Jsons.i(next, "serial");
@@ -40,6 +46,13 @@ public final class NativeTheatre {
 
   public static void captureFrame(RenderTarget source) {
     frame++;
+    if (releaseRequested || capture != null && began != 0 && elapsed() >= duration()) {
+      // The finished cue never draws this texture again. Retire it on the render thread.
+      if (capture != null) retired.add(new Retired(capture, frame + 4));
+      capture = null;
+      began = 0;
+      releaseRequested = false;
+    }
     while (!retired.isEmpty() && retired.peek().after <= frame) {
       TextureTarget old = retired.remove().target;
       old.destroyBuffers();
@@ -73,10 +86,25 @@ public final class NativeTheatre {
     began = 0;
     requested = -1;
     captured = -2;
+    releaseRequested = true;
   }
 
   public static void skip() {
     began = 0;
+    releaseRequested = true;
+  }
+
+  public static void close() {
+    clear();
+    if (RenderSystem.isOnRenderThread()) releaseBuffers();
+    else RenderSystem.recordRenderCall(NativeTheatre::releaseBuffers);
+  }
+
+  private static void releaseBuffers() {
+    if (capture != null) capture.destroyBuffers();
+    capture = null;
+    while (!retired.isEmpty()) retired.remove().target.destroyBuffers();
+    releaseRequested = false;
   }
 
   public static double elapsed() {

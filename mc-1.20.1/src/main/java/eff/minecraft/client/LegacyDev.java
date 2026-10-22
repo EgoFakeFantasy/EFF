@@ -1,6 +1,6 @@
 package eff.minecraft.client;
 
-import net.minecraft.client.Minecraft;
+import net.minecraft.client.*;
 import net.minecraft.client.gui.screens.TitleScreen;
 
 /** Options only for owned opt-in dev worlds; ordinary installation leaves user options alone. */
@@ -19,9 +19,33 @@ final class LegacyDev {
     if (!logged && mc.getOverlay() == null && mc.screen != null) {
       logged = true;
       mc.options.guiScale().set(2);
-      mc.options.renderDistance().set(8);
-      mc.options.simulationDistance().set(8);
-      System.out.println("[EFF_DEV] ready screen=" + mc.screen.getClass().getName());
+      boolean lowMemory = Boolean.getBoolean("eff.lowMemory");
+      int render =
+          Math.max(2, Math.min(16, Integer.getInteger("eff.renderDistance", lowMemory ? 2 : 8)));
+      // Vanilla 1.20.1 rejects simulation distances below five and resets them to its default.
+      int simulation =
+          Math.max(
+              5, Math.min(16, Integer.getInteger("eff.simulationDistance", lowMemory ? 5 : 8)));
+      mc.options.renderDistance().set(render);
+      mc.options.simulationDistance().set(simulation);
+      if (lowMemory) {
+        mc.options.graphicsMode().set(GraphicsStatus.FAST);
+        mc.options.cloudStatus().set(CloudStatus.OFF);
+        mc.options.ambientOcclusion().set(false);
+        mc.options.mipmapLevels().set(0);
+        mc.options.biomeBlendRadius().set(0);
+        mc.options.entityShadows().set(false);
+        mc.options.framerateLimit().set(60);
+      }
+      System.out.println(
+          "[EFF_DEV] ready screen="
+              + mc.screen.getClass().getName()
+              + " lowMemory="
+              + lowMemory
+              + " renderDistance="
+              + render
+              + " simulationDistance="
+              + simulation);
     }
   }
 }

@@ -1,5 +1,5 @@
 plugins { id 'fabric-loom' version '1.10.5' }
-version = '0.5.0+mc1.20.1'
+version = '0.5.1+mc1.20.1'
 group = 'eff.minecraft'
 base { archivesName = 'eff-minecraft-runtime-1.20.1' }
 repositories { mavenCentral() }
@@ -123,7 +123,13 @@ tasks.register('exportManagedLaunch') {
   run.useArgFile.set(false)
   def args = new ArrayList<String>(run.allJvmArgs)
   args.addAll(run.jvmArguments.get())
-  args += ['-XX:+DisableAttachMechanism', '-XX:+ExitOnOutOfMemoryError', '-Xmx2G', '-Deff.preview=true', '-Deff.previewResearch=true']
+  def lowMemory = !project.hasProperty('effLowMemory') || project.property('effLowMemory').toString().toBoolean()
+  args.removeAll { it.startsWith('-Xms') || it.startsWith('-Xmx') }
+  if(lowMemory) {
+   args.removeAll { it in ['-XX:+UseG1GC','-XX:+UseParallelGC'] || it.startsWith('-XX:ReservedCodeCacheSize=') || it.startsWith('-XX:ActiveProcessorCount=') }
+   args += ['-Xms64m','-Xmx768m','-XX:+UseSerialGC','-XX:ReservedCodeCacheSize=64m','-XX:ActiveProcessorCount=2','-XX:MaxDirectMemorySize=128m']
+  } else args += ['-Xms128m','-Xmx2G']
+  args += ['-XX:+DisableAttachMechanism', '-XX:+ExitOnOutOfMemoryError', '-Deff.lowMemory='+lowMemory, '-Deff.preview=true', '-Deff.previewResearch=true']
   if(project.hasProperty('effManagedTest')) args += '-Deff.managedSelftest=true'
   if(project.hasProperty('effGuardedTest')) args += '-Deff.guardedSelftest=true'
   if(project.hasProperty('effGuardedFallbackTest')) args += '-Deff.guardedAllowFallback=true'

@@ -48,7 +48,7 @@ module.exports.onReady=async(c,g)=>{
   process.kill(first.pid);const second=await until(()=>fs.existsSync(file(2))&&JSON.parse(fs.readFileSync(file(2),'utf8')));
   assert.notEqual(second.pid,first.pid);assert.equal(second.snapshot.fields['authority.recovery.active'],false);assert.deepEqual(second.engines,first.engines);
   assert.equal(alive(first.snapshot.runtime.policy.pid),false);assert.equal(alive(first.snapshot.runtime.execution.pid),false);
-  const events=fs.readFileSync(path.join(seal.config.directory,'guard-events.jsonl'),'utf8');assert.match(events,/job-drained/);assert.match(events,/"active":0/);checks.push('controller-recovery-and-no-orphans');
+  const events=fs.readFileSync(path.join(seal.config.directory,'guard-events.jsonl'),'utf8');assert.match(events,/job-drained/);assert.match(events,/"active":0/);const drained=events.trim().split("\n").map(line=>JSON.parse(line)).find(e=>e.type==="job-drained");assert.ok(drained.detail.peakCommittedBytes>0);checks.push('controller-recovery-and-no-orphans');
  });
  let second=JSON.parse(fs.readFileSync(file(2),'utf8'));
  await t.test('killing the outer guard closes its kernel job and stops all owned JVMs',async()=>{
@@ -66,9 +66,9 @@ module.exports.onReady=async(c,g)=>{
  });
  await t.test('the verified launcher successfully starts and cleanly stops a sealed process',()=>{
   const code=path.join(seal.payload,'stop-fixture.cjs'),savedManifest=fs.readFileSync(s.manifest),savedLauncher=fs.readFileSync(s.launcher,'utf8');
-  fs.writeFileSync(code,`require('node:readline').createInterface({input:process.stdin}).once('line',()=>{process.stdout.write(JSON.stringify({op:'stopped'})+'\\n');});`);
+  fs.writeFileSync(code,`require('./protected-child.cjs');const api=require.cache[require.resolve('./protected-child.cjs')].exports;api.onReady=async c=>{const snap=await c.snapshot();require('node:fs').writeFileSync(require('node:path').join(c.directory,'launcher-real-proof.json'),JSON.stringify(snap));setTimeout(()=>c.onUserStop(),50);};`);
   const once=JSON.parse(savedManifest);once.child=code;once.files.push({path:code,sha256:sha(code),size:fs.statSync(code).size});once.trees[0].entries.push('stop-fixture.cjs');fs.writeFileSync(s.manifest,JSON.stringify(once));fs.writeFileSync(s.launcher,savedLauncher.replace(originalPin,sha(s.manifest)));
-  try{const result=spawnSync('cmd.exe',['/d','/c',s.launcher],{encoding:'utf8',windowsHide:true,timeout:20000,input:''});assert.equal(result.status,0,result.stderr);assert.match(fs.readFileSync(path.join(seal.config.directory,'guard-events.jsonl'),'utf8'),/guard-stop/);}finally{fs.writeFileSync(s.manifest,savedManifest);fs.writeFileSync(s.launcher,savedLauncher);fs.unlinkSync(code);}checks.push('verified-launcher-runs');
+  try{const result=spawnSync('cmd.exe',['/d','/c',s.launcher],{encoding:'utf8',windowsHide:true,timeout:20000,input:''});assert.equal(result.status,0,result.stderr);const live=JSON.parse(fs.readFileSync(path.join(seal.config.directory,'launcher-real-proof.json'),'utf8'));assert.equal(live.runtime.execution.engine.descriptor.generation,2);assert.equal(live.fields['authority.recovery.active'],false);assert.match(fs.readFileSync(path.join(seal.config.directory,'guard-events.jsonl'),'utf8'),/guard-stop/);}finally{fs.writeFileSync(s.manifest,savedManifest);fs.writeFileSync(s.launcher,savedLauncher);fs.unlinkSync(code);}checks.push('verified-launcher-runs');
  });
  await t.test('tampered bootstrap code cannot be revived from an unchanged seal',()=>{
   fs.appendFileSync(path.join(seal.payload,'controller.cjs'),'\nthrow Error("poison")');const result=spawnSync(s.guard,[s.manifest,s.pin],{encoding:'utf8',windowsHide:true,timeout:20000});assert.equal(result.status,2);assert.match(result.stderr,/CODE_(SIZE|HASH)_MISMATCH/);checks.push('poisoned-code-refused');

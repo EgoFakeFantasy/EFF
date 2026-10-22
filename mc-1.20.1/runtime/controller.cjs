@@ -26,7 +26,7 @@ class WorkerSlot {
     await this.owner.config.store?.verify();
     if(this.owner.closed||this.stopped)throw Error("CONTROLLER_STOPPED");
     this.epoch++;
-    const child=spawn(this.owner.config.javaByRole?.[this.role] || this.owner.config.java,["-Xms16m","-Xmx96m","-XX:+UseSerialGC","-XX:ReservedCodeCacheSize=32m","-XX:+DisableAttachMechanism","-XX:+ExitOnOutOfMemoryError","-XX:ErrorFile="+path.join(this.owner.directory,"worker-error-%p.log"),"-cp",this.owner.config.workerJar,"eff.runtime.Worker",this.role],{env:cleanEnv(),stdio:["pipe","pipe","pipe"],windowsHide:true});
+    const child=spawn(this.owner.config.javaByRole?.[this.role] || this.owner.config.java,["-Xms16m","-Xmx64m","-XX:+UseSerialGC","-XX:ReservedCodeCacheSize=24m","-XX:ActiveProcessorCount=2","-XX:+DisableAttachMechanism","-XX:+ExitOnOutOfMemoryError","-XX:ErrorFile="+path.join(this.owner.directory,"worker-error-%p.log"),"-cp",this.owner.config.workerJar,"eff.runtime.Worker",this.role],{env:cleanEnv(),stdio:["pipe","pipe","pipe"],windowsHide:true});
     this.child=child;
     const epoch=this.epoch;
     child.stderr.on("data",()=>{}); // never forward arbitrary process arguments or secrets

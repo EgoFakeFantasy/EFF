@@ -6,6 +6,8 @@ const send=message=>process.stdout.write(JSON.stringify(message)+'\n');
 function rpc(op,body={}){const id=++serial;return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{pending.delete(id);reject(Error('OUTER_GUARD_TIMEOUT'));},5000);pending.set(id,{resolve,reject,timer});send({id,op,...body});});}
 lines.on('line',async raw=>{
  try{
+  // Windows PowerShell/UTF-8 console can make the framework stdin writer emit one BOM.
+  if(!booted && raw.charCodeAt(0)===0xfeff)raw=raw.slice(1);
   if(raw.length>262144)throw Error('GUARD_REPLY_BUDGET');const message=JSON.parse(raw);
   if(!booted){if(message.op!=='boot')throw Error('OUTER_GUARD_REQUIRED');booted=true;
    const {Controller}=require('./controller.cjs');

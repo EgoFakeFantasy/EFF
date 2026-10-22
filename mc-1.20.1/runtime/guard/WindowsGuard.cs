@@ -28,6 +28,7 @@ public sealed class NativeJob : IDisposable {
   int size=Marshal.SizeOf(l);IntPtr ptr=Marshal.AllocHGlobal(size);try{Marshal.StructureToPtr(l,ptr,false);if(!SetInformationJobObject(handle,9,ptr,(uint)size))throw new IOException("JOB_LIMIT_FAILED");}finally{Marshal.FreeHGlobal(ptr);}}
  public void Add(Process process){if(!AssignProcessToJobObject(handle,process.Handle))throw new IOException("JOB_ASSIGN_FAILED_"+Marshal.GetLastWin32Error());}
  public uint Active(){int size=Marshal.SizeOf(typeof(Accounting));IntPtr ptr=Marshal.AllocHGlobal(size);try{if(!QueryInformationJobObject(handle,1,ptr,(uint)size,IntPtr.Zero))throw new IOException("JOB_QUERY_FAILED");return ((Accounting)Marshal.PtrToStructure(ptr,typeof(Accounting))).active;}finally{Marshal.FreeHGlobal(ptr);}}
+ public ulong PeakMemoryBytes(){int size=Marshal.SizeOf(typeof(Limits));IntPtr ptr=Marshal.AllocHGlobal(size);try{if(!QueryInformationJobObject(handle,9,ptr,(uint)size,IntPtr.Zero))throw new IOException("JOB_MEMORY_QUERY_FAILED");return ((Limits)Marshal.PtrToStructure(ptr,typeof(Limits))).PeakJob.ToUInt64();}finally{Marshal.FreeHGlobal(ptr);}}
  public void Drain(){if(handle==IntPtr.Zero)return;if(!TerminateJobObject(handle,71))throw new IOException("JOB_TERMINATE_FAILED");var watch=Stopwatch.StartNew();while(Active()!=0){if(watch.ElapsedMilliseconds>10000)throw new IOException("OLD_JOB_NOT_EMPTY");Thread.Sleep(20);}}
  public void Dispose(){if(handle!=IntPtr.Zero){CloseHandle(handle);handle=IntPtr.Zero;}}
 }
@@ -99,7 +100,7 @@ public static class Program {
    Event(directory,"guard-ready",new {pid=Process.GetCurrentProcess().Id,files=locks.Count});
    var failures=new Queue<long>();var clock=Stopwatch.StartNew();int generation=0,restarts=0;
    while(!stopping){CheckTrees(seal["trees"]);generation++;using(var job=new NativeJob()){
-    var start=new ProcessStartInfo((string)seal["node"],"--max-old-space-size=192 --disable-proto=throw --no-addons "+Quote((string)seal["child"]));start.UseShellExecute=false;start.CreateNoWindow=true;start.RedirectStandardInput=true;start.RedirectStandardOutput=true;start.RedirectStandardError=true;start.StandardOutputEncoding=Encoding.UTF8;start.StandardErrorEncoding=Encoding.UTF8;start.WorkingDirectory=(string)seal["payload"];
+    var start=new ProcessStartInfo((string)seal["node"],"--max-old-space-size=96 --disable-proto=throw --no-addons "+Quote((string)seal["child"]));start.UseShellExecute=false;start.CreateNoWindow=true;start.RedirectStandardInput=true;start.RedirectStandardOutput=true;start.RedirectStandardError=true;start.StandardOutputEncoding=Encoding.UTF8;start.StandardErrorEncoding=Encoding.UTF8;start.WorkingDirectory=(string)seal["payload"];
     foreach(string k in new List<string>(Keys(start.EnvironmentVariables)))if(k.StartsWith("NODE_",StringComparison.OrdinalIgnoreCase)||k.StartsWith("EFF_",StringComparison.OrdinalIgnoreCase)||k.Equals("JAVA_TOOL_OPTIONS",StringComparison.OrdinalIgnoreCase)||k.Equals("JDK_JAVA_OPTIONS",StringComparison.OrdinalIgnoreCase)||k.Equals("_JAVA_OPTIONS",StringComparison.OrdinalIgnoreCase))start.EnvironmentVariables.Remove(k);
     using(var child=Process.Start(start)){
      bool graceful=false;try{try{job.Add(child);}catch{child.Kill();child.WaitForExit();throw;}Event(directory,"controller-start",new {pid=child.Id,generation=generation});
@@ -122,7 +123,7 @@ public static class Program {
        if(clock.ElapsedMilliseconds>=nextTree){CheckTrees(seal["trees"]);nextTree=clock.ElapsedMilliseconds+1000;}
        Thread.Sleep(5);
       }
-     }catch(IOException e){if(e.Message!="CONTROLLER_PROGRESS_TIMEOUT")throw;Event(directory,"controller-stalled",new {pid=child.Id});}finally{job.Drain();Event(directory,"job-drained",new {rootPid=child.Id,generation=generation,active=job.Active()});}
+     }catch(IOException e){if(e.Message!="CONTROLLER_PROGRESS_TIMEOUT")throw;Event(directory,"controller-stalled",new {pid=child.Id});}finally{job.Drain();Event(directory,"job-drained",new {rootPid=child.Id,generation=generation,active=job.Active(),peakCommittedBytes=job.PeakMemoryBytes()});}
      if(stopping||graceful){Event(directory,"guard-stop",new {graceful=graceful});break;}
      // Do not revive persistent attacks indefinitely. Time decisions use Stopwatch, not wall time.
      long now=clock.ElapsedMilliseconds;while(failures.Count>0&&now-failures.Peek()>60000)failures.Dequeue();if(failures.Count>=3||++restarts>6)throw new IOException("CONTROLLER_RESTART_BUDGET");failures.Enqueue(now);Event(directory,"controller-recovery",new {generation=generation});Thread.Sleep(250*failures.Count);

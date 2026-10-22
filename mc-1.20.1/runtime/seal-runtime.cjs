@@ -1,7 +1,9 @@
 "use strict";
 // Explicit provisioning only. Starting a sealed deployment never refreshes its trust baseline.
 const fs=require('node:fs'),path=require('node:path'),{createHash}=require('node:crypto'),{execFileSync}=require('node:child_process');
-const sha=file=>createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+const hashBuffer=Buffer.allocUnsafe(1024*1024);
+function sha(file){const hash=createHash('sha256'),fd=fs.openSync(file,'r');try{let count;while((count=fs.readSync(fd,hashBuffer,0,hashBuffer.length,null))>0)hash.update(hashBuffer.subarray(0,count));return hash.digest('hex');}finally{fs.closeSync(fd);}}
+const jarMemory=['-J-Xms8m','-J-Xmx64m','-J-XX:+UseSerialGC','-J-XX:ReservedCodeCacheSize=16m','-J-XX:ActiveProcessorCount=2'];
 function walk(root){if(!fs.existsSync(root))return [];let list=[];for(const e of fs.readdirSync(root,{withFileTypes:true})){const f=path.join(root,e.name);if(e.isSymbolicLink())throw Error('SEAL_SYMLINK');if(e.isDirectory())list.push(...walk(f));else if(e.isFile())list.push(f);else throw Error('SEAL_SPECIAL_FILE');}return list.sort();}
 function provision(source,destination,guardBinary){
  if(process.platform!=='win32')throw Error('WINDOWS_GUARD_REQUIRED');
@@ -20,11 +22,12 @@ function provision(source,destination,guardBinary){
  for(const executable of executables){pin(executable);if(path.basename(executable).toLowerCase()==='java.exe'){const root=path.resolve(executable,'..','..');for(const dir of ['bin','lib','conf'])for(const f of walk(path.join(root,dir)))pin(f);if(fs.existsSync(path.join(root,'release')))pin(path.join(root,'release'));}}
  if(config.host){
   const h=config.host;h.cwd=path.join(destination,'mc-host');fs.mkdirSync(h.cwd);const args=h.args;
+  if(args.includes('-Deff.lowMemory=true'))fs.writeFileSync(path.join(h.cwd,'options.txt'),'renderDistance:2\nsimulationDistance:5\nparticles:2\nmipmapLevels:0\ngraphicsMode:0\nao:false\n');
   if(args.some(a=>/^(@|-javaagent:|-agentlib:|-agentpath:|-Xbootclasspath|--patch-module|-XX:(OnError|OnOutOfMemoryError)=|-XX:-DisableAttachMechanism)/i.test(a)))throw Error('UNAPPROVED_JVM_INJECTION');
   for(const key of Object.keys(h.env||{}))if(/^(JAVA|JDK_JAVA|_JAVA|NODE_|EFF_)/i.test(key))throw Error('UNAPPROVED_LAUNCH_ENV');
   const cp=args.indexOf('-cp');if(cp<0)throw Error('EXPECTED_EXPLICIT_CLASSPATH');
   const paths=args[cp+1].split(path.delimiter),dirs=paths.filter(p=>fs.statSync(p).isDirectory());
-  if(dirs.length){const joined=path.join(payload,'mc-mod.jar');const jar=path.join(config.java,'..','jar.exe');execFileSync(jar,['cf',joined,...dirs.flatMap(d=>['-C',d,'.'])],{windowsHide:true});pin(joined);args[cp+1]=[...paths.filter(p=>!dirs.includes(p)).map(dependency),joined].join(path.delimiter);}
+  if(dirs.length){const joined=path.join(payload,'mc-mod.jar');const jar=path.join(config.java,'..','jar.exe');execFileSync(jar,[...jarMemory,'cf',joined,...dirs.flatMap(d=>['-C',d,'.'])],{windowsHide:true});pin(joined);args[cp+1]=[...paths.filter(p=>!dirs.includes(p)).map(dependency),joined].join(path.delimiter);}
   if(!dirs.length)args[cp+1]=paths.map(dependency).join(path.delimiter);
   for(const f of args[cp+1].split(path.delimiter))pin(f);
   const dli=args.findIndex(a=>a.startsWith('-Dfabric.dli.config='));
@@ -39,7 +42,7 @@ function provision(source,destination,guardBinary){
   // The bridge is extracted before play and locked, not rewritten in the writable MC config tree.
   const bundle=dirs.map(d=>path.join(d,'eff-story-runtime.zip')).find(f=>fs.existsSync(f));
   if(!bundle)throw Error('STORY_BUNDLE_REQUIRED');const story=path.join(payload,'story');fs.mkdirSync(story);
-  execFileSync(path.join(config.java,'..','jar.exe'),['xf',bundle],{cwd:story,windowsHide:true});
+  execFileSync(path.join(config.java,'..','jar.exe'),[...jarMemory,'xf',bundle],{cwd:story,windowsHide:true});
   for(const file of walk(story))pin(file);
   h.env={...(h.env||{}),EFF_STORY_RUNTIME:story};args.splice(cp,0,'-Deff.node='+process.execPath);
   const mods=path.join(h.cwd,'mods');fs.mkdirSync(mods);trees.push({root:mods,entries:[]});

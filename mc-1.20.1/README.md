@@ -1,16 +1,16 @@
 # EFF · Minecraft 1.20.1 特供版
 
-运行层研究场 0.5，适配 **Minecraft Java 1.20.1 / Fabric Loader 0.19.5 / Fabric API 0.92.12+1.20.1 / Java 17**。这是独立的 Fabric 构建，与 [26.3 版本](../mc-version/README.md) 共用原文脚本和本地 AI 桥接。
+运行层研究场 0.5.1，适配 **Minecraft Java 1.20.1 / Fabric Loader 0.19.5 / Fabric API 0.92.12+1.20.1 / Java 17**。这是独立的 Fabric 构建，与 [26.3 版本](../mc-version/README.md) 共用原文脚本和本地 AI 桥接。
 
 保留原文之旅、血色庭院争夺练习、运行层研究场、本地双代理、真实实体/控制/事件/磁盘检查点/实例迁移/出口判定，以及真实游戏帧撕裂与重新构成演出。原文、说话者和终章过去介入节点仍由同一套脚本决定。
 
 ## 安装
 
 1. 在启动器中建立 **1.20.1 + Fabric** 独立实例，安装 Fabric Loader **0.19.5**；游戏运行 Java 使用 **17**。
-2. 将本版 `eff-minecraft-runtime-1.20.1-0.5.0+mc1.20.1.jar` 与 **Fabric API 0.92.12+1.20.1** 放进该实例的 `mods`。
+2. 将本版 `eff-minecraft-runtime-1.20.1-0.5.1+mc1.20.1.jar` 与 **Fabric API 0.92.12+1.20.1** 放进该实例的 `mods`。
 3. 安装 **Node.js 22+**；若启动器找不到 Node，增加 JVM 参数 `-Deff.node=C:/实际路径/node.exe`。
 4. 进入单人世界，按 **R**。研究场入口为 `/eff research`，原文之旅为 `/eff play`，独立练习为 `/eff duel`。
-5. 本地 AI 使用已有的 **Ollama** 服务 `127.0.0.1:11434`。在“本地模型”页检测并启用已安装的模型；不会自动下载权重。推荐先用本机已有的 `qwen3.5:4b`。
+5. 本地 AI 使用已有的 **Ollama** 服务 `127.0.0.1:11434`。在“本地模型”页检测并启用已安装的模型；不会自动下载权重。托管低内存入口默认使用规则策略，不自动加载模型；需要本地 AI 时再手动启用已安装的模型，并为推理预留额外内存。
 
 若在旧存档中安装后提示维度缺失，退出并重新打开世界。随时 `/eff leave` 返回，恢复原位置、游戏模式、飞行能力和 EFF 冻结状态。
 
@@ -88,3 +88,12 @@ Windows 推荐使用 [受保护启动入口](./PROTECTED_RUNTIME.md)：封存并
 ## 0.5 有限代际引擎生成
 
 托管与受保护入口中的 `rebuild runtime.execution`、`rebuild runtime.policy` 现在由当前代引擎生成后继字节码，经另一 JVM 复核、候选代验证和战局提交后切换。界面显示实际引擎代次、身份与字节码摘要；`rebuild runtime.host` 仍表示 MC 宿主进程重启。生成、交接、恢复边界与实现接口见 [RECURSIVE_ENGINES.md](./RECURSIVE_ENGINES.md)。这会生成 JVM 上的引擎类，不会生成新的 JVM 虚拟机实现。
+
+
+## 0.5.1 低内存托管
+
+托管与受保护入口默认启用低内存配置。MC 使用 768 MiB Java 堆和 SerialGC，工作 JVM 各使用 64 MiB 堆，外层控制器与低内存剧情桥各限定 96 MiB V8 堆；详细预算见 [受保护运行说明](./PROTECTED_RUNTIME.md)。这些上限不包含全部原生内存或模型内存。
+
+专用托管研究场使用平坦的引导世界，避免每次恢复都生成普通地形；实际战场仍在原生 `eff:phenomenon` 维度。托管视距为 2、模拟距离为 5，演出截图在结束和退出后释放。普通安装及用户自有世界不套用这组启动设置。
+
+开发者可在 Gradle 导出启动清单时使用 `-PeffLowMemory=false`，恢复 2 GiB 堆与普通引导世界；改变清单后需准备新的封存目录。完整 MC 是否通过，以新生成的原生验收回执为准。

@@ -64,11 +64,13 @@ public final class BridgeProcess implements AutoCloseable {
       throw new IOException("STORY_RUNTIME_MISSING");
     Files.createDirectories(saveDir);
     String node = System.getProperty("eff.node", "node");
+    List<String> command = new ArrayList<>();
+    command.add(node);
+    if (Boolean.getBoolean("eff.lowMemory")) command.add("--max-old-space-size=96");
+    command.add(runtime.resolve("bridge/server.cjs").toString());
+    command.add(saveDir.toAbsolutePath().toString());
     ProcessBuilder builder =
-        new ProcessBuilder(
-                node,
-                runtime.resolve("bridge/server.cjs").toString(),
-                saveDir.toAbsolutePath().toString())
+        new ProcessBuilder(command)
             .directory(runtime.toFile())
             .redirectError(
                 ProcessBuilder.Redirect.appendTo(saveDir.resolve("bridge.log").toFile()));

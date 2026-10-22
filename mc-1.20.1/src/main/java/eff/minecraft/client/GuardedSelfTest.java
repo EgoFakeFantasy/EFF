@@ -10,7 +10,7 @@ final class GuardedSelfTest {
   private static final boolean ALLOW_RULE_FALLBACK = Boolean.getBoolean("eff.guardedAllowFallback");
   private static final int GENERATION =
       Integer.parseInt(System.getenv().getOrDefault("EFF_RUNTIME_GUARD_GENERATION", "0"));
-  private static long since = System.nanoTime();
+  private static long since;
 
   private static JsonObject r() {
     return Jsons.o(EffClient.state, "research");
@@ -26,9 +26,10 @@ final class GuardedSelfTest {
   static void tick(Minecraft mc) {
     if (!Boolean.getBoolean("eff.guardedSelftest") || GENERATION == 0 || phase == 99) return;
     try {
-      if ((System.nanoTime() - since) / 1e9 > 160)
+      if (since != 0 && (System.nanoTime() - since) / 1e9 > 160)
         throw new IllegalStateException("GUARDED_NATIVE_TIMEOUT_" + phase + "_" + EffClient.error);
       if (!Jsons.b(Jsons.o(EffClient.state, "native"), "ready") || r().size() == 0) return;
+      if (since == 0) since = System.nanoTime();
       JsonObject f = Jsons.o(r(), "fields");
       boolean idle = !Jsons.b(EffClient.state, "researchBusy");
       if (GENERATION == 1) {

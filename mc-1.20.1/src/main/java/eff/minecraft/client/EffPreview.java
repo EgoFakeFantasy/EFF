@@ -5,6 +5,8 @@ import java.nio.file.*;
 import net.minecraft.client.*;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.tutorial.TutorialSteps;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.level.*;
 import net.minecraft.world.level.levelgen.*;
@@ -50,7 +52,7 @@ public final class EffPreview {
                       new GameRules(),
                       WorldDataConfiguration.DEFAULT),
                   new WorldOptions(271828, false, false),
-                  WorldPresets::createNormalWorldDimensions);
+                  EffPreview::previewDimensions);
         }
         phase = 1;
       } else if (phase == 1 && mc.player != null && mc.level != null) {
@@ -67,8 +69,11 @@ public final class EffPreview {
       } else if (phase == 2 && Jsons.b(Jsons.o(EffClient.state, "native"), "ready")) {
         EffClient.manualPause = true;
         EffClient.send(Jsons.obj("op", "pause", "paused", true));
-        if (Boolean.getBoolean("eff.guardedSelftest")
-            && Boolean.getBoolean("eff.guardedAllowFallback")) {
+        // Low-memory play starts without loading a model; the player can enable one explicitly.
+        // A model-required QA run keeps its existing requirement unless fallback was requested.
+        boolean guarded = Boolean.getBoolean("eff.guardedSelftest");
+        if (guarded && Boolean.getBoolean("eff.guardedAllowFallback")
+            || Boolean.getBoolean("eff.lowMemory") && !guarded) {
           wantsModel = false;
           phase = 4;
         } else {
@@ -119,6 +124,22 @@ public final class EffPreview {
       phase = 5;
       mc.setScreen(new EffScreen("menu"));
     }
+  }
+
+  private static WorldDimensions previewDimensions(RegistryAccess registries) {
+    // Only our disposable, managed research host needs this overworld. The battle still runs in
+    // eff:phenomenon; generating noise terrain and structures here adds no playable content.
+    boolean flat =
+        RuntimeLink.enabled()
+            && Boolean.getBoolean("eff.previewResearch")
+            && Boolean.getBoolean("eff.lowMemory");
+    System.out.println("[EFF_PREVIEW] worldPreset=" + (flat ? "flat" : "normal"));
+    return flat
+        ? registries
+            .registryOrThrow(Registries.WORLD_PRESET)
+            .getOrThrow(WorldPresets.FLAT)
+            .createWorldDimensions()
+        : WorldPresets.createNormalWorldDimensions(registries);
   }
 
   private EffPreview() {}
