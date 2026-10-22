@@ -1,6 +1,6 @@
 # 0.4：保护多 JVM 架构本身（Windows）
 
-推荐通过 `Start-Protected.cmd` 或 `start-protected.ps1` 启动。普通 Fabric 模组入口仍然是单 JVM；旧的 `start-managed.ps1` 是开发托管入口，没有本页的外层代码和日志保护。
+推荐通过 `Start-Protected.cmd` 或 `start-protected.ps1` 启动。0.5 的[有限代际引擎生成](./RECURSIVE_ENGINES.md)在此保护链内运行；后继类只在工作 JVM 内存中生成，静态封存清单不重新采样。普通 Fabric 模组入口仍然是单 JVM；旧的 `start-managed.ps1` 是开发托管入口，没有本页的外层代码和日志保护。
 
 ## 信任链和实现
 

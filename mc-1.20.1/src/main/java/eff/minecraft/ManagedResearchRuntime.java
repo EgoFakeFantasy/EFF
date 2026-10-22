@@ -27,7 +27,7 @@ public final class ManagedResearchRuntime implements ResearchSession {
     this.arena = arena;
     state = RuntimeLink.call(Jsons.obj("op", "snapshot"));
     instance = Jsons.s(state, "instance");
-    notes.add("多 JVM 托管：判定与执行位于独立进程；MC 可被整体替换。已提交的权限撤销会持续保留。");
+    notes.add("多 JVM 托管：判定与执行可生成后继引擎，在独立 JVM 验证后接续；MC 可整体替换。已提交的权限撤销会持续保留。");
   }
 
   private boolean alive() {

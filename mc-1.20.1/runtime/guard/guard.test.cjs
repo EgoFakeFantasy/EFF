@@ -15,13 +15,27 @@ test('native code locks, outer ledger and complete process-tree recovery',async 
  const originalPin=s.pin;
  const child=path.join(seal.payload,'fixture.cjs');
  fs.writeFileSync(child,`require('./protected-child.cjs');module.exports=require.cache[require.resolve('./protected-child.cjs')].exports;
-module.exports.onReady=async(c,g)=>{if(g===1)await c.transition({actor:'player',revision:0,source:'disable control.tether; disable event.possess; disable authority.recovery'});let rollbackDenied=false;try{await c.config.store.commit(c.durable.commit,{...c.durable,commit:c.durable.commit+1,state:{...c.durable.state,recovery:true}});}catch(e){rollbackDenied=e.message==='REVOCATION_ROLLBACK';}const snapshot=await c.snapshot();require('node:fs').writeFileSync(require('node:path').join(c.directory,'proof-'+g+'.json'),JSON.stringify({pid:process.pid,generation:g,snapshot,rollbackDenied}));};`);
+module.exports.onReady=async(c,g)=>{
+ if(g===1){await c.transition({actor:'player',revision:0,source:'disable control.tether; disable event.possess; disable authority.recovery'});for(let n=0;n<2;n++)await c.transition({actor:'player',revision:c.durable.state.revision,source:'rebuild runtime.execution'});}
+ let rollbackDenied=false;try{await c.config.store.commit(c.durable.commit,{...c.durable,commit:c.durable.commit+1,state:{...c.durable.state,recovery:true}});}catch(e){rollbackDenied=e.message==='REVOCATION_ROLLBACK';}
+ const lineageDenied={};
+ const forge=async(name,mutate)=>{const body=JSON.parse(JSON.stringify(c.durable));body.commit++;mutate(body);try{await c.config.store.commit(c.durable.commit,body);lineageDenied[name]=false;}catch(e){lineageDenied[name]=e.message.startsWith('ENGINE_LINEAGE_');}};
+ const successor=p=>{const d={schema:1,role:p.role,generation:p.generation+1,parent:p.id,ruleset:p.ruleset};d.id=require('node:crypto').createHash('sha256').update('eff-engine-v1\\n'+d.role+'\\n'+d.ruleset+'\\n'+d.generation+'\\n'+d.parent).digest('hex');return d;};
+ await forge('rollback',b=>b.engines.execution=b.engines.execution.slice(0,1));
+ await forge('jump',b=>{let a=b.engines.execution;a.push(successor(a.at(-1)));a.push(successor(a.at(-1)));});
+ await forge('changedId',b=>b.engines.execution.at(-1).id='f'.repeat(64));
+ await forge('removed',b=>delete b.engines);
+ await forge('ruleset',b=>b.engines.execution[0].ruleset='0'.repeat(64));
+ const snapshot=await c.snapshot();require('node:fs').writeFileSync(require('node:path').join(c.directory,'proof-'+g+'.json'),JSON.stringify({pid:process.pid,generation:g,snapshot,rollbackDenied,lineageDenied,engines:c.durable.engines}));};`);
  seal.child=child;seal.files.push({path:child,sha256:sha(child),size:fs.statSync(child).size});seal.trees[0].entries.push('fixture.cjs');fs.writeFileSync(s.manifest,JSON.stringify(seal));s.pin=sha(s.manifest);
  let p=run(s);const checks=[];t.after(async()=>{if(p.exitCode===null&&p.signalCode===null){p.kill();await stopped(p);}const resolved=fs.realpathSync(root),base=fs.realpathSync(os.tmpdir());if(path.dirname(resolved)!==base||!path.basename(resolved).startsWith('eff-native-guard-'))throw Error('UNSAFE_TEST_CLEANUP');fs.rmSync(resolved,{recursive:true,force:true});});
  const file=g=>path.join(seal.config.directory,'proof-'+g+'.json');
  const first=await until(()=>fs.existsSync(file(1))&&JSON.parse(fs.readFileSync(file(1),'utf8')));
  await t.test('two JVMs run under the supervised controller and commit revocation to the outer ledger',()=>{assert.equal(first.snapshot.fields['authority.recovery.active'],false);assert.ok(first.snapshot.runtime.policy.pid);assert.ok(first.snapshot.runtime.execution.pid);checks.push('outer-commit');});
  await t.test('the outer ledger independently refuses a controller proposal that restores revoked authority',()=>{assert.equal(first.rollbackDenied,true);checks.push('outer-revocation-fence');});
+ await t.test('recursive execution engines commit an append-only ancestry outside the replaceable controller',()=>{assert.equal(first.engines.execution.length,3);assert.equal(first.engines.execution[2].parent,first.engines.execution[1].id);assert.equal(first.engines.execution[1].parent,first.engines.execution[0].id);checks.push('outer-engine-ancestry');});
+ await t.test('the outer ledger rejects lineage rollback, skipped generations and removal',()=>{for(const name of ['rollback','jump','removed'])assert.equal(first.lineageDenied[name],true,name);checks.push('outer-lineage-rollback-jump-removed');});
+ await t.test('the outer ledger independently pins engine identifiers and the sealed worker ruleset',()=>{for(const name of ['changedId','ruleset'])assert.equal(first.lineageDenied[name],true,name);checks.push('outer-lineage-id-ruleset');});
  await t.test('a second guardian cannot take the same ledger or truncate it',()=>{
   const result=spawnSync(s.guard,[s.manifest,s.pin],{encoding:'utf8',windowsHide:true,timeout:20000});assert.equal(result.status,2);assert.ok(alive(first.pid));checks.push('single-outer-writer');
  });
@@ -32,7 +46,7 @@ module.exports.onReady=async(c,g)=>{if(g===1)await c.transition({actor:'player',
  });
  await t.test('killing the controller drains the old job before restarting with the same durable revocation',async()=>{
   process.kill(first.pid);const second=await until(()=>fs.existsSync(file(2))&&JSON.parse(fs.readFileSync(file(2),'utf8')));
-  assert.notEqual(second.pid,first.pid);assert.equal(second.snapshot.fields['authority.recovery.active'],false);
+  assert.notEqual(second.pid,first.pid);assert.equal(second.snapshot.fields['authority.recovery.active'],false);assert.deepEqual(second.engines,first.engines);
   assert.equal(alive(first.snapshot.runtime.policy.pid),false);assert.equal(alive(first.snapshot.runtime.execution.pid),false);
   const events=fs.readFileSync(path.join(seal.config.directory,'guard-events.jsonl'),'utf8');assert.match(events,/job-drained/);assert.match(events,/"active":0/);checks.push('controller-recovery-and-no-orphans');
  });

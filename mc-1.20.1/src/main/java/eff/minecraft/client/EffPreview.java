@@ -67,8 +67,14 @@ public final class EffPreview {
       } else if (phase == 2 && Jsons.b(Jsons.o(EffClient.state, "native"), "ready")) {
         EffClient.manualPause = true;
         EffClient.send(Jsons.obj("op", "pause", "paused", true));
-        EffClient.send(Jsons.obj("op", "modelStatus"));
-        phase = 3;
+        if (Boolean.getBoolean("eff.guardedSelftest")
+            && Boolean.getBoolean("eff.guardedAllowFallback")) {
+          wantsModel = false;
+          phase = 4;
+        } else {
+          EffClient.send(Jsons.obj("op", "modelStatus"));
+          phase = 3;
+        }
         requestedAt = System.nanoTime();
       } else if (phase == 3 && !Jsons.a(EffClient.state, "models").isEmpty()) {
         String model = "";

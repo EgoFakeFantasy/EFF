@@ -14,7 +14,7 @@ function provision(source,destination,guardBinary){
  function copy(source,name){const target=path.join(payload,name);fs.copyFileSync(source,target);pin(target);return target;}
  const guard=copy(guardBinary,'eff-guard.exe');
  const guardConfig=copy(path.join(__dirname,'guard/WindowsGuard.exe.config'),'eff-guard.exe.config');
- for(const name of ['controller.cjs','protected-child.cjs'])copy(path.join(__dirname,name),name);
+ for(const name of ['controller.cjs','protected-child.cjs','engine-lineage.cjs'])copy(path.join(__dirname,name),name);
  config.workerJar=copy(config.workerJar,'workers.jar');pin(process.execPath);
  const executables=new Set([config.java,...Object.values(config.javaByRole||{})]);if(config.host)executables.add(config.host.command);
  for(const executable of executables){pin(executable);if(path.basename(executable).toLowerCase()==='java.exe'){const root=path.resolve(executable,'..','..');for(const dir of ['bin','lib','conf'])for(const f of walk(path.join(root,dir)))pin(f);if(fs.existsSync(path.join(root,'release')))pin(path.join(root,'release'));}}
@@ -41,7 +41,7 @@ function provision(source,destination,guardBinary){
   if(!bundle)throw Error('STORY_BUNDLE_REQUIRED');const story=path.join(payload,'story');fs.mkdirSync(story);
   execFileSync(path.join(config.java,'..','jar.exe'),['xf',bundle],{cwd:story,windowsHide:true});
   for(const file of walk(story))pin(file);
-  h.env={...(h.env||{}),EFF_STORY_RUNTIME:story};args.push('-Deff.node='+process.execPath);
+  h.env={...(h.env||{}),EFF_STORY_RUNTIME:story};args.splice(cp,0,'-Deff.node='+process.execPath);
   const mods=path.join(h.cwd,'mods');fs.mkdirSync(mods);trees.push({root:mods,entries:[]});
  }
  // The payload tree itself is closed: an added helper, mod or package file is a deployment change.

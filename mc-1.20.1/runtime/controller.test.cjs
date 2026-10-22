@@ -1,6 +1,7 @@
 "use strict";
 const {test}=require("node:test"), assert=require("node:assert/strict"), fs=require("node:fs"), os=require("node:os"), path=require("node:path");
 const {Controller,cleanEnv,monotonic}=require("./controller.cjs");
+const Engines=require("./engine-lineage.cjs");
 const java=process.env.EFF_TEST_JAVA,workerJar=process.env.EFF_TEST_WORKERS;
 if(!java||!workerJar)throw Error("Run Gradle managedRuntimeTest to supply the actual Java worker jar");
 const {createHmac,randomUUID}=require("node:crypto");
@@ -14,6 +15,29 @@ test("independent JVMs, durable authority and fenced replacement",async t=>{
  await t.test("policy and execution run in distinct real processes",async()=>{
   assert.ok(c.workers.policy.child.pid>0);assert.notEqual(c.workers.policy.child.pid,c.workers.execution.child.pid);
   const s=await c.snapshot();assert.equal(s.fields["control.tether.active"],true);
+ });
+ await t.test("generated executable class is the active engine and its child can generate a grandchild",async()=>{
+  const proofs=[];for(let n=0;n<3;n++){const snap=await c.snapshot();proofs.push(snap.runtime.execution.engine);if(n<2)await execute("rebuild runtime.execution");}
+  assert.equal(new Set(proofs.map(x=>x.className)).size,3);assert.equal(new Set(proofs.map(x=>x.bytecodeSHA256)).size,3);assert.equal(new Set(proofs.map(x=>x.loaderId)).size,3);
+  for(let n=1;n<3;n++){assert.equal(proofs[n].descriptor.parent,proofs[n-1].descriptor.id);assert.equal(proofs[n].descriptor.generation,n);}
+  assert.ok(c.events.some(e=>e.type==="engine-generated"&&e.generation===2&&e.source==="parent"));
+ });
+ await t.test("the independent JVM rejects changed bytecode even when its supplied hash is recomputed",async()=>{
+  const parent=c.activeEngine("execution"),packet=await c.workers.execution.send({op:"generateEngine"});const bytes=Buffer.from(packet.artifact,"base64");bytes[bytes.length-1]^=1;packet.artifact=bytes.toString("base64");packet.bytecodeSHA256=Engines.hash(bytes);
+  await assert.rejects(c.workers.policy.send({op:"verifyEngine",parent,packet}),/ENGINE_ARTIFACT_MISMATCH/);
+ });
+ await t.test("wrong parent, arbitrary source fields, double boot and generation exhaustion fail closed",async()=>{
+  const parent=c.activeEngine("execution"),packet=await c.workers.execution.send({op:"generateEngine"});
+  await assert.rejects(c.workers.policy.send({op:"verifyEngine",parent:Engines.descriptor("execution",c.ruleset),packet}),/ENGINE_ANCESTRY_MISMATCH/);
+  await assert.rejects(c.workers.execution.send({op:"prepareEngine",descriptor:{...parent,source:"System.exit(0)"}}),/ENGINE_DESCRIPTOR_KEYS/);
+  await assert.rejects(c.workers.execution.send({op:"bootEngine",packet}),/ENGINE_ALREADY_BOOTED/);
+  const max=Engines.descriptor("execution",c.ruleset,16,"a".repeat(64));assert.throws(()=>Engines.successor(max),/ENGINE_GENERATION_BUDGET/);
+  const invalid={...max,generation:17};await assert.rejects(c.workers.execution.send({op:"prepareEngine",descriptor:invalid}),/ENGINE_GENERATION_BUDGET/);
+ });
+ await t.test("a candidate snapshot mismatch cannot activate a child or mutate the durable checkpoint",async()=>{
+  const before=JSON.stringify(c.durable),oldPid=c.workers.execution.child.pid,peer=c.workers.policy,send=peer.send.bind(peer);
+  peer.send=async body=>body.op==="snapshot"?{forged:true}:send(body);
+  try{await assert.rejects(execute("rebuild runtime.execution"),/ENGINE_SNAPSHOT_MISMATCH/);assert.equal(JSON.stringify(c.durable),before);assert.equal(c.workers.execution.child.pid,oldPid);}finally{peer.send=send;}
  });
  await t.test("whole-program parsing rejects injection before mutation",async()=>{
   const before=JSON.stringify(c.durable);await assert.rejects(execute("erase entity.avatar; java.lang.Runtime.halt(0)"),/PROGRAM_SYNTAX|UNKNOWN_INTERVENTION/);assert.equal(JSON.stringify(c.durable),before);
@@ -45,9 +69,10 @@ test("independent JVMs, durable authority and fenced replacement",async t=>{
   const body={op:"transition",state:c.durable.state,revision:c.durable.state.revision,source:"inspect instance.world",actor:"player",candidate:{state:{recovery:false}}};
   await assert.rejects(c.workers.policy.rpc(body),/POLICY_TRANSITION_MISMATCH/);
  });
+ c.workers.execution.failures=[];
  await t.test("a live but non-progressing worker is killed and replaced, then the transaction retries once",async()=>{
   const slot=c.workers.execution,old=slot.child.pid;slot.child.stdin.cork();
-  await execute("inspect instance.world");assert.notEqual(slot.child.pid,old);assert.ok(c.events.some(e=>e.type==="worker-replaced"&&e.reason==="WORKER_PROGRESS_TIMEOUT"));
+  await execute("inspect instance.world");assert.notEqual(c.workers.execution.child.pid,old);assert.ok(c.events.some(e=>e.type==="worker-replaced"&&e.reason==="WORKER_PROGRESS_TIMEOUT"));
  });
  await t.test("revocation is committed outside every replaceable JVM",async()=>{
   await execute("disable control.tether; disable event.possess; disable authority.recovery");assert.equal(c.durable.state.recovery,false);
@@ -83,8 +108,8 @@ test("independent JVMs, durable authority and fenced replacement",async t=>{
   response=await fetch(c.endpoint+"/v1/host",{...request,body:request.body.replace("snapshot","goodbye")});assert.equal((await response.json()).error,"INVALID_HOST_SIGNATURE");assert.equal(c.userStopped,undefined);
  });
  await t.test("a new controller process lifetime reloads durable revocation and sealed checkpoints",async()=>{
-  await execute("seal checkpoint.origin");const rev=c.durable.state.revision;await c.close();
-  c=new Controller({java,workerJar,directory});await c.start();assert.equal(c.durable.state.recovery,false);assert.equal(c.durable.state.revision,rev);assert.equal(c.durable.state.checkpoints["checkpoint.origin"],undefined);
+  await execute("seal checkpoint.origin");const rev=c.durable.state.revision;const lineage=JSON.stringify(c.durable.engines);await c.close();
+  c=new Controller({java,workerJar,directory});await c.start();assert.equal(JSON.stringify(c.durable.engines),lineage);assert.equal(c.durable.state.recovery,false);assert.equal(c.durable.state.revision,rev);assert.equal(c.durable.state.checkpoints["checkpoint.origin"],undefined);
  });
  await t.test("long sessions keep worker envelopes bounded without losing authority",async()=>{
   const source=Array(16).fill("inspect authority.recovery").join("; ");
@@ -128,4 +153,28 @@ test("independent JVMs, durable authority and fenced replacement",async t=>{
   await c.close();const file=path.join(directory,"committed.json"),original=fs.readFileSync(file,"utf8");fs.writeFileSync(file,original.replace('"recovery":false','"recovery":true'));
   c=new Controller({java,workerJar,directory});await assert.rejects(c.start(),/COMMITTED_STATE_CORRUPT/);
  });
+});
+
+
+test("engine handoff lifecycle fences",async t=>{
+ async function fixture(fn){const dir=fs.mkdtempSync(path.join(os.tmpdir(),"eff-engine-lifecycle-"));const c=new Controller({java,workerJar,directory:dir});await c.start();try{await fn(c);}finally{await c.close();fs.rmSync(dir,{recursive:true,force:true});}}
+ const alive=pid=>{try{process.kill(pid,0);return true;}catch{return false;}};
+ await t.test("concurrent starts wait for the complete engine boot handshake",()=>fixture(async c=>{
+  await c.workers.execution.close();const {WorkerSlot}=require("./controller.cjs"),slot=new WorkerSlot(c,"execution");c.workers.execution=slot;
+  const first=slot.start();const results=await Promise.all([first,slot.rpc({op:"snapshot",state:c.durable.state}),slot.rpc({op:"snapshot",state:c.durable.state})]);assert.equal(results[1].revision,c.durable.state.revision);assert.equal(results[2].revision,c.durable.state.revision);
+ }));
+ await t.test("postcommit retirement failure closes the controller with both child lineages committed",()=>fixture(async c=>{
+  const old=c.workers.execution,close=old.close.bind(old);let calls=0;old.close=async()=>{if(++calls===1)throw Error("INJECTED_RETIREMENT_FAILURE");return close();};
+  await assert.rejects(c.transition({source:"rebuild runtime.execution; rebuild runtime.policy",actor:"player",revision:c.durable.state.revision}),/ENGINE_RETIREMENT_FAILED/);
+  assert.equal(c.closed,true);assert.equal(c.durable.engines.policy.length,2);assert.equal(c.durable.engines.execution.length,2);assert.equal(old.child,null);
+ }));
+ await t.test("simultaneous death of both JVMs fails closed instead of leaving a healthy-pulsing stuck controller",()=>fixture(async c=>{
+  for(const slot of Object.values(c.workers))slot.child.kill();await wait(150);
+  await assert.rejects(c.snapshot(),/ENGINE_PEER_UNAVAILABLE/);assert.equal(c.closed,true);assert.equal(c.fatalError,"ENGINE_PEER_UNAVAILABLE");
+ }));
+ await t.test("closing during an outstanding commit drains candidates and never activates them afterward",()=>fixture(async c=>{
+  const original=c.persist.bind(c);let release,entered;const gate=new Promise(r=>release=r),ready=new Promise(r=>entered=r);let candidatePids=[];
+  c.persist=async(...args)=>{candidatePids=[...c.candidates].map(w=>w.child.pid);entered();await gate;return original(...args);};
+  const changing=c.transition({source:"rebuild runtime.execution",actor:"player",revision:c.durable.state.revision});await ready;await c.close();release();await assert.rejects(changing,/CONTROLLER_STOPPED/);assert.ok(candidatePids.every(pid=>!alive(pid)));assert.equal(c.candidates.size,0);
+ }));
 });

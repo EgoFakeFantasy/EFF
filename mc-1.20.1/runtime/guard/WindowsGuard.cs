@@ -32,12 +32,12 @@ public sealed class NativeJob : IDisposable {
  public void Dispose(){if(handle!=IntPtr.Zero){CloseHandle(handle);handle=IntPtr.Zero;}}
 }
 public sealed class Ledger : IDisposable {
- readonly FileStream file,keyLock,anchor;readonly byte[] key;readonly JavaScriptSerializer json;string previous="GENESIS";
+ readonly FileStream file,keyLock,anchor;readonly byte[] key;readonly JavaScriptSerializer json;readonly string ruleset;string previous="GENESIS";
  public Dictionary<string,object> Current;
  public static void Provision(string directory){Directory.CreateDirectory(directory);string k=Path.Combine(directory,"ledger-key.dpapi"),p=Path.Combine(directory,"ledger.bin");if(File.Exists(k)||File.Exists(p))throw new IOException("LEDGER_ALREADY_PROVISIONED");byte[] raw=new byte[32];using(var r=RandomNumberGenerator.Create())r.GetBytes(raw);File.WriteAllBytes(k,ProtectedData.Protect(raw,null,DataProtectionScope.CurrentUser));using(var f=new FileStream(p,FileMode.CreateNew,FileAccess.Write,FileShare.None)){f.Flush(true);}
  using(var f=new FileStream(Path.Combine(directory,"ledger-head.bin"),FileMode.CreateNew,FileAccess.Write,FileShare.None)){byte[] body=Encoding.UTF8.GetBytes("0:GENESIS");byte[] mac;using(var h=new HMACSHA256(raw))mac=h.ComputeHash(body);var w=new BinaryWriter(f);w.Write(body.Length);w.Write(body);w.Write(mac);w.Flush();f.Flush(true);}Array.Clear(raw,0,raw.Length);}
  static byte[] ReadAll(FileStream f){f.Position=0;var b=new byte[checked((int)f.Length)];int off=0;while(off<b.Length){int n=f.Read(b,off,b.Length-off);if(n==0)throw new IOException("TRUNCATED_FILE");off+=n;}return b;}
- public Ledger(string directory,JavaScriptSerializer serializer){json=serializer;keyLock=new FileStream(Path.Combine(directory,"ledger-key.dpapi"),FileMode.Open,FileAccess.Read,FileShare.Read);key=ProtectedData.Unprotect(ReadAll(keyLock),null,DataProtectionScope.CurrentUser);
+ public Ledger(string directory,JavaScriptSerializer serializer,string expectedRuleset){json=serializer;ruleset=expectedRuleset;keyLock=new FileStream(Path.Combine(directory,"ledger-key.dpapi"),FileMode.Open,FileAccess.Read,FileShare.Read);key=ProtectedData.Unprotect(ReadAll(keyLock),null,DataProtectionScope.CurrentUser);
   try{file=new FileStream(Path.Combine(directory,"ledger.bin"),FileMode.Open,FileAccess.ReadWrite,FileShare.Read);var reader=new BinaryReader(file,Encoding.UTF8,true);while(file.Position<file.Length){if(file.Length-file.Position<4)throw new IOException("LEDGER_TRUNCATED");int length=reader.ReadInt32();if(length<2||length>131072||file.Length-file.Position<length+32)throw new IOException("LEDGER_TRUNCATED");byte[] data=reader.ReadBytes(length),mac=reader.ReadBytes(32);if(!Equal(mac,Mac(data)))throw new IOException("LEDGER_AUTHENTICATION_FAILED");var entry=Map(json.DeserializeObject(Encoding.UTF8.GetString(data)));if(Convert.ToString(entry["previous"])!=previous)throw new IOException("LEDGER_CHAIN_BROKEN");var body=Map(entry["body"]);Validate(body);Current=body;previous=Hex(mac);}
  anchor=new FileStream(Path.Combine(directory,"ledger-head.bin"),FileMode.Open,FileAccess.ReadWrite,FileShare.Read);byte[] head=ReadAll(anchor);if(head.Length<36)throw new IOException("LEDGER_HEAD_CORRUPT");int headLength=BitConverter.ToInt32(head,0);if(headLength<1||headLength>128||head.Length!=headLength+36)throw new IOException("LEDGER_HEAD_CORRUPT");byte[] bodyHead=new byte[headLength],tag=new byte[32];Array.Copy(head,4,bodyHead,0,headLength);Array.Copy(head,4+headLength,tag,0,32);if(!Equal(tag,Mac(bodyHead)))throw new IOException("LEDGER_HEAD_AUTHENTICATION_FAILED");string[] parts=Encoding.UTF8.GetString(bodyHead).Split(':');long sequence=long.Parse(parts[0]);long current=Current==null?0:Convert.ToInt64(Current["commit"]);if(sequence>current||sequence==current&&parts[1]!=previous)throw new IOException("LEDGER_ROLLBACK_DETECTED");if(sequence<current)WriteHead();}
   catch{keyLock.Dispose();if(file!=null)file.Dispose();if(anchor!=null)anchor.Dispose();throw;}}
@@ -45,7 +45,33 @@ public sealed class Ledger : IDisposable {
  byte[] Mac(byte[] b){using(var h=new HMACSHA256(key))return h.ComputeHash(b);}
  static string Hex(byte[] b){return BitConverter.ToString(b).Replace("-","").ToLowerInvariant();}
  public static Dictionary<string,object> Map(object o){var v=o as Dictionary<string,object>;if(v==null)throw new IOException("INVALID_RECORD");return v;}
- void Validate(Dictionary<string,object> body){long expected=Current==null?1:Convert.ToInt64(Current["commit"])+1;if(Convert.ToInt32(body["schema"])!=1||Convert.ToInt64(body["commit"])!=expected)throw new IOException("LEDGER_REVISION_MISMATCH");var next=Map(body["state"]);if(Current!=null){var old=Map(Current["state"]);if(!Convert.ToBoolean(old["recovery"])&&Convert.ToBoolean(next["recovery"]))throw new IOException("REVOCATION_ROLLBACK");if(Convert.ToInt64(next["revision"])<Convert.ToInt64(old["revision"]))throw new IOException("STATE_ROLLBACK");if(Convert.ToString(old["outcome"])!="pending"&&Convert.ToString(old["outcome"])!=Convert.ToString(next["outcome"]))throw new IOException("ENDING_ROLLBACK");}}
+ static long EngineInteger(object value){if(!(value is int)&&!(value is long))throw new IOException("ENGINE_LINEAGE_INTEGER");return Convert.ToInt64(value);}
+ static string EngineText(Dictionary<string,object> d,string field){object value;if(!d.TryGetValue(field,out value)||!(value is string))throw new IOException("ENGINE_LINEAGE_FIELD");return (string)value;}
+ Dictionary<string,object> EngineMap(object value){var d=value as Dictionary<string,object>;if(d==null)throw new IOException("ENGINE_LINEAGE_RECORD");return d;}
+ object[] Chain(Dictionary<string,object> map,string role){object value;if(!map.TryGetValue(role,out value)||!(value is object[]))throw new IOException("ENGINE_LINEAGE_CHAIN");var chain=(object[])value;if(chain.Length<1||chain.Length>17)throw new IOException("ENGINE_LINEAGE_BUDGET");return chain;}
+ void ValidateEngines(Dictionary<string,object> body){
+  bool had=Current!=null&&Current.ContainsKey("engines"),has=body.ContainsKey("engines");
+  // Read legacy 0.4 records; adding a lineage is a one-time genesis migration.
+  if(!has){if(had)throw new IOException("ENGINE_LINEAGE_REMOVED");return;}
+  var next=EngineMap(body["engines"]);if(next.Count!=2||!next.ContainsKey("policy")||!next.ContainsKey("execution"))throw new IOException("ENGINE_LINEAGE_ROLES");
+  var old=had?EngineMap(Current["engines"]):null;
+  foreach(string role in new []{"policy","execution"}){
+   var chain=Chain(next,role);var prior=had?Chain(old,role):null;
+   if(!had&&chain.Length!=1)throw new IOException("ENGINE_LINEAGE_GENESIS");
+   if(had&&(chain.Length<prior.Length||chain.Length>prior.Length+1))throw new IOException("ENGINE_LINEAGE_ROLLBACK_OR_JUMP");
+   string parent="GENESIS";
+   for(int i=0;i<chain.Length;i++){
+    var d=EngineMap(chain[i]);if(d.Count!=6||!d.ContainsKey("schema")||!d.ContainsKey("generation")||EngineInteger(d["schema"])!=1||EngineInteger(d["generation"])!=i)throw new IOException("ENGINE_LINEAGE_DESCRIPTOR");
+    string r=EngineText(d,"role"),seed=EngineText(d,"ruleset"),p=EngineText(d,"parent"),id=EngineText(d,"id");
+    if(r!=role||seed!=ruleset||p!=parent)throw new IOException("ENGINE_LINEAGE_ANCESTRY");
+    string expected;using(var sha=SHA256.Create())expected=Hex(sha.ComputeHash(Encoding.UTF8.GetBytes("eff-engine-v1\n"+role+"\n"+ruleset+"\n"+i+"\n"+parent)));
+    if(id!=expected)throw new IOException("ENGINE_LINEAGE_ID");
+    if(had&&i<prior.Length&&EngineText(EngineMap(prior[i]),"id")!=id)throw new IOException("ENGINE_LINEAGE_PREFIX");
+    parent=id;
+   }
+  }
+ }
+ void Validate(Dictionary<string,object> body){long expected=Current==null?1:Convert.ToInt64(Current["commit"])+1;if(Convert.ToInt32(body["schema"])!=1||Convert.ToInt64(body["commit"])!=expected)throw new IOException("LEDGER_REVISION_MISMATCH");var next=Map(body["state"]);if(Current!=null){var old=Map(Current["state"]);if(!Convert.ToBoolean(old["recovery"])&&Convert.ToBoolean(next["recovery"]))throw new IOException("REVOCATION_ROLLBACK");if(Convert.ToInt64(next["revision"])<Convert.ToInt64(old["revision"]))throw new IOException("STATE_ROLLBACK");if(Convert.ToString(old["outcome"])!="pending"&&Convert.ToString(old["outcome"])!=Convert.ToString(next["outcome"]))throw new IOException("ENDING_ROLLBACK");}ValidateEngines(body);}
  public object Commit(long observed,Dictionary<string,object> body){if(observed!=(Current==null?0:Convert.ToInt64(Current["commit"])))throw new IOException("STALE_LEDGER_COMMIT");Validate(body);var entry=new Dictionary<string,object>{{"previous",previous},{"body",body}};byte[] data=Encoding.UTF8.GetBytes(json.Serialize(entry));if(data.Length>131072)throw new IOException("LEDGER_BUDGET");byte[] mac=Mac(data);long offset=file.Length;
   try{file.Position=offset;var w=new BinaryWriter(file,Encoding.UTF8,true);w.Write(data.Length);w.Write(data);w.Write(mac);w.Flush();file.Flush(true);}catch{try{file.SetLength(offset);file.Flush(true);}catch{}throw;}
   Current=body;previous=Hex(mac);WriteHead();return body;}
@@ -68,7 +94,8 @@ public static class Program {
   var manifestLock=new FileStream(args[0],FileMode.Open,FileAccess.Read,FileShare.Read);locks.Add(manifestLock);if(!String.Equals(Sha(manifestLock),args[1],StringComparison.OrdinalIgnoreCase))throw new IOException("SEAL_MISMATCH");if(manifestLock.Length>2097152)throw new IOException("SEAL_BUDGET");manifestLock.Position=0;string text;using(var r=new StreamReader(manifestLock,Encoding.UTF8,true,4096,true))text=r.ReadToEnd();var seal=M(Json.DeserializeObject(text));if(Convert.ToInt32(seal["schema"])!=1)throw new IOException("SEAL_SCHEMA");
   foreach(object item in (object[])seal["files"]){var f=M(item);string path=(string)f["path"];NoReparse(path);var held=new FileStream(LongPath(path),FileMode.Open,FileAccess.Read,FileShare.Read);locks.Add(held);if(held.Length!=Convert.ToInt64(f["size"]))throw new IOException("CODE_SIZE_MISMATCH");if(!String.Equals(Sha(held),(string)f["sha256"],StringComparison.OrdinalIgnoreCase))throw new IOException("CODE_HASH_MISMATCH");}
   CheckTrees(seal["trees"]);var config=M(seal["config"]);directory=(string)config["directory"];NoReparse(directory);Console.CancelKeyPress+=(s,e)=>{e.Cancel=true;stopping=true;};
-  using(var ledger=new Ledger(directory,Json)){
+  string ruleset=null;foreach(object item in (object[])seal["files"]){var f=M(item);if(String.Equals(Path.GetFullPath((string)f["path"]),Path.GetFullPath((string)config["workerJar"]),StringComparison.OrdinalIgnoreCase))ruleset=(string)f["sha256"];}if(ruleset==null)throw new IOException("WORKER_RULESET_NOT_SEALED");
+  using(var ledger=new Ledger(directory,Json,ruleset)){
    Event(directory,"guard-ready",new {pid=Process.GetCurrentProcess().Id,files=locks.Count});
    var failures=new Queue<long>();var clock=Stopwatch.StartNew();int generation=0,restarts=0;
    while(!stopping){CheckTrees(seal["trees"]);generation++;using(var job=new NativeJob()){
@@ -84,7 +111,7 @@ public static class Program {
        if(line.IsCompleted){string raw=line.Result;if(raw==null)break;if(raw.Length>262144)throw new IOException("GUARD_MESSAGE_BUDGET");var r=M(Json.DeserializeObject(raw));string op=Convert.ToString(r["op"]);object result=null;string error=null;
         if(op=="pulse"){last=clock.ElapsedMilliseconds;ready=true;}
         else if(op=="load")result=ledger.Current;
-        else if(op=="commit"){try{result=ledger.Commit(Convert.ToInt64(r["previous"]),M(r["body"]));}catch(IOException e){if(!(e.Message.StartsWith("STALE_")||e.Message.StartsWith("STATE_")||e.Message.StartsWith("ENDING_")||e.Message.StartsWith("REVOCATION_")||e.Message.StartsWith("LEDGER_REVISION")))throw;error=e.Message;}}
+        else if(op=="commit"){try{result=ledger.Commit(Convert.ToInt64(r["previous"]),M(r["body"]));}catch(IOException e){if(!(e.Message.StartsWith("STALE_")||e.Message.StartsWith("STATE_")||e.Message.StartsWith("ENDING_")||e.Message.StartsWith("REVOCATION_")||e.Message.StartsWith("LEDGER_REVISION")||e.Message.StartsWith("ENGINE_LINEAGE_")))throw;error=e.Message;}}
         else if(op=="verify"){CheckTrees(seal["trees"]);result=new {verified=true};}
         else if(op=="stopped"){graceful=true;break;}
         else throw new IOException("GUARD_OP_NOT_ALLOWED");

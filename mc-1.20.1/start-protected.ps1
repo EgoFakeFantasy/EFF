@@ -1,4 +1,4 @@
-param([string]$Directory,[switch]$Prepare,[switch]$Verify,[string]$Jdk)
+param([string]$Directory,[switch]$Prepare,[switch]$Verify,[string]$Jdk,[switch]$AllowRuleFallback)
 $ErrorActionPreference='Stop'
 if (-not $Directory) { $Directory=Join-Path $PSScriptRoot $(if($Verify){'run-protected-qa-'+(Get-Date -Format 'yyyyMMdd-HHmmss')}else{'run-protected'}) }
 $Directory=[IO.Path]::GetFullPath($Directory)
@@ -10,7 +10,7 @@ if ($Prepare -or $Verify) {
  if (-not $env:GRADLE_USER_HOME) { $env:GRADLE_USER_HOME=Join-Path $PSScriptRoot '.gradle-user-home' }
  $effBuildDir=$Directory+'-build'
  $effArgs=@('-p',$PSScriptRoot,'--no-daemon','--no-watch-fs','build','exportManagedLaunch',('-PeffManagedDir='+$effBuildDir))
- if ($Verify) { $effArgs+='-PeffGuardedTest' }
+ if ($Verify) { $effArgs+='-PeffGuardedTest'; if ($AllowRuleFallback) { $effArgs+='-PeffGuardedFallbackTest' } }
  & (Join-Path $PSScriptRoot 'gradlew.bat') @effArgs
  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
  $effConfig=Join-Path $effBuildDir 'private-launch.json'

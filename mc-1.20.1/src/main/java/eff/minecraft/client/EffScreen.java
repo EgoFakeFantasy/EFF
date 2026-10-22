@@ -207,7 +207,23 @@ public final class EffScreen extends Screen {
               .append(" / 已提交 ")
               .append(Jsons.i(rt, "commit"))
               .append(
-                  "\n跨进程：rebuild runtime.policy; rebuild runtime.execution; rebuild runtime.host");
+                  "\n"
+                      + "换代引擎：rebuild runtime.policy; rebuild runtime.execution；换宿主：rebuild"
+                      + " runtime.host");
+          for (String role : new String[] {"policy", "execution"}) {
+            JsonObject engine = Jsons.o(Jsons.o(rt, role), "engine");
+            if (engine.size() == 0) continue;
+            JsonObject descriptor = Jsons.o(engine, "descriptor");
+            String identity = Jsons.s(descriptor, "id"),
+                bytecode = Jsons.s(engine, "bytecodeSHA256");
+            text.append("\n")
+                .append(role.equals("policy") ? "判定引擎 G" : "执行引擎 G")
+                .append(Jsons.i(descriptor, "generation"))
+                .append(" · ")
+                .append(identity.substring(0, Math.min(12, identity.length())))
+                .append(" · 字节码 ")
+                .append(bytecode.substring(0, Math.min(12, bytecode.length())));
+          }
         }
         lines = font.split(Component.literal(text.toString()), w);
         textBottom = height - 138;

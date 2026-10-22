@@ -11,6 +11,7 @@ lines.on('line',async raw=>{
    const {Controller}=require('./controller.cjs');
    const store={load:()=>rpc('load'),commit:(previous,body)=>rpc('commit',{previous,body}),verify:()=>rpc('verify')};
    controller=new Controller({...message.config,protectedGeneration:message.generation,store});
+   controller.onFatal=()=>process.exit(2);
    const pulse=setInterval(()=>send({op:'pulse'}),1000);
    await controller.start();await module.exports.onReady?.(controller,message.generation);send({op:'pulse'});
    controller.onUserStop=async()=>{await controller.close();clearInterval(pulse);send({op:'stopped'});process.exitCode=0;lines.close();};

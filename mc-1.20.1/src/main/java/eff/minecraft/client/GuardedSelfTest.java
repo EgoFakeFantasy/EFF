@@ -7,6 +7,7 @@ import net.minecraft.client.Minecraft;
 
 final class GuardedSelfTest {
   private static int phase;
+  private static final boolean ALLOW_RULE_FALLBACK = Boolean.getBoolean("eff.guardedAllowFallback");
   private static final int GENERATION =
       Integer.parseInt(System.getenv().getOrDefault("EFF_RUNTIME_GUARD_GENERATION", "0"));
   private static long since = System.nanoTime();
@@ -32,15 +33,22 @@ final class GuardedSelfTest {
       boolean idle = !Jsons.b(EffClient.state, "researchBusy");
       if (GENERATION == 1) {
         if (phase == 0
-            && Jsons.b(Jsons.o(EffClient.state, "modelConfig"), "enabled")
+            && (ALLOW_RULE_FALLBACK || Jsons.b(Jsons.o(EffClient.state, "modelConfig"), "enabled"))
             && Jsons.b(f, "entity.avatar.alive")) send("erase entity.avatar");
         else if (phase == 1
             && idle
             && Jsons.b(f, "entity.avatar.alive")
-            && Jsons.s(Jsons.o(r(), "counter"), "source").equals("local-model")) {
-          proof(mc, "model-recovered");
+            && (Jsons.s(Jsons.o(r(), "counter"), "source").equals("local-model")
+                || ALLOW_RULE_FALLBACK
+                    && Jsons.s(Jsons.o(r(), "counter"), "source").equals("rule-template"))) {
+          proof(mc, "counter-recovered");
           send("disable control.tether; disable event.possess; disable authority.recovery");
         } else if (phase == 2 && idle && !Jsons.b(f, "authority.recovery.active")) {
+          send("rebuild runtime.execution");
+        } else if (phase == 3 && idle && engineGeneration() == 1) {
+          proof(mc, "first-generated-engine");
+          send("rebuild runtime.execution");
+        } else if (phase == 4 && idle && engineGeneration() == 2) {
           proof(mc, "ready-for-controller-death");
           phase = 99;
         }
@@ -49,7 +57,8 @@ final class GuardedSelfTest {
             && idle
             && !Jsons.b(f, "authority.recovery.active")
             && !Jsons.b(f, "control.tether.active")
-            && !Jsons.b(f, "event.possess.active")) {
+            && !Jsons.b(f, "event.possess.active")
+            && engineGeneration() == 2) {
           proof(mc, "outer-ledger-restored");
           send("erase entity.avatar; refuse ending.owned");
         } else if (phase == 1
@@ -69,6 +78,13 @@ final class GuardedSelfTest {
       phase = 99;
       mc.stop();
     }
+  }
+
+  private static int engineGeneration() {
+    return Jsons.i(
+        Jsons.o(Jsons.o(Jsons.o(r(), "runtime"), "execution"), "engine")
+            .getAsJsonObject("descriptor"),
+        "generation");
   }
 
   private static void proof(Minecraft mc, String name) throws Exception {
