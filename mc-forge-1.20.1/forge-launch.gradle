@@ -1,0 +1,32 @@
+tasks.register('exportManagedLaunch') {
+ dependsOn 'runtimeKernelJar','jar' // MixinGradle materializes the named refmap during JAR preparation.
+ dependsOn { def run=tasks.named('runClient').get(); run.taskDependencies.getDependencies(run) }
+ doLast {
+  def resolved = project.effResolveForgeRun(tasks.named('runClient').get())
+  def directory = project.hasProperty('effManagedDir') ? file(project.property('effManagedDir')) : file('run-managed')
+  directory.mkdirs()
+  def game = new File(directory,'mc-host'); game.mkdirs()
+  def args = new ArrayList<String>(resolved.vm)
+  def lowMemory = !project.hasProperty('effLowMemory') || project.property('effLowMemory').toString().toBoolean()
+  args.removeAll { it.startsWith('-Xms') || it.startsWith('-Xmx') }
+  if(lowMemory) {
+   args.removeAll { it in ['-XX:+UseG1GC','-XX:+UseParallelGC'] || it.startsWith('-XX:ReservedCodeCacheSize=') || it.startsWith('-XX:ActiveProcessorCount=') }
+   args += ['-Xms64m','-Xmx768m','-XX:+UseSerialGC','-XX:ReservedCodeCacheSize=64m','-XX:ActiveProcessorCount=2','-XX:MaxDirectMemorySize=128m']
+  } else args += ['-Xms128m','-Xmx2G']
+  args += ['-XX:+DisableAttachMechanism','-XX:+ExitOnOutOfMemoryError','-Deff.lowMemory='+lowMemory,'-Deff.preview=true','-Deff.previewResearch=true']
+  if(project.hasProperty('effManagedTest')) args += '-Deff.managedSelftest=true'
+  if(project.hasProperty('effGuardedTest')) args += '-Deff.guardedSelftest=true'
+  if(project.hasProperty('effGuardedFallbackTest')) args += '-Deff.guardedAllowFallback=true'
+  args += ['-cp',resolved.classpath,resolved.main]
+  args += resolved.args
+  def command = javaToolchains.launcherFor(java.toolchain).get().executablePath.asFile.absolutePath
+  def config = [java:command,workerJar:tasks.named('runtimeKernelJar').get().archiveFile.get().asFile.absolutePath,
+    directory:new File(directory,'authority').absolutePath,
+    host:[loader:'forge',command:command,args:args,cwd:game.absolutePath,env:resolved.env,useArgFile:true,
+      modRefmap:layout.buildDirectory.file('tmp/compileJava/eff-1201-refmap.json').get().asFile.absolutePath,
+      modManifest:[MixinConfigs:'eff.mixins.json,eff.client.mixins.json']]]
+  def target = new File(directory,'private-launch.json')
+  target.setText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(config)),'UTF-8')
+  logger.lifecycle('Managed Forge launch manifest: '+target)
+ }
+}

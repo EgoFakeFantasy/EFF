@@ -1,0 +1,57 @@
+name: Check Forge 1.20.1
+
+on:
+  pull_request:
+    paths:
+      - 'mc-forge-1.20.1/**'
+      - 'mc-1.20.1/**'
+      - 'mc-version/bridge/**'
+      - 'mc-version/tests/**'
+      - 'pixel-version/**'
+      - 'local-version/**'
+      - 'desktop/model-client.cjs'
+      - '.github/workflows/forge-1201-check.yml'
+  push:
+    paths:
+      - 'mc-forge-1.20.1/**'
+      - 'mc-1.20.1/**'
+      - 'mc-version/bridge/**'
+      - 'mc-version/tests/**'
+      - 'pixel-version/**'
+      - 'local-version/**'
+      - 'desktop/model-client.cjs'
+      - '.github/workflows/forge-1201-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        forge: ['47.4.20', '47.4.28']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build reobfuscated mod and run automated checks
+        shell: pwsh
+        run: ./mc-forge-1.20.1/gradlew.bat -p mc-forge-1.20.1 --no-daemon --max-workers=2 build "-Pforge_version=${{ matrix.forge }}"
+      - name: Inspect production distribution
+        shell: pwsh
+        run: node mc-forge-1.20.1/tests/distribution.test.cjs mc-forge-1.20.1/build/libs/eff-minecraft-forge-1.20.1-0.5.2+mc1.20.1-forge.jar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eff-forge-${{ matrix.forge }}
+          path: mc-forge-1.20.1/build/libs/eff-minecraft-forge-1.20.1-0.5.2+mc1.20.1-forge.jar
+          if-no-files-found: error

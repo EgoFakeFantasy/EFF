@@ -1,0 +1,10 @@
+.gradle/
+.gradle-user-home/
+build/
+/run/
+/run-*/
+*.iml
+private-launch.json
+sealed-runtime.json
+ledger*.bin
+ledger-key.dpapi

@@ -1,0 +1,9 @@
+// Inspect the final installable JAR, after Forge production reobfuscation.
+tasks.register('distributionTest', Exec) {
+ dependsOn 'reobfJar'
+ inputs.file tasks.named('jar').flatMap { it.archiveFile }
+ inputs.file 'tests/distribution.test.cjs'
+ environment 'JAVA_HOME', javaToolchains.launcherFor(java.toolchain).get().metadata.installationPath.asFile.absolutePath
+ commandLine 'node', file('tests/distribution.test.cjs').absolutePath, tasks.named('jar').get().archiveFile.get().asFile.absolutePath
+}
+check { dependsOn 'distributionTest' }

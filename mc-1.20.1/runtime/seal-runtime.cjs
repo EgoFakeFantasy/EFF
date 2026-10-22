@@ -22,12 +22,29 @@ function provision(source,destination,guardBinary){
  for(const executable of executables){pin(executable);if(path.basename(executable).toLowerCase()==='java.exe'){const root=path.resolve(executable,'..','..');for(const dir of ['bin','lib','conf'])for(const f of walk(path.join(root,dir)))pin(f);if(fs.existsSync(path.join(root,'release')))pin(path.join(root,'release'));}}
  if(config.host){
   const h=config.host;h.cwd=path.join(destination,'mc-host');fs.mkdirSync(h.cwd);const args=h.args;
+  if(h.loader&&h.loader!=='forge')throw Error('UNSUPPORTED_SEALED_LOADER');
   if(args.includes('-Deff.lowMemory=true'))fs.writeFileSync(path.join(h.cwd,'options.txt'),'renderDistance:2\nsimulationDistance:5\nparticles:2\nmipmapLevels:0\ngraphicsMode:0\nao:false\n');
   if(args.some(a=>/^(@|-javaagent:|-agentlib:|-agentpath:|-Xbootclasspath|--patch-module|-XX:(OnError|OnOutOfMemoryError)=|-XX:-DisableAttachMechanism)/i.test(a)))throw Error('UNAPPROVED_JVM_INJECTION');
   for(const key of Object.keys(h.env||{}))if(/^(JAVA|JDK_JAVA|_JAVA|NODE_|EFF_)/i.test(key))throw Error('UNAPPROVED_LAUNCH_ENV');
   const cp=args.indexOf('-cp');if(cp<0)throw Error('EXPECTED_EXPLICIT_CLASSPATH');
   const paths=args[cp+1].split(path.delimiter),dirs=paths.filter(p=>fs.statSync(p).isDirectory());
-  if(dirs.length){const joined=path.join(payload,'mc-mod.jar');const jar=path.join(config.java,'..','jar.exe');execFileSync(jar,[...jarMemory,'cf',joined,...dirs.flatMap(d=>['-C',d,'.'])],{windowsHide:true});pin(joined);args[cp+1]=[...paths.filter(p=>!dirs.includes(p)).map(dependency),joined].join(path.delimiter);}
+  let joined;
+  if(dirs.length){joined=path.join(payload,'mc-mod.jar');const jar=path.join(config.java,'..','jar.exe');
+   let manifestArgs=[],extraResources=[];
+   if(h.loader==='forge'){
+    if(!h.modManifest||Object.keys(h.modManifest).some(k=>k!=='MixinConfigs')||h.modManifest.MixinConfigs!=='eff.mixins.json,eff.client.mixins.json')throw Error('FORGE_MOD_MANIFEST');
+    const refmapName='eff-1201-refmap.json';
+    if(typeof h.modRefmap!=='string'||path.basename(h.modRefmap)!==refmapName||!fs.existsSync(h.modRefmap)||!fs.statSync(h.modRefmap).isFile())throw Error('FORGE_REFMAP_REQUIRED');
+    const refmap=JSON.parse(fs.readFileSync(h.modRefmap,'utf8'));
+    if(!refmap||typeof refmap!=='object'||Array.isArray(refmap)||!refmap.mappings||typeof refmap.mappings!=='object'||Array.isArray(refmap.mappings))throw Error('FORGE_REFMAP_INVALID');
+    const modResources=path.join(payload,'mod-resources');fs.mkdirSync(modResources);
+    const privateRefmap=path.join(modResources,refmapName);fs.copyFileSync(h.modRefmap,privateRefmap);pin(privateRefmap);
+    const existingRefmaps=dirs.map(d=>path.join(d,refmapName)).filter(f=>fs.existsSync(f));
+    if(existingRefmaps.length>1||existingRefmaps.some(f=>!fs.statSync(f).isFile()||sha(f)!==sha(privateRefmap)))throw Error('FORGE_REFMAP_CONFLICT');
+    if(!existingRefmaps.length)extraResources=['-C',modResources,refmapName];h.modRefmap=privateRefmap;
+    const manifest=path.join(payload,'mc-mod.mf');fs.writeFileSync(manifest,'Manifest-Version: 1.0\nMixinConfigs: '+h.modManifest.MixinConfigs+'\n\n');pin(manifest);manifestArgs=['--manifest',manifest];
+   }
+   execFileSync(jar,[...jarMemory,'--create','--file',joined,...manifestArgs,...dirs.flatMap(d=>['-C',d,'.']),...extraResources],{windowsHide:true});pin(joined);args[cp+1]=[...paths.filter(p=>!dirs.includes(p)).map(dependency),joined].join(path.delimiter);}
   if(!dirs.length)args[cp+1]=paths.map(dependency).join(path.delimiter);
   for(const f of args[cp+1].split(path.delimiter))pin(f);
   const dli=args.findIndex(a=>a.startsWith('-Dfabric.dli.config='));
@@ -38,6 +55,41 @@ function provision(source,destination,guardBinary){
     text=text.replace(f,target);
    }
    const fixed=path.join(payload,'launch.cfg');fs.writeFileSync(fixed,text);pin(fixed);args[dli]='-Dfabric.dli.config='+fixed;
+  }
+  if(h.loader==='forge'){
+   // Forge has executable dependencies outside -cp. Snapshot each one into the same closed payload.
+   const modules=args.indexOf('-p');
+   if(args.filter(a=>a==='-p').length!==1||args.filter(a=>a==='-cp').length!==1||args.some(a=>/^(--module-path(?:=|$)|--class-path(?:=|$)|-classpath$|--upgrade-module-path(?:=|$)|-DlegacyClassPath=)/.test(a)))throw Error('FORGE_AMBIGUOUS_CODE_PATH');
+   if(modules<0||!args[modules+1]||!joined)throw Error('FORGE_MODULE_PATH_REQUIRED');
+   args[modules+1]=args[modules+1].split(path.delimiter).map(dependency).join(path.delimiter);
+   const legacy=args.findIndex(a=>a.startsWith('-DlegacyClassPath.file='));
+   if(legacy<0)throw Error('FORGE_LEGACY_CLASSPATH_REQUIRED');
+   const legacySource=args[legacy].slice('-DlegacyClassPath.file='.length);
+   const legacyPaths=fs.readFileSync(legacySource,'utf8').split(/\r?\n/).filter(Boolean);
+   if(!legacyPaths.length||legacyPaths.some(f=>!fs.statSync(f).isFile()))throw Error('FORGE_LEGACY_CLASSPATH_FILE_ONLY');
+   const legacyTarget=path.join(payload,'forge-classpath.txt');fs.writeFileSync(legacyTarget,legacyPaths.map(dependency).join('\n'));pin(legacyTarget);
+   args[legacy]='-DlegacyClassPath.file='+legacyTarget;
+   const env=h.env||{},modRoots=(env.MOD_CLASSES||'').split(path.delimiter);
+   if(Object.keys(env).some(k=>!['MOD_CLASSES','MCP_MAPPINGS'].includes(k)))throw Error('FORGE_UNAPPROVED_ENV');
+   if(!modRoots.length||modRoots.some(entry=>!entry.startsWith('eff%%')||!dirs.some(d=>path.resolve(d).toLowerCase()===path.resolve(entry.slice(5)).toLowerCase())))throw Error('FORGE_MOD_ROOTS_REQUIRED');
+   if(typeof env.MCP_MAPPINGS!=='string'||!env.MCP_MAPPINGS)throw Error('FORGE_MAPPINGS_REQUIRED');
+   // Current ForgeGradle uses a mapping identifier; older exports may supply a mapping file.
+   const mappingId=env.MCP_MAPPINGS==='official_1.20.1';
+   if(!mappingId&&(!fs.existsSync(env.MCP_MAPPINGS)||!fs.statSync(env.MCP_MAPPINGS).isFile()))throw Error('FORGE_MAPPINGS_REQUIRED');
+   h.env={...env,MOD_CLASSES:'eff%%'+joined,MCP_MAPPINGS:mappingId?env.MCP_MAPPINGS:copy(env.MCP_MAPPINGS,'forge-mappings.tsrg')};
+   // Refmap remapping and logging configuration are code inputs, not writable game configuration.
+   for(let i=0;i<args.length;i++)for(const key of ['mixin.env.refMapRemappingFile','net.minecraftforge.gradle.GradleStart.srg.srg-mcp','log4j.configurationFile']){
+    const prefix='-D'+key+'=';if(args[i].startsWith(prefix)){const source=args[i].slice(prefix.length);if(!fs.statSync(source).isFile())throw Error('FORGE_INPUT_FILE_REQUIRED');args[i]=prefix+dependency(source);}
+   }
+   const nativeCopies=new Map();
+   for(let i=0;i<args.length;i++)for(const key of ['java.library.path','org.lwjgl.librarypath']){
+    const prefix='-D'+key+'=';if(!args[i].startsWith(prefix))continue;
+    args[i]=prefix+args[i].slice(prefix.length).split(path.delimiter).map(source=>{
+     source=path.resolve(source);const canonical=source.toLowerCase();if(nativeCopies.has(canonical))return nativeCopies.get(canonical);
+     if(!fs.statSync(source).isDirectory())throw Error('FORGE_NATIVE_DIRECTORY_REQUIRED');const target=path.join(payload,'natives-'+nativeCopies.size);fs.mkdirSync(target);nativeCopies.set(canonical,target);
+     for(const f of walk(source)){const to=path.join(target,path.relative(source,f));fs.mkdirSync(path.dirname(to),{recursive:true});fs.copyFileSync(f,to);pin(to);}return target;
+    }).join(path.delimiter);
+   }
   }
   // The bridge is extracted before play and locked, not rewritten in the writable MC config tree.
   const bundle=dirs.map(d=>path.join(d,'eff-story-runtime.zip')).find(f=>fs.existsSync(f));

@@ -1,0 +1,4 @@
+#!/bin/sh
+EFF_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+if [ -n "$JAVA_HOME" ]; then EFF_JAVA="$JAVA_HOME/bin/java"; else EFF_JAVA=java; fi
+exec "$EFF_JAVA" -Xms16m -Xmx64m -XX:+UseSerialGC -XX:ActiveProcessorCount=2 -classpath "$EFF_DIR/gradle/wrapper/gradle-wrapper.jar" org.gradle.wrapper.GradleWrapperMain "$@"

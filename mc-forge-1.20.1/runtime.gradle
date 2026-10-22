@@ -1,0 +1,72 @@
+def shared=file('../mc-1.20.1')
+def runtime=new File(shared,'runtime')
+tasks.register('storyBundle', Zip) {
+ archiveFileName='eff-story-runtime.zip'
+ destinationDirectory=layout.buildDirectory.dir('generated/story')
+ preserveFileTimestamps=false; reproducibleFileOrder=true
+ from('../mc-version/bridge') { into 'bridge'; include '*.cjs' }
+ from('../pixel-version') { into 'pixel-version'; include '*.js','index.html' }
+ from('../local-version') { into 'local-version'; include '*.js' }
+ from('../desktop') { into 'desktop'; include 'model-client.cjs' }
+}
+processResources { dependsOn 'storyBundle'; from(tasks.named('storyBundle').map { it.archiveFile }) }
+sourceSets {
+ researchCheck {
+  java.srcDirs=['../mc-1.20.1/src/researchCheck/java']
+  compileClasspath+=sourceSets.main.output
+  runtimeClasspath+=sourceSets.main.output
+ }
+ runtimeKernel {
+  java.srcDirs=['../mc-1.20.1/src/runtime/java','../mc-1.20.1/src/main/java']
+  java.include 'eff/runtime/**','eff/minecraft/ResearchProgram.java','eff/minecraft/Jsons.java'
+ }
+}
+dependencies { runtimeKernelImplementation 'com.google.code.gson:gson:2.10' }
+tasks.register('runtimeKernelJar', Jar) {
+ dependsOn runtimeKernelClasses
+ archiveFileName='eff-runtime-workers.jar'
+ destinationDirectory=layout.buildDirectory.dir('runtime')
+ duplicatesStrategy=DuplicatesStrategy.EXCLUDE
+ from sourceSets.runtimeKernel.output
+ from(new File(runtime,'GSON-LICENSE.txt')) { into 'META-INF/licenses/gson' }
+ from { configurations.runtimeKernelRuntimeClasspath.collect { it.isDirectory()?it:zipTree(it) } }
+ exclude 'META-INF/*.SF','META-INF/*.RSA','META-INF/*.DSA'
+ preserveFileTimestamps=false; reproducibleFileOrder=true
+}
+tasks.register('bridgeTest', Exec) {
+ workingDir file('../mc-version')
+ commandLine 'node','--test','tests/bridge.test.cjs','tests/research.test.cjs'
+}
+tasks.register('researchJavaTest', JavaExec) {
+ dependsOn researchCheckClasses
+ classpath=sourceSets.researchCheck.runtimeClasspath
+ mainClass='eff.minecraft.ResearchProgramCheck'
+ maxHeapSize='64m'; jvmArgs '-XX:+UseSerialGC','-XX:ActiveProcessorCount=2'
+}
+tasks.register('managedRuntimeTest', Exec) {
+ dependsOn runtimeKernelJar
+ environment 'EFF_TEST_JAVA',javaToolchains.launcherFor(java.toolchain).get().executablePath.asFile.absolutePath
+ environment 'EFF_TEST_WORKERS',tasks.named('runtimeKernelJar').get().archiveFile.get().asFile.absolutePath
+ commandLine 'node','--test',new File(runtime,'controller.test.cjs').absolutePath
+}
+check { dependsOn 'bridgeTest','researchJavaTest','managedRuntimeTest' }
+if(System.getProperty('os.name').toLowerCase().contains('windows')) {
+ tasks.register('guardianBuild',Exec) {
+  def exe=layout.buildDirectory.file('guard/eff-guard.exe')
+  inputs.files(new File(runtime,'guard/WindowsGuard.cs'),new File(runtime,'guard/WindowsGuard.exe.config'))
+  outputs.file(exe); outputs.file(layout.buildDirectory.file('guard/eff-guard.exe.config'))
+  doFirst { exe.get().asFile.parentFile.mkdirs() }
+  commandLine new File(System.getenv('SystemRoot'),'Microsoft.NET/Framework64/v4.0.30319/csc.exe').absolutePath,
+    '/nologo','/platform:x64','/target:exe','/r:System.Web.Extensions.dll','/r:System.Security.dll',
+    '/out:'+exe.get().asFile.absolutePath,new File(runtime,'guard/WindowsGuard.cs').absolutePath
+  doLast { copy { from new File(runtime,'guard/WindowsGuard.exe.config'); into exe.get().asFile.parentFile; rename { 'eff-guard.exe.config' } } }
+ }
+ tasks.register('guardianTest',Exec) {
+  dependsOn guardianBuild,runtimeKernelJar
+  environment 'EFF_TEST_JAVA',javaToolchains.launcherFor(java.toolchain).get().executablePath.asFile.absolutePath
+  environment 'EFF_TEST_WORKERS',tasks.named('runtimeKernelJar').get().archiveFile.get().asFile.absolutePath
+  environment 'EFF_TEST_GUARD',layout.buildDirectory.file('guard/eff-guard.exe').get().asFile.absolutePath
+  commandLine 'node','--test',new File(runtime,'guard/guard.test.cjs').absolutePath
+ }
+ check { dependsOn 'guardianTest' }
+}

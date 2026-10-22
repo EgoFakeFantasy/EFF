@@ -1,0 +1,21 @@
+modLoader="javafml"
+loaderVersion="[47,48)"
+license="All Rights Reserved"
+[[mods]]
+modId="eff"
+version="${version}"
+displayName="EFF — 无中归来 · Forge"
+authors="EgoFakeFantasy"
+description='''EFF story, native phenomenon combat and protected recursive JVM runtime.'''
+[[dependencies.eff]]
+modId="forge"
+mandatory=true
+versionRange="[47.4.20,48)"
+ordering="NONE"
+side="BOTH"
+[[dependencies.eff]]
+modId="minecraft"
+mandatory=true
+versionRange="[1.20.1]"
+ordering="NONE"
+side="BOTH"

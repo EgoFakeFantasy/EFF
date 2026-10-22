@@ -1,0 +1,100 @@
+import net.minecraftforge.gradle.common.util.runs.RunConfigGenerator
+import java.util.stream.Collectors
+buildscript {
+ repositories { maven { url='https://maven.minecraftforge.net/' }; mavenCentral() }
+ dependencies { classpath 'org.spongepowered:mixingradle:0.7.38' }
+}
+plugins {
+ id 'net.minecraftforge.gradle' version '6.0.54'
+}
+apply plugin: 'org.spongepowered.mixin'
+version='0.5.2+mc1.20.1-forge'
+group='eff.minecraft'
+base { archivesName='eff-minecraft-forge-1.20.1' }
+java { toolchain.languageVersion=JavaLanguageVersion.of(17); withSourcesJar() }
+repositories { mavenCentral() }
+dependencies {
+ minecraft "net.minecraftforge:forge:1.20.1-${forge_version}"
+ annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+}
+minecraft {
+ mappings channel:'official', version:'1.20.1'
+ copyIdeResources=true
+ runs {
+  configureEach {
+   workingDirectory project.hasProperty('effRunDir') ? file(project.property('effRunDir')) : file('run')
+   property 'forge.logging.console.level','info'
+   mods { eff { source sourceSets.main } }
+  }
+  client {
+   args '--username','EFF_Traveler','--width','1280','--height','720'
+   if(project.hasProperty('effPreview')) property 'eff.preview','true'
+   if(project.hasProperty('effResearchpreview')) { property 'eff.preview','true'; property 'eff.previewResearch','true' }
+   if(project.hasProperty('effSelftest')) property 'eff.selftest','true'
+   if(project.hasProperty('effResearchtest')) property 'eff.researchSelftest','true'
+   if(project.hasProperty('effKeepPreview')) property 'eff.keepPreview','true'
+   if(!project.hasProperty('effLowMemory') || project.property('effLowMemory').toString().toBoolean()) {
+    property 'eff.lowMemory','true'
+    jvmArgs '-Xms64m','-Xmx768m','-XX:+UseSerialGC','-XX:ReservedCodeCacheSize=64m','-XX:ActiveProcessorCount=2','-XX:MaxDirectMemorySize=128m'
+   }
+  }
+  server { args '--nogui' }
+ }
+}
+def common=file('../mc-1.20.1/src/main/java').absolutePath
+def adapters=['eff/minecraft/EffMod.java','eff/minecraft/EffPackets.java','eff/minecraft/EffServer.java','eff/minecraft/BridgeProcess.java','eff/minecraft/client/EffClient.java','eff/minecraft/client/NativeTheatre.java']
+sourceSets.main {
+ java.setSrcDirs(['src/main/java','../mc-1.20.1/src/main/java'])
+ java.exclude { e -> e.file.absolutePath.startsWith(common+File.separator) && adapters.contains(e.relativePath.pathString) }
+ resources.setSrcDirs(['src/main/resources','../mc-1.20.1/src/main/resources'])
+ resources.exclude 'fabric.mod.json'
+}
+tasks.withType(JavaCompile).configureEach { options.encoding='UTF-8'; options.release=17 }
+tasks.withType(Jar).configureEach { preserveFileTimestamps=false; reproducibleFileOrder=true }
+processResources { inputs.property('version',project.version); filesMatching('META-INF/mods.toml') { expand version:project.version } }
+jar { manifest { attributes 'MixinConfigs':'eff.mixins.json,eff.client.mixins.json' }; finalizedBy 'reobfJar' }
+
+mixin {
+ add sourceSets.main, 'eff-1201-refmap.json'
+ config 'eff.mixins.json'
+ config 'eff.client.mixins.json'
+}
+// Share gameplay and workers; only loader bindings differ from the Fabric edition.
+apply from: 'runtime.gradle'
+
+// Resolve exactly the same fixed configuration as ForgeGradle's run task.
+abstract class EffForgeRunExport extends RunConfigGenerator {
+ static Map resolve(Project project, def run) {
+  def config=run.runConfig.get()
+  def tokens=configureTokensLazy(project,config,mapModClassesToGradle(project,config),run.minecraftArtifacts,run.runtimeClasspathArtifacts)
+  def vm=config.jvmArgs.collect { config.replace(tokens,it) }
+  if(config.isClient()) vm+=run.additionalClientArgs.get().collect { config.replace(tokens,it) }
+  config.properties.each { k,v -> vm+='-D'+k+'='+config.replace(tokens,v) }
+  def env=config.environment.collectEntries { k,v -> [(k):config.replace(tokens,v)] }
+  def cp=project.files(config.allSources.collect { it.runtimeClasspath }).asPath
+  def args=getArgsStream(config,tokens,false).collect(Collectors.toList())
+  return [vm:vm,env:env,classpath:cp,main:run.mainClass.get(),args:args]
+ }
+}
+ext.effResolveForgeRun={ run -> EffForgeRunExport.resolve(project,run) }
+
+apply from: 'forge-launch.gradle'
+
+def nativeQaStartedAt=0L
+tasks.matching { it.name=='runClient' }.configureEach {
+ doFirst { nativeQaStartedAt=System.currentTimeMillis() }
+ doLast {
+  def research=project.hasProperty('effResearchtest')
+  if(research || project.hasProperty('effSelftest')) {
+   def runPath=project.hasProperty('effRunDir') ? file(project.property('effRunDir')) : file('run')
+   def receipt=new File(runPath,research?'eff-research-qa/result.json':'eff-qa/result.json')
+   if(!receipt.isFile() || receipt.lastModified()<nativeQaStartedAt) throw new GradleException('No fresh native QA result: '+receipt)
+   def result=new groovy.json.JsonSlurper().parse(receipt,'UTF-8')
+   if(result.ok!=true) throw new GradleException('Native QA failed: '+result.error)
+   logger.lifecycle('Native QA passed: '+result.checks.size()+' checks')
+  }
+ }
+}
+
+apply from: 'verification.gradle'
+apply from: 'forge-seal-test.gradle'

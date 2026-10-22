@@ -1,0 +1,11 @@
+// Exercise the protected Forge dependency snapshot without starting Minecraft.
+if(System.getProperty('os.name').toLowerCase().contains('windows')) {
+ tasks.register('forgeSealTest',Exec) {
+  dependsOn 'guardianBuild','runtimeKernelJar'
+  environment 'EFF_TEST_JAVA',javaToolchains.launcherFor(java.toolchain).get().executablePath.asFile.absolutePath
+  environment 'EFF_TEST_WORKERS',tasks.named('runtimeKernelJar').get().archiveFile.get().asFile.absolutePath
+  environment 'EFF_TEST_GUARD',layout.buildDirectory.file('guard/eff-guard.exe').get().asFile.absolutePath
+  commandLine 'node','--test','runtime/seal-forge.test.cjs'
+ }
+ check { dependsOn 'forgeSealTest' }
+}
