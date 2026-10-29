@@ -27,10 +27,41 @@ document.getElementById('enableModel').addEventListener('click',async()=>{
 });
 document.getElementById('stopModel').addEventListener('click',async()=>{modelOperation++;await native.modelConfigure({enabled:false,model:''});feedback('本游戏的两侧模型请求已停止；你自己的 Ollama 服务继续由你管理。');});
 document.getElementById('quitGame').addEventListener('click',()=>native.quit());
-const c=document.getElementById('homeArt').getContext('2d');c.imageSmoothingEnabled=false;
-c.fillStyle='#0c1728';c.fillRect(0,0,640,176);
-for(let i=0;i<110;i++){const x=(i*73+17)%640,y=(i*37+9)%160;c.fillStyle=i%4?'#1a2a3c':'#3d5263';c.fillRect(x,y,1,2);}
-for(let r=39;r>0;r--){const shade=r>30?'#392233':r>22?'#6b343e':'#b55251';c.fillStyle=shade;for(let y=-r;y<=r;y++){const w=Math.floor(Math.sqrt(r*r-y*y));c.fillRect(499-w,45+y,w*2,1);}}
-for(let y=0;y<176;y+=16){for(let x=367;x<448;x+=16){c.fillStyle=(x+y)%32?'#172435':'#213146';c.fillRect(x,y,15,15);c.fillStyle='#3a485b';c.fillRect(x+2,y+1,10,1);}c.fillStyle='#0b121f';c.fillRect(390,y+5,14,5);}
-for(let y=94;y<176;y+=13){c.fillStyle='#172536';c.fillRect(295-(y-94),y,126,4);c.fillStyle='#3a4e60';c.fillRect(304-(y-94),y,80,1);}
-c.fillStyle='#080e18';c.fillRect(0,165,640,11);c.fillStyle='#8c9c9f';c.fillRect(453,127,6,6);c.fillStyle='#526984';c.fillRect(452,133,8,13);c.fillStyle='#243349';c.fillRect(452,145,3,7);c.fillRect(457,145,3,7);
+// Home illustration: the rain tower beneath the red moon, drawn on a 2× backing so
+// edges have half-pixel detail. It animates only rain, stars and the moon's glow.
+(()=>{
+ const canvas=document.getElementById('homeArt'),c=canvas.getContext('2d'),R=2;canvas.width=640*R;canvas.height=176*R;
+ const still=matchMedia('(prefers-reduced-motion: reduce)').matches,hash=(a,b)=>{const v=Math.sin(a*127.1+b*311.7)*43758.5453;return v-Math.floor(v);};
+ const px=(x,y,w,h,col)=>{c.fillStyle=col;c.fillRect(x,y,w,h);};
+ const disc=(cx,cy,r,col)=>{c.fillStyle=col;c.beginPath();c.arc(cx,cy,r,0,Math.PI*2);c.fill();};
+ function frame(now){
+  const t=still?0:now/1000;c.setTransform(R,0,0,R,0,0);c.imageSmoothingEnabled=false;
+  const sky=c.createLinearGradient(0,0,0,176);sky.addColorStop(0,'#0c1728');sky.addColorStop(.6,'#0a1525');sky.addColorStop(1,'#121a2a');c.fillStyle=sky;c.fillRect(0,0,640,176);
+  for(let i=0;i<140;i++){const x=Math.floor(hash(i,1)*640),y=Math.floor(hash(i,2)*150),tw=still?1:.55+.45*Math.sin(t*(1+hash(i,3)*2)+i);c.globalAlpha=tw*(i%5?.6:1);px(x,y,i%7?.5:1,i%7?.5:1,i%5?'#5d7790':'#d6deea');}
+  c.globalAlpha=1;
+  // Red moon: halo, body, terminator shading and craters.
+  const glow=still?.5:.45+.08*Math.sin(t*.7),halo=c.createRadialGradient(499,45,30,499,45,95);halo.addColorStop(0,`rgba(181,82,81,${glow*.45})`);halo.addColorStop(1,'rgba(181,82,81,0)');c.fillStyle=halo;c.fillRect(380,0,240,150);
+  disc(499,45,39,'#6b343e');disc(503,42,35,'#a24749');disc(507,39,28,'#c05b55');disc(511,34,15,'#d4766a');
+  for(const [x,y,r] of [[488,58,6],[516,52,4],[493,31,3.5],[522,28,2.5],[478,42,3]]){disc(x,y,r,'#8a3a40');disc(x+.5,y+.5,r-1,'#b5524f');}
+  c.save();c.beginPath();c.arc(499,45,39,0,Math.PI*2);c.clip();disc(475,57,40,'rgba(33,14,30,.42)');c.restore();
+  // Distant ruined blocks.
+  for(let i=0;i<9;i++){const x=i*72-10,h=30+hash(i,8)*44;px(x,176-h,52,h,'#0f1a29');for(let wy=176-h+6;wy<170;wy+=9)for(let wx=x+5;wx<x+48;wx+=8)if(hash(wx,wy)>.82)px(wx,wy,2.5,3,'#3b4651');}
+  // The tower: bricks with mortar, lit edge and a few windows.
+  px(364,0,87,176,'#121d2c');
+  for(let y=0;y<176;y+=8){const o=(y/8)%2?8:0;for(let x=367-o;x<448;x+=16){const sx=Math.max(367,x),w=Math.min(448,x+15.5)-sx;if(w<=0)continue;px(sx,y,w,7.5,hash(x,y)>.5?'#1a2738':'#1e2c3f');px(sx,y,w,.5,'#2f3e52');}}
+  px(447,0,1.5,176,'#4a5b6e');px(364,0,1,176,'#0a111c');
+  for(let y=5;y<176;y+=16){px(390,y,14,5,'#0b121f');px(390,y,14,.5,'#05080f');const lit=still?hash(y,9)>.6:hash(y,Math.floor(t*.25))>.75;if(lit){px(391,y+1,12,3.5,'#d7a35d');px(391,y+1,12,1,'#f0c886');}}
+  // Stair spiralling down from the tower.
+  for(let y=94;y<176;y+=13){const x=295-(y-94);px(x,y,126,4,'#172536');px(x+9,y,80,1,'#3a4e60');px(x,y+4,126,1.5,'#0b1320');for(let k=0;k<126;k+=14)px(x+k,y+.5,.5,3,'#24364a');}
+  px(0,165,640,11,'#080e18');px(0,165,640,.5,'#1d2a38');
+  // The returner on the stair, coat moving slightly in the wind.
+  const sway=still?0:Math.sin(t*1.6)*.5;
+  px(452.5,126,7,7,'#c9b9a4');px(452,125,8,3,'#1c2230');px(452,128,2,3,'#1c2230');px(458,129,1,1,'#2b2a35');
+  px(451.5,133,9,13,'#3c5272');px(451.5,133,9,1,'#5c7397');px(460+sway,138,1.5,8,'#2c3d58');px(455.5,134,1,11,'#2c3d58');
+  px(452,146,3,7,'#1e2a3c');px(457,146,3,7,'#1e2a3c');px(451.5,152.5,4,1.5,'#0b0f17');px(456.5,152.5,4,1.5,'#0b0f17');
+  // Rain, slanted, lit where it crosses the moon.
+  for(let i=0;i<120;i++){const x=(hash(i,4)*700+t*40)%700-30,y=(hash(i,5)*200+t*(170+hash(i,6)*60))%200-12,near=Math.hypot(x-499,y-45)<45;c.strokeStyle=near?'rgba(236,170,160,.55)':'rgba(120,150,180,.28)';c.lineWidth=.5;c.beginPath();c.moveTo(x,y);c.lineTo(x-2,y+7);c.stroke();}
+  if(!still)requestAnimationFrame(frame);
+ }
+ requestAnimationFrame(frame);
+})();

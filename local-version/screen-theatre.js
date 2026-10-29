@@ -58,11 +58,12 @@ const ScreenTheatre={dom:null,session:null,focused:true,serial:0,seen:new Set(),
   const seams=ring.map(([x,y],i)=>[center[0]+(x-center[0])*.42+(i%2?2:-2),center[1]+(y-center[1])*.42+(i%3-1)*3]);
   this.fracture={center,ring,seams};this.dom.world.replaceChildren();
   return ring.map((point,i)=>{
-   const next=(i+1)%ring.length,pane=document.createElement('div');pane.className='theatre-pane';
-   pane.style.clipPath='polygon('+[center,seams[i],point,ring[next],seams[next]].map(v=>v[0]+'% '+v[1]+'%').join(',')+')';
+   // The shard is clipped on an inner layer so the outer pane's drop-shadow can light its broken edge.
+   const next=(i+1)%ring.length,pane=document.createElement('div'),shard=document.createElement('div');pane.className='theatre-pane';shard.className='theatre-shard';
+   shard.style.clipPath='polygon('+[center,seams[i],point,ring[next],seams[next]].map(v=>v[0]+'% '+v[1]+'%').join(',')+')';
    const mx=(point[0]+ring[next][0])/2,my=(point[1]+ring[next][1])/2;
    pane.motion=[(mx-center[0])/100,(my-center[1])/100,(i%2?-1:1)*(3+i%3)];
-   pane.dataset.pane=i;pane.append(this.copySnapshot(source));this.dom.world.append(pane);return pane;
+   pane.dataset.pane=i;shard.append(this.copySnapshot(source));pane.append(shard);this.dom.world.append(pane);return pane;
   });
  },
  present(plan,{rebuild,preview=false,key}={}){
@@ -113,7 +114,8 @@ const ScreenTheatre={dom:null,session:null,focused:true,serial:0,seen:new Set(),
    const fall=!s.reduced&&collapse&&p>.36?Math.pow(Math.min(1,(p-.36)/.12),2)*h*1.4:0;
    pane.style.transform='translate('+Math.round(dx)+'px,'+Math.round(dy+fall)+'px) rotate('+(s.reduced?0:angle*spread)+'deg)';
    pane.style.opacity=String(s.reduced?.15:collapse&&p>.42?Math.max(0,1-(p-.42)*12):1-spread*.72);
-   pane.style.filter='brightness('+(1-spread*.28).toFixed(3)+')';
+   const edge=s.reduced||spread<=0?'':' drop-shadow(0 0 '+(1+spread*3).toFixed(1)+'px '+(this.dom.dialog.dataset.tone==='intruder'?'#d58aa0':'#b8e0c4')+')';
+   pane.style.filter='brightness('+(1-spread*.28).toFixed(3)+')'+edge;
   });
   const recovery=s.plan.rebuild&&s.rebuildReady?(s.reduced?1:Math.max(0,Math.min(1,(p-.62)/.3))):0;
   this.dom.newWorld.style.opacity=String(recovery);this.dom.newWorld.style.transform=s.reduced?'none':'translateY('+Math.round((1-recovery)*h*.10)+'px) scale('+(.68+recovery*.32).toFixed(4)+')';
@@ -133,38 +135,93 @@ const ScreenTheatre={dom:null,session:null,focused:true,serial:0,seen:new Set(),
   }else this.dom.claims.replaceChildren();
  },
 
+ // The code layer is drawn at the window's device resolution so cracks, traces
+ // and the seal stay sharp; geometry is still expressed in the 640×360 plan space.
+ sizeCode(){
+  const c=this.dom.code,dpr=Math.min(2,window.devicePixelRatio||1),w=Math.max(320,Math.round(window.innerWidth*dpr)),h=Math.max(180,Math.round(window.innerHeight*dpr));
+  if(c.width!==w||c.height!==h){c.width=w;c.height=h;}
+  return {w,h,sx:w/640,sy:h/360,s:Math.min(w/640,h/360)};
+ },
+ crack(i,seg){
+  // A deterministic jagged path from the impact through one seam to the frame edge.
+  this.cracks||=new Map();const key=i+':'+seg.map(v=>v.join(',')).join('|');if(this.cracks.has(key))return this.cracks.get(key);
+  const pts=[];for(let k=0;k<seg.length-1;k++){const [a,b]=[seg[k],seg[k+1]],n=9;for(let j=0;j<n;j++){const u=j/n,jit=(Math.sin((i*7+k*13+j)*12.9898)*43758.5453%1)*2-1,nx=-(b[1]-a[1]),ny=b[0]-a[0],len=Math.hypot(nx,ny)||1;pts.push([a[0]+(b[0]-a[0])*u+nx/len*jit*(j&&j<n?1.6:0),a[1]+(b[1]-a[1])*u+ny/len*jit*(j&&j<n?1.6:0)]);}}
+  pts.push(seg.at(-1));this.cracks.set(key,pts);if(this.cracks.size>64)this.cracks.delete(this.cracks.keys().next().value);return pts;
+ },
  drawCode(s,p){
-  const c=this.dom.code.getContext('2d'),w=640,h=360,red=this.dom.dialog.dataset.tone==='intruder',col=red?'#ce8195':'#a4c8af';
-  c.imageSmoothingEnabled=false;c.clearRect(0,0,w,h);
-  const {center,ring,seams}=this.fracture,scale=v=>[v[0]*6.4,v[1]*3.6];
-  const opening=s.reduced?.25:Math.min(1,Math.max(0,(p-.1)*2.1));
-  c.lineWidth=1;c.strokeStyle=red?'#ce819580':'#cebd9080';
-  for(let i=0;i<ring.length;i++){
-   c.beginPath();c.moveTo(...scale(center));c.lineTo(...scale(seams[i]));const point=scale(ring[i]);c.lineTo(...point);c.stroke();
-   const mid=scale(seams[i]);c.fillStyle=col;
-   for(let j=0;j<3;j++)c.fillRect(Math.round(mid[0]+(j-1)*opening*13),Math.round(mid[1]+(i%2?1:-1)*j*opening*7),1,2);
+  const {w,h,sx,sy,s:k}=this.sizeCode(),c=this.dom.code.getContext('2d'),red=this.dom.dialog.dataset.tone==='intruder';
+  const ink=red?[206,129,149]:[164,200,175],gold=[226,206,160],rgba=(v,a)=>`rgba(${v[0]},${v[1]},${v[2]},${a})`;
+  const X=x=>x*sx,Y=y=>y*sy,time=s.reduced?0:s.elapsed;
+  c.setTransform(1,0,0,1,0,0);c.clearRect(0,0,w,h);c.imageSmoothingEnabled=true;
+  const {center,ring,seams}=this.fracture,P=v=>[X(v[0]*6.4),Y(v[1]*3.6)];
+  const opening=s.reduced?.25:Math.min(1,Math.max(0,(p-.1)*2.1)),grow=s.reduced?1:Math.min(1,Math.max(0,(p-.03)/.27));
+  const collapse=s.plan.rebuild||s.plan.kind==='occupation';
+  // 1. The verified trace, exposed in columns through the rupture.
+  const trace=(s.plan.trace?.length?s.plan.trace:['eff.runtime / '+s.plan.kind]).map(String);
+  const exposure=s.reduced?.12:Math.max(0,Math.min(1,(p-.18)/.18))*(collapse&&p>.46?Math.max(0,1-(p-.46)*12):1);
+  if(exposure>0){
+   c.font=`${Math.round(9*k)}px Consolas, monospace`;c.textBaseline='top';
+   const cols=Math.max(8,Math.round(w/(150*k))),lh=Math.round(12*k);
+   for(let col=0;col<cols;col++){
+    const x=Math.round((col+.15)*w/cols),speed=(18+col%5*7)*k,off=(time*speed+col*97)%lh;
+    for(let row=-1;row<h/lh+1;row++){
+     const line=trace[(row+col*3+Math.floor(time*speed/lh))%trace.length]||'';
+     const dx=x/w-center[0]/100,dy=row*lh/h-center[1]/100,near=Math.max(0,1-Math.hypot(dx,dy)*2.2);
+     c.fillStyle=rgba(ink,(.05+near*.22)*exposure);c.fillText(line.slice(0,26),x,Math.round(row*lh+off));
+    }
+   }
   }
-  // A few verified lines are exposed at the fracture edge; the scene remains legible.
-  const trace=s.plan.trace?.slice(0,24)||[],start=231;
-  c.fillStyle='#040912bd';c.fillRect(13,start-8,248,71);c.fillStyle=col;c.font='7px Consolas, monospace';c.textBaseline='top';
-  c.fillText('EFF.RUNTIME / '+s.plan.kind.toUpperCase(),23,start);
-  const chosen=trace.filter(line=>line.includes(s.plan.target==='bad_owned'?'ending_lock':s.plan.target||'authority'));
-  const lines=[...chosen,...trace.slice(-2)].slice(0,3);
-  lines.forEach((line,i)=>{c.fillStyle=i?'#829d99':'#c3c9b3';c.fillText(String(line).slice(0,62),23,start+15+i*12);});
+  // 2. Impact: a ring and flash at the point where the claims collide.
+  const [cx,cy]=P(center);
+  if(!s.reduced&&p<.2){const u=p/.2;c.strokeStyle=rgba(gold,.7*(1-u));c.lineWidth=Math.max(1,3*k*(1-u));c.beginPath();c.arc(cx,cy,u*Math.min(w,h)*.45,0,Math.PI*2);c.stroke();
+   const g=c.createRadialGradient(cx,cy,0,cx,cy,140*k);g.addColorStop(0,rgba(gold,.35*(1-u)));g.addColorStop(1,rgba(gold,0));c.fillStyle=g;c.fillRect(cx-140*k,cy-140*k,280*k,280*k);}
+  // 3. Cracks along every seam: glow, coloured core and a hot centre line.
+  if(!(collapse&&p>=.48)){
+   for(let i=0;i<ring.length;i++){
+    const pts=this.crack(i,[center,seams[i],ring[i]]).map(P),n=Math.max(2,Math.ceil(pts.length*grow));
+    for(const [width,col] of [[7*k,rgba(ink,.12)],[3*k,rgba(ink,.45)],[1.2*k,rgba([245,240,225],.85)]]){
+     c.lineWidth=width;c.strokeStyle=col;c.lineJoin='miter';c.beginPath();c.moveTo(...pts[0]);for(let j=1;j<n;j++)c.lineTo(...pts[j]);c.stroke();
+    }
+    // Sparks fly from the advancing tip of each crack.
+    if(!s.reduced&&grow<1){const [tx,ty]=pts[n-1];c.fillStyle=rgba(gold,.9);for(let j=0;j<4;j++)c.fillRect(Math.round(tx+Math.cos(i+j*1.7+time*9)*(4+j*3)*k),Math.round(ty+Math.sin(i*2+j+time*7)*(4+j*3)*k),Math.ceil(1.5*k),Math.ceil(1.5*k));}
+   }
+  }
+  // 4. The runtime panel types in its verified lines.
+  if(!(collapse&&p>=.46)){
+   const px=Math.round(X(13)),py=Math.round(Y(222)),pw=Math.round(260*k),ph=Math.round(74*k),chosen=trace.filter(line=>line.includes(s.plan.target==='bad_owned'?'ending_lock':s.plan.target||'authority'));
+   const lines=[...new Set([...chosen,...trace.slice(-2)])].slice(0,3),typed=s.reduced?999:Math.floor(Math.max(0,p-.08)*260);
+   c.fillStyle='rgba(4,9,18,.82)';c.fillRect(px,py,pw,ph);c.strokeStyle=rgba(ink,.6);c.lineWidth=Math.max(1,k);c.strokeRect(px+.5,py+.5,pw-1,ph-1);
+   c.fillStyle=rgba(ink,.18);c.fillRect(px,py,pw,Math.round(14*k));c.fillStyle=rgba(ink,.95);c.font=`${Math.round(8*k)}px Consolas, monospace`;c.textBaseline='middle';
+   c.fillText('EFF.RUNTIME / '+s.plan.kind.toUpperCase(),px+8*k,py+7*k);c.fillStyle=rgba(gold,.8);c.fillRect(px+pw-12*k,py+5*k,4*k,4*k);
+   let left=typed;lines.forEach((line,i)=>{const text=String(line).slice(0,58),shown=text.slice(0,Math.max(0,left));left-=text.length;c.fillStyle=i?'#8fa8a3':'#d2d6c2';c.fillText(shown,px+8*k,py+(26+i*15)*k);
+    if(shown.length<text.length&&shown.length>0&&!s.reduced&&Math.floor(time*4)%2===0){const tw=c.measureText(shown).width;c.fillRect(px+8*k+tw+1,py+(21+i*15)*k,4*k,9*k);}});
+  }
+  // 5. The seal: a stamped plate torn along a jagged line, halves pulled apart.
   const seal=['ending','rebirth','occupation','chapter-rebirth'].includes(s.plan.kind);
   if(seal&&p<.5){
-   const split=s.plan.kind==='occupation'?0:opening*47;
-   c.save();c.translate(320,205);c.rotate(-.08);c.font='bold 32px Consolas, monospace';c.textAlign='center';
+   const split=s.plan.kind==='occupation'?0:opening*47*k,plateW=330*k,plateH=58*k,label=s.plan.seal||'BAD END 05';
+   const tear=[];for(let j=0;j<=10;j++)tear.push([(Math.sin(j*91.7)*43758.5%1)*14*k-7*k,-plateH/2-6*k+j*(plateH+12*k)/10]);
+   c.save();c.translate(X(320),Y(200));c.rotate(-.08);
    for(const side of [-1,1]){
-    c.save();c.beginPath();c.rect(side<0?-210:0,-62,210,84);c.clip();c.translate(side*split,side*split*.14);
-    c.fillStyle='#120c1bd9';c.fillRect(-155,-40,310,50);c.strokeStyle='#b7758f';c.strokeRect(-155,-40,310,50);
-    c.fillStyle='#cf8d9e';c.fillText(s.plan.seal||'BAD END 05',0,-32);c.restore();
-   }c.restore();
+    c.save();c.translate(side*split,side*split*.14);c.rotate(side*opening*.04);
+    c.beginPath();c.moveTo(side*(plateW/2+20*k),-plateH);for(const [tx,ty] of tear)c.lineTo(tx,ty);c.lineTo(side*(plateW/2+20*k),plateH);c.closePath();c.clip();
+    c.fillStyle='rgba(18,12,27,.9)';c.fillRect(-plateW/2,-plateH/2,plateW,plateH);
+    c.strokeStyle='rgba(183,117,143,.9)';c.lineWidth=2*k;c.strokeRect(-plateW/2,-plateH/2,plateW,plateH);c.lineWidth=k;c.strokeRect(-plateW/2+5*k,-plateH/2+5*k,plateW-10*k,plateH-10*k);
+    c.strokeStyle='rgba(183,117,143,.18)';for(let x=-plateW/2;x<plateW/2;x+=7*k){c.beginPath();c.moveTo(x,-plateH/2+6*k);c.lineTo(x+18*k,plateH/2-6*k);c.stroke();}
+    c.font=`bold ${Math.round(30*k)}px Consolas, monospace`;c.textAlign='center';c.textBaseline='middle';c.fillStyle='#e3a1b1';c.fillText(label,0,k);
+    c.restore();
+    if(opening>0&&!s.reduced){c.fillStyle=rgba(gold,.85);for(const [tx,ty] of tear)if((ty*7|0)%3===0)c.fillRect(Math.round(tx+side*split*.5),Math.round(ty),Math.ceil(2*k),Math.ceil(2*k));}
+   }
+   c.restore();
   }
+  // 6. A retroaction runs back from the present along one history.
   if(s.plan.kind==='retroaction'&&WorldStage.context?.frame.narrative.authorizedPast){
-   const x=s.reduced?210:Math.round(548-Math.min(1,Math.max(0,(p-.12)/.68))*390);
-   c.strokeStyle='#a6ccbd';c.beginPath();c.moveTo(548,300);c.lineTo(x,300);c.stroke();
-   c.fillStyle='#e3ceb0';c.fillRect(x-2,297,4,6);c.font='8px Consolas';c.fillText('PAST <--- ONE HISTORY <--- PRESENT',148,313);
+   const u=s.reduced?.5:Math.min(1,Math.max(0,(p-.12)/.68)),x0=X(548),x=X(548-u*390),y=Y(300);
+   c.strokeStyle=rgba([166,204,189],.25);c.lineWidth=7*k;c.beginPath();c.moveTo(x0,y);c.lineTo(x,y);c.stroke();
+   c.strokeStyle='#a6ccbd';c.lineWidth=1.5*k;c.beginPath();c.moveTo(x0,y);c.lineTo(x,y);c.stroke();
+   c.fillStyle='#e3ceb0';c.beginPath();c.moveTo(x-8*k,y);c.lineTo(x+4*k,y-6*k);c.lineTo(x+4*k,y+6*k);c.closePath();c.fill();
+   for(const [tx,label] of [[548,'PRESENT'],[158,'PAST']]){c.fillStyle='#a6ccbd';c.fillRect(X(tx)-2*k,y-8*k,4*k,16*k);c.font=`${Math.round(8*k)}px Consolas`;c.textAlign='center';c.fillText(label,X(tx),y+16*k);c.textAlign='left';}
+   c.font=`${Math.round(8*k)}px Consolas`;c.textAlign='center';c.fillText('ONE HISTORY',(x0+X(158))/2,y-14*k);c.textAlign='left';
   }
  },
  finish(reason='complete'){
