@@ -106,7 +106,9 @@ const PlayAids = {
       const state = this.state(it), active = near && near.it === it;
       const sx = Math.round(at.x * TILE + 8 - cam.x);
       const bob = state === "new" && !still ? Math.round(Math.sin(t * 4 + at.x) * 2) : 0;
-      const sy = Math.round(at.y * TILE - 4 - cam.y + bob);
+      // Figures stand taller than a tile; their markers float above the head.
+      const lift = (map.npcs || []).includes(it) ? 14 : 0;
+      const sy = Math.round(at.y * TILE - 4 - lift - cam.y + bob);
       if (sx < -8 || sx > VIEW_W + 8 || sy < -8 || sy > VIEW_H + 8) continue;
       this.lastMarkers.push({ id: it.id, x: sx, y: sy, state });
       const box = (x, y, w, h, color) => { c.fillStyle = color; c.fillRect(sx + x, sy + y, w, h); };

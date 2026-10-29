@@ -81,6 +81,7 @@ python -m http.server 4179
 | `pixel-version/narrative-agency.js` | 身体合一、自我归属、回写前提调查和研究院尾声 |
 | `pixel-version/narrative-trials.js` | 家庭停留概率、庭院反抗时间、黄昏接雨与对应检查点 |
 | `pixel-version/pixel-art.js` | 像素演员、姿态、头像、材质和舞台绘制 |
+| `pixel-version/sprites-hd.js`、`tiles-hd.js` | 2× 画布上的半像素人物与材质、家具、植物 |
 | `pixel-version/atmosphere.js` | 区域光源与抖动量化的光影层 |
 | `pixel-version/play-aids.js` | 调查标记与进度、碎片共鸣、脚步、自动与快进已读 |
 | `pixel-version/cutscenes.js` | 镜碎、棺盖、睁眼与庭院崩坏等转折演出 |
