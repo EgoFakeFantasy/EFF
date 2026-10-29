@@ -20,7 +20,8 @@ const HDSprites = {
   cache: new Map(),
 
   applies(c) {
-    try { return (c?.getTransform?.()?.a || 1) >= 2; } catch { return false; }
+    // Scale magnitude, so rotated figures (the fallen sister) also count as 2×.
+    try { const m = c?.getTransform?.(); return !!m && Math.hypot(m.a || 0, m.b || 0) >= 1.99; } catch { return false; }
   },
 
   color(v) { return typeof v === "string" && v.length === 4 ? "#" + [...v.slice(1)].map(a => a + a).join("") : v; },
