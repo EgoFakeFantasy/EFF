@@ -2387,6 +2387,18 @@ test("the phenomenon-war scene port backs 2x layers and draws a court frame with
   assert.deepEqual(result, { scene: 640, skeleton: 384, tiles: result.map * 2, map: result.map, drawn: true });
 });
 
+test("spectacle cracks are jagged, deterministic and end on their seams", () => {
+  const game = harness();
+  const result = game.value(`(() => {
+    const seg = [[50, 54], [30, 30], [0, 0]];
+    ScreenTheatre.cracks = null;
+    const a = ScreenTheatre.crack(2, seg), b = ScreenTheatre.crack(2, seg.map(v => v.slice()));
+    const off = a.slice(1, 9).some(([x, y]) => Math.abs((y - 54) * 20 - (x - 50) * 24) > 1);
+    return { same: JSON.stringify(a) === JSON.stringify(b), first: a[0], last: a.at(-1), mid: a[9], jagged: off, count: a.length };
+  })()`);
+  assert.deepEqual([result.same, result.first, result.last, result.mid, result.jagged, result.count], [true, [50, 54], [0, 0], [30, 30], true, 19]);
+});
+
 let failed = 0;
 for (const [name, callback] of tests) {
   try { callback(); console.log(`PASS ${name}`); }
