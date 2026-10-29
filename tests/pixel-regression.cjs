@@ -2340,6 +2340,41 @@ test("every ending opens on its own illustration, still under reduced motion", (
   assert.equal(game.evaluate("EndingArt.drawn"), null, "nothing is drawn once the ending closes");
 });
 
+/* ---------- Half-pixel (2×) art ---------- */
+
+test("2x surfaces draw half-pixel figures for every kind, view, pose and walk frame; 1x surfaces keep the old actor", () => {
+  const game = harness();
+  game.evaluate("ui.start.hidden = true; globalThis.hd = { getTransform: () => ({ a: 2 }) }; globalThis.lo = { getTransform: () => ({ a: 1 }) }");
+  assert.equal(game.evaluate("HDSprites.applies(Object.assign(Object.create(ctx), hd))"), true);
+  assert.equal(game.evaluate("HDSprites.applies(Object.assign(Object.create(ctx), lo))"), false, "the technical window's 1x canvases keep the 1x actor");
+  assert.equal(game.evaluate("HDSprites.applies(ctx)"), false, "a surface without a transform is treated as 1x");
+  const kinds = [{}, { beard: true, coat: "#5a5248" }, { bun: true, coat: "#7a5a5a" }, { hood: true, coat: "#4a4a55" }, { dead: true }, { blood: true }, { glow: "#7fb3d5" }];
+  const poses = ["stand", "mirror", "wake", "pain", "search", "photo", "carry", "catch", "eat", "sit", "kneel", "bound", "refuse", "sleep"];
+  const count = game.evaluate(`(() => {
+    const c = Object.assign(Object.create(ctx), hd); HDSprites.cache.clear(); let n = 0;
+    for (const kind of ${JSON.stringify(kinds)}) for (const pose of ${JSON.stringify(poses)}) for (const dir of [0, 1, 2, 3]) for (const walk of [0, 0.01, 0.12, 0.23, 0.34])
+      if (PixelArt.actor(c, 100, 80, { ...kind, pose, dir, walk })) n++;
+    return n;
+  })()`);
+  assert.equal(count, 7 * 14 * 4 * 5);
+  assert.ok(game.evaluate("HDSprites.built") > 300, "frames, views and poses produce distinct sprites");
+  assert.notEqual(game.evaluate("HDSprites.kind({ hood: true })"), game.evaluate("HDSprites.kind({})"));
+  assert.equal(game.evaluate("hdShade(hdShade('#3a4a6a', 0.5), 2)"), "rgb(58,74,106)", "shading accepts its own rgb() output");
+});
+
+test("2x tile caches redraw furniture, plants and props at half-pixel resolution in every area", () => {
+  const game = harness();
+  game.evaluate("ui.start.hidden = true; tileCtx.getTransform = () => ({ a: 2 }); globalThis.objects = 0; const draw = HDTiles.drawObject.bind(HDTiles); HDTiles.drawObject = (...args) => { objects++; return draw(...args); }");
+  for (const area of ["mirror", "garden", "house_empty", "house_family", "blood", "rain"]) {
+    game.evaluate(`objects = 0; G.area = ${JSON.stringify(area)}; StoryStaging.reset(); buildTileCache()`);
+    const owned = game.evaluate(`MAPS[${JSON.stringify(area)}].grid.join('').split('').filter(ch => HDTiles.OWNED.has(ch)).length`);
+    assert.equal(game.evaluate("objects"), owned, `${area}: every owned object tile is redrawn in HD`);
+  }
+  assert.equal(game.evaluate("tileCache.width"), game.evaluate("MAPS.rain.grid[0].length * TILE * RES"), "the tile cache is built at 2x");
+  game.evaluate("const c = Object.assign(Object.create(ctx), { getTransform: () => ({ a: 2 }) }); for (const area of ['garden', 'house_empty', 'house_family']) { G.area = area; HDTiles.props(c, MAPS[area], { x: 0, y: 0 }); } StoryStaging.coffin = true; HDTiles.props(c, MAPS.garden, { x: 0, y: 0 })");
+  for (let i = 0; i < 3; i++) game.frame(16);
+});
+
 let failed = 0;
 for (const [name, callback] of tests) {
   try { callback(); console.log(`PASS ${name}`); }

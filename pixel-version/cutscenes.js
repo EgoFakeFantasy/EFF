@@ -43,8 +43,8 @@ const Cutscenes = {
   beginShatter() {
     if (this.still()) return false;
     const snapshot = document.createElement("canvas");
-    snapshot.width = VIEW_W; snapshot.height = VIEW_H;
-    snapshot.getContext("2d")?.drawImage?.(canvas, 0, 0);
+    snapshot.width = VIEW_W * RES; snapshot.height = VIEW_H * RES;
+    snapshot.getContext("2d")?.drawImage?.(canvas, 0, 0, VIEW_W * RES, VIEW_H * RES);
     const cam = Expedition.camera || { x: 0, y: 0 };
     const ox = G.px + 6 - cam.x, oy = G.py + 8 - cam.y;
     // A jittered vertex grid keeps neighbouring shards' cracks connected.
@@ -85,7 +85,7 @@ const Cutscenes = {
       const [p, q, r] = shard.tri;
       c.save();
       c.beginPath(); c.moveTo(p[0] + dx, p[1] + dy); c.lineTo(q[0] + dx, q[1] + dy); c.lineTo(r[0] + dx, r[1] + dy); c.closePath(); c.clip();
-      c.drawImage(s.snapshot, dx, dy);
+      c.drawImage(s.snapshot, dx, dy, VIEW_W, VIEW_H);
       // Falling glass dims and catches a little of the storm's light.
       if (tf > 0) { c.fillStyle = `rgba(150,170,220,${Math.min(0.28, tf * 0.5)})`; c.fillRect(Math.min(p[0], q[0], r[0]) + dx, Math.min(p[1], q[1], r[1]) + dy, 60, 60); }
       c.restore();
@@ -207,7 +207,7 @@ const Cutscenes = {
         for (let i = 0; i < 4; i++) {
           const y = Math.floor(hash(Math.floor(t * 10), i, 41) * VIEW_H), hgt = 3 + Math.floor(hash(Math.floor(t * 10), i, 42) * 8);
           const shift = Math.round((hash(Math.floor(t * 10), i, 43) - 0.5) * 14);
-          c.drawImage(canvas, 0, y, VIEW_W, hgt, shift, y, VIEW_W, hgt);
+          c.drawImage(canvas, 0, y * RES, VIEW_W * RES, hgt * RES, shift, y, VIEW_W, hgt);
         }
       }
       this.clash.cracks ||= this.cracks(G.px + 6 - cam.x, G.py + 8 - cam.y);
@@ -244,7 +244,7 @@ const Cutscenes = {
         const sx = tx * TILE - cam.x, sy = ty * TILE - cam.y;
         const delay = 0.1 + hash(tx, ty, 46) * 0.55 + Math.hypot(sx + 8 - VIEW_W / 2, sy + 8 - VIEW_H / 2) / 700;
         const tf = t - delay, dy = tf > 0 ? Math.round(0.5 * 300 * tf * tf) : 0;
-        if (dy < 22) { c.drawImage(tileCache, tx * TILE, ty * TILE, TILE, TILE, sx, sy + dy, TILE, TILE); if (dy > 8) { c.fillStyle = "rgba(12,17,27,0.5)"; c.fillRect(sx, sy + dy, TILE, TILE); } continue; }
+        if (dy < 22) { c.drawImage(tileCache, tx * TILE * RES, ty * TILE * RES, TILE * RES, TILE * RES, sx, sy + dy, TILE, TILE); if (dy > 8) { c.fillStyle = "rgba(12,17,27,0.5)"; c.fillRect(sx, sy + dy, TILE, TILE); } continue; }
         const fy = sy + dy;
         if (fy > VIEW_H + 8) continue;
         for (let k = 0; k < 3; k++) {

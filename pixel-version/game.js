@@ -7,6 +7,9 @@
 const TILE = 16;
 const VIEW_W = 320;
 const VIEW_H = 192;
+// The main canvas keeps 2× backing pixels: logic and tiles stay in 320×192 /
+// 16px units, while characters and materials gain half-pixel detail.
+const RES = 2;
 const SAVE_KEY = "wuzhong-returner-pixel-v1";
 const META_KEY = "wuzhong-returner-pixel-meta-v1";
 
@@ -1459,6 +1462,12 @@ function drawTile(c, ch, x, y, map, t) {
   // 基底地板
   c.fillStyle = map === MAPS.blood && y > 10 ? "#30231d" : P.floor;
   c.fillRect(px, py, TILE, TILE);
+  // 2× surfaces redraw furniture and plants at half-pixel resolution.
+  if (HDTiles.OWNED.has(ch) && HDTiles.applies(c)) {
+    PixelArt.floor(c, ".", x, y, map);
+    HDTiles.drawObject(c, ch, x, y, map, t);
+    return;
+  }
   PixelArt.floor(c, ch, x, y, map);
 
   switch (ch) {
@@ -1626,12 +1635,15 @@ function drawTile(c, ch, x, y, map, t) {
       break;
   }
   PixelArt.tile(c, ch, x, y, map, t);
+  if (HDTiles.applies(c)) HDTiles.detail(c, ch, x, y, map, t);
 }
 
 function buildTileCache() {
   const map = MAPS[G.area];
-  tileCache.width = map.grid[0].length * TILE;
-  tileCache.height = map.grid.length * TILE;
+  tileCache.width = map.grid[0].length * TILE * RES;
+  tileCache.height = map.grid.length * TILE * RES;
+  tileCtx.setTransform(RES, 0, 0, RES, 0, 0);
+  tileCtx.imageSmoothingEnabled = false;
   tileCtx.clearRect(0, 0, tileCache.width, tileCache.height);
   map._moon = null;
   map._water = [];
@@ -2354,7 +2366,7 @@ function renderFrame(now) {
   Expedition.camera = cam;
   ctx.clearRect(0, 0, VIEW_W, VIEW_H);
 
-  ctx.drawImage(tileCache, cam.x, cam.y, VIEW_W, VIEW_H, 0, 0, VIEW_W, VIEW_H);
+  ctx.drawImage(tileCache, cam.x * RES, cam.y * RES, VIEW_W * RES, VIEW_H * RES, 0, 0, VIEW_W, VIEW_H);
 
   // 红月光晕：挂在无穷层的顶端
   if (map._moon) {
@@ -2383,6 +2395,7 @@ function renderFrame(now) {
   }
 
   PixelArt.sceneProps(ctx, map, cam);
+  HDTiles.props(ctx, map, cam);
 
   // 区域专属演出（倒影、雾缘、窗光、心跳、碑光等）
   renderAreaFx(map, cam, t);
@@ -2491,6 +2504,8 @@ function renderFrame(now) {
 
 // 演出叠加在所有渲染之上：镜碎与睁眼。
 function render(now) {
+  ctx.setTransform(RES, 0, 0, RES, 0, 0);
+  ctx.imageSmoothingEnabled = false;
   renderFrame(now);
   Cutscenes.overlay(ctx);
   Music.update();

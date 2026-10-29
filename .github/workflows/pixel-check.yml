@@ -35,6 +35,8 @@ jobs:
       - run: node --check pixel-version/finale.js
       - run: node --check pixel-version/combat-script.js
       - run: node --check pixel-version/pixel-art.js
+      - run: node --check pixel-version/sprites-hd.js
+      - run: node --check pixel-version/tiles-hd.js
       - run: node --check pixel-version/atmosphere.js
       - run: node --check pixel-version/play-aids.js
       - run: node --check pixel-version/cutscenes.js

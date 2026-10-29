@@ -137,6 +137,12 @@ const PixelArt = {
   },
 
   moon(c, x, y, radius) {
+    // On 2× surfaces the moon is drawn at double radius in real pixels.
+    if (!this.hdMoon && typeof HDTiles !== 'undefined' && HDTiles.applies(c)) {
+      this.hdMoon = true;
+      try { c.save(); c.scale(.5, .5); this.moon(c, x * 2, y * 2, radius * 2); c.restore(); } finally { this.hdMoon = false; }
+      return;
+    }
     const r = Math.max(2, Math.round(radius));
     this.moons ||= new Map();
     if (!this.moons.has(r)) {
@@ -254,6 +260,7 @@ const PixelArt = {
       const right=Math.min(16,Math.round((windowX-y*.28-x)*16+22));
       if(right>left)r(left,0,right-left,16,map===MAPS.house_family?'#e0bf7620':'#aec9d317');
     }
+    if(typeof HDTiles!=='undefined'&&HDTiles.applies(c))HDTiles.floorDetail(c,x,y,map);
     // Ambient occlusion is baked into each tile and cannot obscure an actor.
     if(map.grid[y-1]?.[x]==='#'){r(0,0,16,2,'#080d164d');r(0,2,16,2,'#080d1626');}
     if(map.grid[y]?.[x-1]==='#')r(0,0,2,16,'#080d163b');
@@ -399,6 +406,8 @@ const PixelArt = {
   // 24×32 actor envelope, anchored to the existing 12×14 collision body.
   // The drawing never changes position, story flags or ownership decisions.
   actor(c, x, y, opt = {}) {
+    // 2× surfaces get the half-pixel figures; 1× surfaces keep this drawing.
+    if (typeof HDSprites !== 'undefined' && HDSprites.applies(c)) return HDSprites.draw(c, x, y, opt);
     const pose=opt.pose||'stand', back=opt.dir===3||pose==='mirror';
     const color=v=>v.length===4?'#'+[...v.slice(1)].map(a=>a+a).join(''):v;
     const coat=color(opt.coat||'#3a4a6a'),hair=color(opt.hair||'#222222'),skin=color(opt.skin||'#e8c8a8');

@@ -248,7 +248,7 @@ const PhenomenonBattle = {
       for (let i = 0; i < 36; i++) {
         const x = Math.floor(hash(i, 8, 7) * VIEW_W), y = (Math.floor(hash(i, 9, 1) * 150) + t * 24) % VIEW_H;
         c.fillStyle = twilight ? "#625039" : i % 3 ? "#344253" : "#83959d";
-        if (progress < 2) c.drawImage(tileCache, Math.floor(hash(i, 5, 2) * (tileCache.width - 16)), Math.floor(hash(i, 6, 3) * (tileCache.height - 16)), 16, 16, x, y, 12, 8);
+        if (progress < 2) c.drawImage(tileCache, Math.floor(hash(i, 5, 2) * (tileCache.width - 16 * RES)), Math.floor(hash(i, 6, 3) * (tileCache.height - 16 * RES)), 16 * RES, 16 * RES, x, y, 12, 8);
         else c.fillRect(x, y, 2, 1);
         if (progress >= 2) { c.fillStyle = "#819caa"; c.fillRect(x, y + 4, 1, 4); }
       }
