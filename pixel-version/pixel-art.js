@@ -191,6 +191,7 @@ const PixelArt = {
   },
 
   writingPresence(c, x, y, helper = false) {
+    if (typeof HDTiles !== 'undefined' && HDTiles.applies(c)) { this.writingPresenceHD(c, x, y, helper); return; }
     const poly=(points,color)=>this.polygon(c,points.map(([a,b])=>[x+a,y+b]),color);
     const r=(a,b,w,h,color)=>{c.fillStyle=color;c.fillRect(x+a,y+b,w,h);};
     if(helper){
@@ -204,6 +205,43 @@ const PixelArt = {
     poly([[10,17],[16,23],[12,28],[8,24]],'#80516e');
     for(let i=0;i<5;i++)r(3+i%2*5,5+i*4,4,1,i%2?'#a37d91':'#d0a7b2');
     r(10,1,1,10,'#debdc3');r(8,12,1,9,'#b58399');
+  },
+
+  // Half-pixel versions: the outsider is a broken, written surface; the helper a hooded presence.
+  writingPresenceHD(c, x, y, helper) {
+    c.save(); c.translate(x, y); c.scale(.5, .5);
+    const poly = (points, color) => this.polygon(c, points, color);
+    const r = (a, b, w, h, color) => { c.fillStyle = color; c.fillRect(a, b, w, h); };
+    if (helper) {
+      poly([[-1, 17], [5, 2], [13, -4], [21, 5], [27, 24], [14, 33]], '#1e3036');
+      poly([[1, 16], [6, 3], [13, -2], [20, 6], [25, 23], [14, 31]], '#3a5960');
+      poly([[3, 15], [7, 5], [13, 0], [18, 7], [22, 21], [14, 28]], '#4b7178');
+      poly([[8, 10], [14, 3], [19, 10], [18, 20], [10, 20]], '#0b1622');
+      r(10, 12, 3, 1, '#8fd1bd'); r(15, 12, 3, 1, '#8fd1bd'); r(11, 12, 1, 1, '#e3fff3'); r(16, 12, 1, 1, '#e3fff3');
+      for (let i = 0; i < 4; i++) r(7 + i * 3, 25 + (i % 2), 2, 1, '#86b9aa');
+      r(5, 4, 1, 10, '#6f9a95'); r(13, -2, 2, 1, '#9ec8bf');
+      c.restore(); return;
+    }
+    const shards = [
+      [[[2, 4], [20, -4], [16, 24], [-2, 34]], '#8c637c', '#b4899f'],
+      [[[24, 2], [34, 16], [30, 40], [18, 26]], '#67485f', '#8f6a83'],
+      [[[4, 36], [16, 28], [16, 52], [0, 48]], '#4b3c55', '#6c5a78'],
+      [[[20, 34], [32, 46], [24, 56], [16, 48]], '#80516e', '#a8708f'],
+    ];
+    for (const [pts, base, light] of shards) {
+      poly(pts.map(([a, b]) => [a + 1, b + 1]), '#1b1220');
+      poly(pts, base);
+      const [p0, p1] = pts; const steps = Math.max(Math.abs(p1[0] - p0[0]), Math.abs(p1[1] - p0[1]));
+      for (let i = 0; i <= steps; i++) r(Math.round(p0[0] + (p1[0] - p0[0]) * i / steps), Math.round(p0[1] + (p1[1] - p0[1]) * i / steps), 1, 1, light);
+    }
+    // Lines of writing run across the fragments, catching light at their heads.
+    for (let i = 0; i < 9; i++) {
+      const lx = 4 + (i % 2) * 10, ly = 9 + i * 4, w = 6 + (i * 5) % 9;
+      r(lx, ly, w, 1, i % 2 ? '#a37d91' : '#d6aebb'); r(lx, ly, 1, 1, '#f3d8de');
+      if (i % 3 === 0) r(lx + w + 1, ly - 1, 1, 3, '#c999aa');
+    }
+    r(20, 2, 1, 20, '#e8c6cc'); r(17, 24, 1, 18, '#b58399'); r(21, 3, 1, 18, '#5a3a4f');
+    c.restore();
   },
 
   languageGround(c) {

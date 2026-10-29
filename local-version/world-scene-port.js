@@ -2,10 +2,12 @@
 // Adapter for the existing integer-pixel art. It never changes G, F, dialogue or the map cache.
 class WorldScenePort{
  constructor(scene){
-  this.scene=scene;this.map=MAPS[scene];this.sceneCanvas=document.createElement('canvas');this.skeletonCanvas=document.createElement('canvas');
-  for(const c of [this.sceneCanvas,this.skeletonCanvas]){c.width=320;c.height=192;c.getContext('2d').imageSmoothingEnabled=false;}
-  this.tiles=document.createElement('canvas');this.tiles.width=this.map.grid[0].length*16;this.tiles.height=this.map.grid.length*16;
-  const c=this.tiles.getContext('2d');c.imageSmoothingEnabled=false;this.dynamic=[];
+  this.scene=scene;this.map=MAPS[scene];this.res=typeof RES==='number'?RES:2;this.sceneCanvas=document.createElement('canvas');this.skeletonCanvas=document.createElement('canvas');
+  // Both layers back 2× pixels; drawing stays in 320×192 logical units so the
+  // half-pixel figures and materials of the story mode appear here too.
+  for(const c of [this.sceneCanvas,this.skeletonCanvas]){c.width=320*this.res;c.height=192*this.res;c.getContext('2d').imageSmoothingEnabled=false;}
+  this.tiles=document.createElement('canvas');this.tiles.width=this.map.grid[0].length*16*this.res;this.tiles.height=this.map.grid.length*16*this.res;
+  const c=this.tiles.getContext('2d');c.setTransform(this.res,0,0,this.res,0,0);c.imageSmoothingEnabled=false;this.dynamic=[];
   for(let y=0;y<this.map.grid.length;y++)for(let x=0;x<this.map.grid[y].length;x++){const ch=this.map.grid[y][x];drawTile(c,ch,x,y,this.map,0);if(['x','b','I','*','~','o'].includes(ch))this.dynamic.push({x,y,ch});}
   PixelArt.sceneProps(c,this.map,{x:0,y:0});
   this.contours=[];const blocked=(x,y)=>!WorldRuntime.walkable({grid:this.map.grid},x*16,y*16);
@@ -17,10 +19,11 @@ class WorldScenePort{
 
  }
  draw(frame,reduced=false,options={}){
-  const c=this.sceneCanvas.getContext('2d'),k=this.skeletonCanvas.getContext('2d'),map=this.map,w=this.tiles.width,h=this.tiles.height,t=reduced?0:frame.time;
+  const c=this.sceneCanvas.getContext('2d'),k=this.skeletonCanvas.getContext('2d'),map=this.map,w=this.tiles.width/this.res,h=this.tiles.height/this.res,t=reduced?0:frame.time;
+  for(const g of [c,k]){g.setTransform(this.res,0,0,this.res,0,0);g.imageSmoothingEnabled=false;}
   // Camera, silhouettes and collision geometry use the same instance coordinates.
   const cam={x:Math.round(Math.max(0,Math.min(w-320,frame.avatar.x-155))),y:Math.round(Math.max(0,Math.min(h-192,frame.avatar.y-109)))};this.camera=cam;
-  c.clearRect(0,0,320,192);c.drawImage(this.tiles,cam.x,cam.y,320,192,0,0,320,192);
+  c.clearRect(0,0,320,192);c.drawImage(this.tiles,cam.x*this.res,cam.y*this.res,320*this.res,192*this.res,0,0,320,192);
   for(const {x,y,ch} of this.dynamic){const sx=x*16-cam.x,sy=y*16-cam.y;if(sx>-16&&sx<320&&sy>-16&&sy<192){c.save();c.translate(-cam.x,-cam.y);drawTile(c,ch,x,y,map,t);c.restore();}}
   renderAreaFx(map,cam,t,c,this.scene);
   if(this.scene==='blood')for(const n of map.npcs||[]){if(n.kind!=='echo'||n.cond&&!F[n.cond])continue;c.globalAlpha=.4+(reduced?0:Math.sin(t*2)*.12);PixelArt.actor(c,n.x*16+2-cam.x,n.y*16-cam.y,{coat:'#9fc0d8',hair:'#d0e4f0',skin:'#cfe0ea',dir:0});c.globalAlpha=1;}

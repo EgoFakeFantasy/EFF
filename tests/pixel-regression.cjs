@@ -2348,6 +2348,7 @@ test("2x surfaces draw half-pixel figures for every kind, view, pose and walk fr
   assert.equal(game.evaluate("HDSprites.applies(Object.assign(Object.create(ctx), hd))"), true);
   assert.equal(game.evaluate("HDSprites.applies(Object.assign(Object.create(ctx), lo))"), false, "the technical window's 1x canvases keep the 1x actor");
   assert.equal(game.evaluate("HDSprites.applies(ctx)"), false, "a surface without a transform is treated as 1x");
+  assert.equal(game.evaluate("HDSprites.applies(Object.assign(Object.create(ctx), { getTransform: () => ({ a: 0, b: 2 }) }))"), true, "a figure rotated by 90 degrees on a 2x surface stays HD");
   const kinds = [{}, { beard: true, coat: "#5a5248" }, { bun: true, coat: "#7a5a5a" }, { hood: true, coat: "#4a4a55" }, { dead: true }, { blood: true }, { glow: "#7fb3d5" }];
   const poses = ["stand", "mirror", "wake", "pain", "search", "photo", "carry", "catch", "eat", "sit", "kneel", "bound", "refuse", "sleep"];
   const count = game.evaluate(`(() => {
@@ -2373,6 +2374,17 @@ test("2x tile caches redraw furniture, plants and props at half-pixel resolution
   assert.equal(game.evaluate("tileCache.width"), game.evaluate("MAPS.rain.grid[0].length * TILE * RES"), "the tile cache is built at 2x");
   game.evaluate("const c = Object.assign(Object.create(ctx), { getTransform: () => ({ a: 2 }) }); for (const area of ['garden', 'house_empty', 'house_family']) { G.area = area; HDTiles.props(c, MAPS[area], { x: 0, y: 0 }); } StoryStaging.coffin = true; HDTiles.props(c, MAPS.garden, { x: 0, y: 0 })");
   for (let i = 0; i < 3; i++) game.frame(16);
+});
+
+test("the phenomenon-war scene port backs 2x layers and draws a court frame with half-pixel art", () => {
+  const game = harness();
+  const result = game.value(`(() => {
+    const port = new WorldScenePort('blood');
+    const frame = WorldRuntime.frame(WorldRuntime.create(WorldStage.config({ mode: 'court', claimed: [false, false, false] }, 1)));
+    const layers = port.draw(frame, true, {});
+    return { scene: port.sceneCanvas.width, skeleton: port.skeletonCanvas.height, tiles: port.tiles.width, map: MAPS.blood.grid[0].length * 16, drawn: !!layers.scene && !!layers.skeleton };
+  })()`);
+  assert.deepEqual(result, { scene: 640, skeleton: 384, tiles: result.map * 2, map: result.map, drawn: true });
 });
 
 let failed = 0;
