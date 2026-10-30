@@ -57,7 +57,7 @@ async function start(){
  session.defaultSession.on('will-download',event=>event.preventDefault());
  window.on('close',event=>{
   if(closing)return;event.preventDefault();closing=true;model.close();
-  const finish=async()=>{try{await Promise.race([window.webContents.executeJavaScript('window.EFFLocal ? window.EFFLocal.flush() : null'),new Promise(resolve=>setTimeout(resolve,2000))]);await store.flush();}catch{}finally{window.destroy();app.quit();}};
+  const finish=async()=>{try{await Promise.race([window.webContents.executeJavaScript('(typeof saveRun==="function"&&saveRun(true), (typeof window!=="undefined"&&window.EFFLocal?window.EFFLocal.flush():null))'),new Promise(resolve=>setTimeout(resolve,2000))]);await store.flush();}catch{}finally{window.destroy();app.quit();}};
   void world.close().then(finish,finish);
  });
  window.once('ready-to-show',()=>window.show());

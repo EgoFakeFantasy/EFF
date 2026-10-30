@@ -114,6 +114,15 @@ public final class EffServer {
   }
 
   public static void enter(ServerPlayer p, String mode) {
+    MinecraftServer currentServer = p.level().getServer();
+    if (currentServer != null && currentServer.isDedicatedServer() && !p.hasPermissions(2)) {
+      send(p, Jsons.obj("error", "DEDICATED_SERVER_OP_REQUIRED"));
+      return;
+    }
+    if (!RUNS.containsKey(p.getUUID()) && (RUNS.size() + STARTING.size()) >= 4) {
+      send(p, Jsons.obj("error", "MAX_CONCURRENT_RUNS_EXCEEDED"));
+      return;
+    }
     if (!Set.of("story", "practice", "research").contains(mode)) {
       send(p, Jsons.obj("error", "INVALID_MODE"));
       return;

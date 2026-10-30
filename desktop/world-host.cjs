@@ -48,9 +48,17 @@ class WorldHost{
   const timer=setTimeout(()=>{this.calls.delete(id);reject(Error('WORLD_REPLY_TIMEOUT'));},5000);this.calls.set(id,{resolve,reject,timer,child});child.postMessage({id,...message});
  });}
  async stop(){
-  const child=this.child;if(!child)return;this.child=null;
-  const exit=new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('WORLD_STOP_TIMEOUT')),5000);child.once('exit',()=>{clearTimeout(timer);resolve();});});
-  if(child.pid===undefined)child.once('spawn',()=>child.kill());child.kill();await exit;
+  const child=this.child;if(!child)return;
+  const exit=new Promise((resolve,reject)=>{
+   const timer=setTimeout(()=>{
+    try{if(child.pid)process.kill(child.pid,'SIGKILL');}catch{}
+    reject(Error('WORLD_STOP_TIMEOUT'));
+   },5000);
+   child.once('exit',()=>{clearTimeout(timer);resolve();});
+  });
+  if(child.pid===undefined)child.once('spawn',()=>child.kill());
+  child.kill();
+  try{await exit;}finally{if(this.child===child)this.child=null;}
  }
  async close(){this.closed=true;await this.queue.catch(()=>{});await this.stop();this.config=null;this.frame=null;}
 }

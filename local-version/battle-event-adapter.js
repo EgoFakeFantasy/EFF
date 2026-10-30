@@ -26,5 +26,5 @@ const BattleEventAdapter={key:'wuzhong-returner-phenomenon-lab-v1',state:null,ga
   if(owned)NarrativeTrials.loseCourt();else ui.dialogChoices.children[index].click();
   return true;
  },
- reset(){if(!this.available())return;RepressionUI.dismiss();this.state=null;this.engineGeneration=1;this.worldPose=null;this.gate=null;this.applied=false;this.observations=[];this.receipts=[];localStorage.removeItem(this.key);}
+ reset(){if(!this.available())return;RepressionUI.dismiss();this.state=null;this.engineGeneration=1;this.worldPose=null;this.gate=null;this.applied=false;this.observations=[];this.receipts=[];try{localStorage.removeItem(this.key);}catch{}}
 };

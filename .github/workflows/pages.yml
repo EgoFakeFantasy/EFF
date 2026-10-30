@@ -25,13 +25,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Run regressions before deploy
+        run: |
+          node tests/pixel-regression.cjs
+          node --test tests/phenomenon-runtime.test.cjs tests/local-host.test.cjs tests/local-agents.test.cjs tests/spectacle-plan.test.cjs tests/world-runtime.test.cjs
+
+      - name: Assemble Pages site
+        run: |
+          mkdir -p _site
+          cp -r index.html game.js styles.css assets new-version pixel-version local-version _site/
+          touch _site/.nojekyll
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: _site
 
       - name: Deploy to GitHub Pages
         id: deployment

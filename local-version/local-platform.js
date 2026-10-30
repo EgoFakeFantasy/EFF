@@ -16,7 +16,12 @@ const EFFLocal=(()=>{
  }
  if(enabled&&typeof Storage!=='undefined'){
   get=Storage.prototype.getItem;set=Storage.prototype.setItem;remove=Storage.prototype.removeItem;
-  if(native){for(const p of ['story','tech'])for(const k of keys){const physical=p+':'+k,v=native.bootstrap.entries?.[physical];if(typeof v==='string')set.call(localStorage,physical,v);else remove.call(localStorage,physical);}status=native.bootstrap.recovered?'已从备份恢复本地存档':'本地文件存档';}
+  if(native){
+   try{
+    for(const p of ['story','tech'])for(const k of keys){const physical=p+':'+k,v=native.bootstrap.entries?.[physical];if(typeof v==='string')set.call(localStorage,physical,v);else remove.call(localStorage,physical);}
+    status=native.bootstrap.recovered?'已从备份恢复本地存档':'本地文件存档';
+   }catch(e){status='本地镜像写入受限；采用文件存档';}
+  }
   const physical=key=>keys.includes(key)?profile+':'+key:key;
   const changed=(key,value)=>{if(native&&keys.some(k=>key===profile+':'+k)){pending[key]=value;if(!timer)timer=setTimeout(flush,60);}};
   Storage.prototype.getItem=function(key){return get.call(this,this===localStorage?physical(key):key);};
@@ -30,3 +35,6 @@ const EFFLocal=(()=>{
   const header=document.querySelector('.topbar');if(header){const badge=document.createElement('p');badge.id='localSaveStatus';badge.className='local-save-status';badge.setAttribute('role','status');header.after(badge);notify();}}
  return {enabled,profile,native,keys,flush,notify,init,applyEntries,get stopped(){return stopped;}};
 })();
+if(typeof window!=='undefined'){window.EFFLocal=EFFLocal;}
+if(typeof globalThis!=='undefined'){globalThis.EFFLocal=EFFLocal;}
+if(typeof module!=='undefined'&&module.exports){module.exports={EFFLocal};}

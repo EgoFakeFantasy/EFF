@@ -6,3 +6,15 @@ test('atomic files survive reload, serialize simultaneous writes and preserve pr
 test('corrupt primary restores the previous good backup and a next commit remains valid',async()=>{const s=new SaveStore(await fs.mkdtemp(path.join(os.tmpdir(),'eff-recover-')));await s.load();await s.commit({[key]:'{"area":"mirror","flags":{}}'});await s.commit({[key]:'{"area":"rain","flags":{}}'});await fs.writeFile(s.file,'broken');const n=new SaveStore(s.directory);await n.load();assert.equal(n.recovered,true);assert.equal(JSON.parse(n.entries[key]).area,'mirror');await n.commit({[key]:'{"area":"blood","flags":{}}'});assert.equal(readPacket(await fs.readFile(n.file,'utf8')).revision,2);});
 test('host rejects paths, prototypes, malformed JSON and oversized saves',()=>{assert.throws(()=>validateEntries({'../../private.txt':'{}'}),/KEY_NOT_ALLOWED/);assert.throws(()=>validateEntries({[key]:'{"__proto__":{"admin":true}}'}),/UNSAFE_FIELD/);assert.throws(()=>validateEntries({[key]:'bad'}));assert.throws(()=>validateEntries({[key]:'x'.repeat(524289)}),/SAVE_TOO_LARGE/);});
 test('legacy v1 and browser backups migrate into only the selected profile',()=>{const old={area:'blood',flags:{parents:true},trials:{version:1,court:{remaining:12000}}},entries=importData(JSON.stringify(old),'story');assert.deepEqual(JSON.parse(entries[key]),old);assert.deepEqual(Object.keys(entries),[key]);const v=importData(JSON.stringify({format:'eff-browser-backup',version:1,stores:{'wuzhong-returner-pixel-v1':JSON.stringify(old)}}),'tech');assert.ok(v['tech:wuzhong-returner-pixel-v1']);assert.throws(()=>importData('{}','tech'));});
+test('EFFLocal is exposed globally and window.EFFLocal.flush is safe to call on window close',async()=>{
+ const vm=require('node:vm');
+ const code=await fs.readFile(path.join(__dirname,'../local-version/local-platform.js'),'utf8');
+ const context={window:{effDesktop:{bootstrap:{entries:{}}}},console,setTimeout,clearTimeout};
+ context.window.window=context.window;
+ context.globalThis=context;
+ vm.createContext(context);
+ vm.runInContext(code,context);
+ assert.ok(context.window.EFFLocal,'EFFLocal should be attached to window');
+ assert.equal(typeof context.window.EFFLocal.flush,'function');
+ await assert.doesNotReject(()=>context.window.EFFLocal.flush());
+});

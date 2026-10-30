@@ -40,7 +40,10 @@ public final class BridgeProcess implements AutoCloseable {
                 .resolve(hash)
                 .toAbsolutePath()
                 .normalize();
-    if (sealedRuntime == null) {
+    Path marker = runtime.resolve(".extracted");
+    if (sealedRuntime == null && (!Files.isRegularFile(marker) || !Files.isRegularFile(runtime.resolve("bridge/server.cjs")))) {
+      synchronized (BridgeProcess.class) {
+        if (!Files.isRegularFile(marker) || !Files.isRegularFile(runtime.resolve("bridge/server.cjs"))) {
       Files.createDirectories(runtime);
       int total = 0;
       try (ZipInputStream in = new ZipInputStream(new ByteArrayInputStream(zip))) {
@@ -59,6 +62,8 @@ public final class BridgeProcess implements AutoCloseable {
           Files.write(target, data);
         }
       }
+      Files.writeString(marker, hash);
+    }
     }
     if (!Files.isRegularFile(runtime.resolve("bridge/server.cjs")))
       throw new IOException("STORY_RUNTIME_MISSING");

@@ -997,7 +997,7 @@ function saveRun(trialCheckpoint = false) {
   const trialSafe = trialCheckpoint && (NarrativeTrials.canCheckpoint() || NarrativeAgency.canCheckpoint());
   if (!trialSafe && (dialogActive || dialogResolving || (transitionLock && !endingId))) return false;
   try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify({ area: G.area, px: G.px, py: G.py, flags: F, memories: G.memories, counters: G.counters, protagonistName: G.protagonistName, seen: G.seen, endingId, trials: NarrativeTrials.snapshot(), agency: NarrativeAgency.snapshot() }));
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ version: 1, area: G.area, px: G.px, py: G.py, flags: F, memories: G.memories, counters: G.counters, protagonistName: G.protagonistName, seen: G.seen, endingId, trials: NarrativeTrials.snapshot(), agency: NarrativeAgency.snapshot() }));
     return true;
   } catch (e) { /* file:// 限制时忽略 */ }
   return false;
@@ -1015,7 +1015,7 @@ function isSaveRecord(value) {
 
 function savedNames(value, allowed) {
   if (!Array.isArray(value)) return [];
-  return [...new Set(value.filter(name => typeof name === "string" && name.length > 0 && (!allowed || allowed.has(name))))];
+  return [...new Set(value.filter(name => typeof name === "string" && name.length > 0 && name.length <= 80 && (!allowed || allowed.has(name))))];
 }
 
 function savedFlags(value) {
@@ -1074,7 +1074,7 @@ function loadAll() {
         }
         F = savedFlags(s.flags);
         NarrativeTrials.restore(s.trials);
-        G.memories = savedNames(s.memories);
+        G.memories = savedNames(s.memories).slice(0, 64);
         G.counters = savedCounters(s.counters);
         G.seen = savedNames(s.seen, PlayAids.inspectIds());
         NarrativeAgency.restore(s.agency);
