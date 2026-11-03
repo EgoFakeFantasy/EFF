@@ -1,4 +1,4 @@
-param([string]$Directory,[switch]$Prepare,[switch]$Verify,[string]$Jdk,[switch]$AllowRuleFallback)
+param([string]$Directory,[switch]$Prepare,[switch]$Verify,[string]$Jdk,[switch]$AllowRuleFallback,[switch]$MediumIntegrityHost)
 $ErrorActionPreference='Stop'
 $effRuntime=Join-Path $PSScriptRoot '../mc-1.20.1/runtime'
 if (-not $Directory) { $Directory=Join-Path $PSScriptRoot $(if($Verify){'run-protected-qa-'+(Get-Date -Format 'yyyyMMdd-HHmmss')}else{'run-protected'}) }
@@ -15,9 +15,11 @@ if ($Prepare -or $Verify) {
  & (Join-Path $PSScriptRoot 'gradlew.bat') @effArgs
  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
  $effConfig=Join-Path $effBuildDir 'private-launch.json'
+ # Default: MC runs at Low integrity below the kernel. Opt out only if a driver or mod cannot run that way.
+ $effSealFlags=@(); if ($MediumIntegrityHost) { $effSealFlags+='--medium-integrity-host' }
  $effGuard=Join-Path $PSScriptRoot 'build/guard/eff-guard.exe'
- if ($Verify) { & node (Join-Path $effRuntime 'guard/native-test.cjs') $effConfig $Directory $effGuard; exit $LASTEXITCODE }
- & node (Join-Path $effRuntime 'seal-runtime.cjs') $effConfig $Directory $effGuard
+ if ($Verify) { & node (Join-Path $effRuntime 'guard/native-test.cjs') $effConfig $Directory $effGuard @effSealFlags; exit $LASTEXITCODE }
+ & node (Join-Path $effRuntime 'seal-runtime.cjs') $effConfig $Directory $effGuard @effSealFlags
  exit $LASTEXITCODE
 }
 $effLauncher=Join-Path $Directory 'Start-Protected.cmd'

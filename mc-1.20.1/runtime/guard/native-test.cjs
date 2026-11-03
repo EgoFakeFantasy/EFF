@@ -1,13 +1,13 @@
 "use strict";
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),{spawn}=require('node:child_process');
 const {provision}=require('../seal-runtime.cjs');const wait=ms=>new Promise(r=>setTimeout(r,ms));
-const source=process.argv[2],destination=process.argv[3],binary=process.argv[4];
+const source=process.argv[2],destination=process.argv[3],binary=process.argv[4],mediumIntegrityHost=process.argv.includes('--medium-integrity-host');
 // Native QA uses a small, fixed JVM profile; gameplay launch manifests are untouched.
 const qa=JSON.parse(fs.readFileSync(source,'utf8'));
 qa.host.args=qa.host.args.filter(a=>!/^-(Xms|Xmx)/.test(a)&&!/^[-]XX:(ReservedCodeCacheSize|ActiveProcessorCount)=/.test(a)&&a!=='-XX:+UseG1GC');
 qa.host.args.splice(qa.host.args.indexOf('-cp'),0,'-Xms64m','-Xmx768m','-XX:+UseSerialGC','-XX:ReservedCodeCacheSize=64m','-XX:ActiveProcessorCount=2','-Deff.lowMemory=true');
 const qaInput=path.resolve(destination)+'-qa-input.json';fs.writeFileSync(qaInput,JSON.stringify(qa),{flag:'wx'});
-let s;try{s=provision(qaInput,destination,binary);}finally{fs.unlinkSync(qaInput);}
+let s;try{s=provision(qaInput,destination,binary,{mediumIntegrityHost});}finally{fs.unlinkSync(qaInput);}
 const seal=JSON.parse(fs.readFileSync(s.manifest,'utf8'));
 // Low-memory initial options are provided identically by the sealer for QA and play.
 const p=spawn('cmd.exe',['/d','/c',s.launcher],{stdio:['ignore','pipe','pipe'],windowsHide:true});let stderr='';p.stdout.resume();p.stderr.on('data',b=>stderr+=b);

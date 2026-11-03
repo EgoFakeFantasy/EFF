@@ -5,7 +5,7 @@ const hashBuffer=Buffer.allocUnsafe(1024*1024);
 function sha(file){const hash=createHash('sha256'),fd=fs.openSync(file,'r');try{let count;while((count=fs.readSync(fd,hashBuffer,0,hashBuffer.length,null))>0)hash.update(hashBuffer.subarray(0,count));return hash.digest('hex');}finally{fs.closeSync(fd);}}
 const jarMemory=['-J-Xms8m','-J-Xmx64m','-J-XX:+UseSerialGC','-J-XX:ReservedCodeCacheSize=16m','-J-XX:ActiveProcessorCount=2'];
 function walk(root){if(!fs.existsSync(root))return [];let list=[];for(const e of fs.readdirSync(root,{withFileTypes:true})){const f=path.join(root,e.name);if(e.isSymbolicLink())throw Error('SEAL_SYMLINK');if(e.isDirectory())list.push(...walk(f));else if(e.isFile())list.push(f);else throw Error('SEAL_SPECIAL_FILE');}return list.sort();}
-function provision(source,destination,guardBinary){
+function provision(source,destination,guardBinary,options={}){
  if(process.platform!=='win32')throw Error('WINDOWS_GUARD_REQUIRED');
  destination=path.resolve(destination);fs.mkdirSync(destination);fs.writeFileSync(path.join(destination,'.gitignore'),'*\n');const payload=path.join(destination,'payload');fs.mkdirSync(payload);
  const config=JSON.parse(fs.readFileSync(source,'utf8'));config.directory=path.join(destination,'authority');fs.mkdirSync(config.directory);
@@ -16,12 +16,15 @@ function provision(source,destination,guardBinary){
  function copy(source,name){const target=path.join(payload,name);fs.copyFileSync(source,target);pin(target);return target;}
  const guard=copy(guardBinary,'eff-guard.exe');
  const guardConfig=copy(path.join(__dirname,'guard/WindowsGuard.exe.config'),'eff-guard.exe.config');
- for(const name of ['controller.cjs','protected-child.cjs','engine-lineage.cjs'])copy(path.join(__dirname,name),name);
+ for(const name of ['controller.cjs','protected-child.cjs','engine-lineage.cjs','intrusion-defense.cjs'])copy(path.join(__dirname,name),name);
  config.workerJar=copy(config.workerJar,'workers.jar');pin(process.execPath);
  const executables=new Set([config.java,...Object.values(config.javaByRole||{})]);if(config.host)executables.add(config.host.command);
  for(const executable of executables){pin(executable);if(path.basename(executable).toLowerCase()==='java.exe'){const root=path.resolve(executable,'..','..');for(const dir of ['bin','lib','conf'])for(const f of walk(path.join(root,dir)))pin(f);if(fs.existsSync(path.join(root,'release')))pin(path.join(root,'release'));}}
  if(config.host){
   const h=config.host;h.cwd=path.join(destination,'mc-host');fs.mkdirSync(h.cwd);const args=h.args;
+  // MC runs below the kernel's integrity level unless the person preparing the seal opts out. The choice is
+  // part of the pinned manifest, so nothing running later (MC included) can switch it back.
+  h.lowIntegrity=options.mediumIntegrityHost!==true;h.integrityHelper=guard;
   if(h.loader&&h.loader!=='forge')throw Error('UNSUPPORTED_SEALED_LOADER');
   if(args.includes('-Deff.lowMemory=true'))fs.writeFileSync(path.join(h.cwd,'options.txt'),'renderDistance:2\nsimulationDistance:5\nparticles:2\nmipmapLevels:0\ngraphicsMode:0\nao:false\n');
   if(args.some(a=>/^(@|-javaagent:|-agentlib:|-agentpath:|-Xbootclasspath|--patch-module|-XX:(OnError|OnOutOfMemoryError)=|-XX:-DisableAttachMechanism)/i.test(a)))throw Error('UNAPPROVED_JVM_INJECTION');
@@ -111,4 +114,4 @@ function provision(source,destination,guardBinary){
  return {directory:destination,manifest,pin:pinValue,guard,guardHash,launcher,files:seal.files.length};
 }
 module.exports={provision,sha};
-if(require.main===module){try{const result=provision(process.argv[2],process.argv[3],process.argv[4]);process.stdout.write(JSON.stringify(result)+'\n');}catch(e){process.stderr.write(e.message+'\n');process.exitCode=1;}}
+if(require.main===module){try{const flags=process.argv.slice(5);if(flags.some(f=>f!=='--medium-integrity-host'))throw Error('UNKNOWN_SEAL_OPTION');const result=provision(process.argv[2],process.argv[3],process.argv[4],{mediumIntegrityHost:flags.includes('--medium-integrity-host')});process.stdout.write(JSON.stringify(result)+'\n');}catch(e){process.stderr.write(e.message+'\n');process.exitCode=1;}}

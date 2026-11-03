@@ -178,3 +178,70 @@ test("engine handoff lifecycle fences",async t=>{
   const changing=c.transition({source:"rebuild runtime.execution",actor:"player",revision:c.durable.state.revision});await ready;await c.close();release();await assert.rejects(changing,/CONTROLLER_STOPPED/);assert.ok(candidatePids.every(pid=>!alive(pid)));assert.equal(c.candidates.size,0);
  }));
 });
+
+test("host channel intrusion defense runs outside MC",async t=>{
+ const {HostFirewall,assertNoInjection,DISGUISE}=require("./intrusion-defense.cjs");
+ const directory=fs.mkdtempSync(path.join(os.tmpdir(),"eff-intrusion-"));
+ // A stand-in MC process: it holds a lease like MC does, so anything it signs is "authentic" to HMAC.
+ const host={command:process.execPath,args:["-e","setInterval(()=>{},1000)"],cwd:directory};
+ const c=new Controller({java,workerJar,directory,workerTimeout:1500,host});await c.start();
+ t.after(async()=>{await c.close();fs.rmSync(directory,{recursive:true,force:true});});
+ const post=async body=>{const r=await fetch(c.endpoint+"/v1/host",signed(c,body));return {status:r.status,...await r.json()};};
+ const play=(source,actor="player")=>post({op:"execute",source,actor,revision:c.durable.state.revision});
+ const until=async fn=>{for(let n=0;n<200;n++){if(fn())return;await wait(25);}throw Error("TIMEOUT");};
+ await t.test("smuggled fields and disguised program text are refused before any JVM sees them",async()=>{
+  const before=JSON.stringify(c.durable);
+  assert.equal((await post({op:"snapshot",trust:"kernel"})).error,"HOST_UNEXPECTED_FIELD");
+  // Visually "inspect", actually a right-to-left override hiding the real command order.
+  assert.equal((await play("inspect instance.world‮; erase entity.avatar")).error,"PROGRAM_DISGUISED_TEXT");
+  assert.equal(JSON.stringify(c.durable),before);
+  for(const ch of ["​","⁦","﻿","\u0007","­"])assert.ok(DISGUISE.test("a"+ch+"b"),JSON.stringify(ch));
+  assert.ok(!DISGUISE.test("erase entity.avatar; refuse ending.owned\n撤销 authority.recovery"));
+ });
+ await t.test("a third violation quarantines the host: its lease dies at once and the process is replaced",async()=>{
+  const oldPid=c.host.pid,oldEpoch=c.hostEpoch,stale=signed(c,{op:"snapshot"});
+  assert.equal((await post({op:"shutdown"})).error,"CONTROLLER_OP_NOT_ALLOWED");
+  assert.ok(c.events.some(e=>e.type==="host-quarantined"));
+  // The request was signed with the old lease; it is dead the moment quarantine fires, before the restart.
+  assert.equal((await (await fetch(c.endpoint+"/v1/host",stale)).json()).error,"INVALID_HOST_SIGNATURE");
+  await until(()=>c.hostEpoch===oldEpoch+1&&c.host&&c.host.pid!==oldPid);
+  assert.ok(c.events.some(e=>e.type==="host-replaced"&&/intrusion-quarantine:CONTROLLER_OP_NOT_ALLOWED/.test(e.reason)));
+  assert.equal(c.firewall.quarantined,null,"a fresh host epoch starts clean");
+  assert.equal((await post({op:"snapshot"})).status,200);
+ });
+ await t.test("a forged goodbye from a still-running MC never stops the kernel",async()=>{
+  const oldPid=c.host.pid;c.progress=null;
+  assert.equal((await post({op:"goodbye"})).result.stopping,true);assert.equal(c.userStopped,undefined);
+  // Commands after goodbye are refused; a ticking client after goodbye is the disguise giving itself away.
+  assert.equal((await post({op:"snapshot"})).error,"HOST_STOPPING");
+  assert.equal((await play("inspect instance.world")).error,"HOST_ACTIVE_AFTER_GOODBYE");
+  let tick=100;for(let n=0;n<3;n++)await post({op:"heartbeat",sequence:n+1,clientTick:tick+=20,serverTick:tick,paused:false,active:true});
+  await until(()=>c.host&&c.host.pid!==oldPid);
+  assert.equal(c.userStopped,undefined);assert.ok(c.events.some(e=>/HOST_ACTIVE_AFTER_GOODBYE/.test(e.reason||"")));
+ });
+ await t.test("a genuine goodbye is a stop only once the process has actually exited",async()=>{
+  let stopped=false;c.onUserStop=()=>{stopped=true;};
+  await post({op:"heartbeat",sequence:1,clientTick:5,serverTick:5,paused:false,active:true});
+  await post({op:"goodbye"});await post({op:"heartbeat",sequence:2,clientTick:5,serverTick:6,paused:false,active:true});
+  assert.equal(c.userStopped,undefined);c.host.kill();
+  await until(()=>stopped);assert.equal(c.userStopped,true);c.onUserStop=undefined;
+ });
+ await t.test("player command flooding is rate limited per actor",()=>{
+  let now=0;const f=new HostFirewall(()=>now);const base={op:"execute",session:"s",epoch:1,requestId:"r".repeat(16),revision:0,source:"inspect instance.world"};
+  for(let n=0;n<12;n++)f.admit({...base,actor:"player"});
+  assert.throws(()=>f.admit({...base,actor:"player"}),/HOST_COMMAND_FLOOD/);f.admit({...base,actor:"intruder"});
+  now+=61000;f.admit({...base,actor:"player"});
+  assert.throws(()=>f.admit({...base,actor:"heartbeat"}),/INVALID_PROGRAM_ACTOR/);
+ });
+ await t.test("agent and boot-path JVM switches are refused at spawn, and Low integrity fails closed off Windows",async()=>{
+  for(const a of ["-javaagent:evil.jar","-agentpath:x.dll","-Xbootclasspath/a:x","@args","-XX:-DisableAttachMechanism"])assert.throws(()=>assertNoInjection(["-cp","a.jar",a]),/HOST_JVM_INJECTION_REFUSED/);
+  assertNoInjection(["-Xmx768m","-XX:+DisableAttachMechanism","-cp","a.jar","Main"]);
+  const saved=c.config.host;
+  try{
+   c.config.host={...saved,args:["-javaagent:evil.jar",...saved.args]};assert.throws(()=>c.hostLaunch(),/HOST_JVM_INJECTION_REFUSED/);
+   c.config.host={...saved,lowIntegrity:true,integrityHelper:"eff-guard.exe"};
+   if(process.platform==="win32")assert.deepEqual(c.hostLaunch().args.slice(0,3),["--low-integrity-host",saved.cwd,saved.command]);
+   else assert.throws(()=>c.hostLaunch(),/LOW_INTEGRITY_HOST_UNAVAILABLE/);
+  }finally{c.config.host=saved;}
+ });
+});

@@ -61,6 +61,38 @@
 - 心跳必须来自有效会话，客户端/服务端循环计数不能倒退。过期或重放数据不会刷新健康时间。超时、退避和重启窗口使用单调时间；墙钟只用于日志。
 - 应用层继续区分世界加载、原版暂停与模拟冻结；宿主加载预算为 180 秒，原生验收每段等待有 240 秒总预算；操作阶段时限从研究场原生状态就绪后开始。HTTP 请求有大小、并发、头部和读取时限，工作进程消息与对局回执也有总量限制。
 
+### 内核入侵防御
+
+威胁：任何在 MC 加载时进入 MC JVM 的代码（模组、mixin、Java agent、通过 JNA 调用的原生代码）都拥有 MC 进程的全部权限，
+包括它持有的宿主租约。它签出的请求在 HMAC 上是“真的”，它可以冒充玩家或外来者下指令、伪造“玩家已退出”，
+也可以尝试直接打开控制器、守护进程或工作 JVM 去注入、读内存或结束它们。
+
+因此防御不放在 MC 里，也不依赖 MC 配合：判断全部发生在 MC 碰不到的进程和对象上。
+
+1. **操作系统强制的权限隔离（默认开启）。** 控制器不再直接启动 `java.exe`，而是通过已封存的 `eff-guard.exe --low-integrity-host`：
+   它只把 `mc-host` 标为低完整性可写，然后把自身令牌降到 Low，再在一个关闭即清理的嵌套 Job 里启动 MC。
+   守护、控制器、两个工作 JVM 保持 Medium；`authority` 目录被打上带 no-read-up / no-write-up 的 Medium 标签。
+   Windows 内核的强制完整性控制据此拒绝 MC 里的任何代码：以写入、读取内存或结束为目的打开内核进程、
+   读取账本与密钥、写入 `payload` 或 `authority`、向内核窗口发送消息（UIPI）。降低完整性不可逆，进程内无法自行升回。
+   MC 的 Java 参数文件因此改放在只读的 `host-launch` 目录，不放在 MC 可写的 `mc-host`。
+2. **宿主通道的准入控制（在控制器中）。** 签名只证明“请求来自 MC 进程”，不证明“来自玩家”。控制器另外检查：
+   - 每种操作只接受固定字段，多出的字段一律拒绝；
+   - 程序文本中的控制字符、双向覆盖符、零宽字符直接拒绝，避免日志和界面显示的指令与实际执行的不同；
+   - 按行动方限流（玩家每分钟 12 条、外来者 8 条、原生观察 4 条），超出视为冒充刷指令；
+   - 60 秒内累计 3 次违规即隔离：租约立刻轮换（已持有的签名全部失效），MC 进程树被替换，并计入现有的宿主重启熔断。
+3. **退出不再凭一句话。** `goodbye` 只把宿主标为“正在退出”；只有 MC 进程真的退出才算玩家结束。
+   `goodbye` 之后仍有客户端 tick 或继续下指令，即判定为伪造退出并按上一条隔离。
+4. **启动时再查一次注入开关。** 每次拉起宿主前，控制器独立拒绝 `-javaagent`、`-agentpath`、`-agentlib`、`-Xbootclasspath`、
+   `--patch-module`、参数文件 `@` 等开关，不只依赖准备阶段的检查。
+
+这项防御本身不能被 MC 内的脚本关闭：开关写在由启动器固定哈希的清单里，判断逻辑在 Medium 进程中运行，
+MC 既不能改文件，也不能打开这些进程。确有显卡驱动或模组无法在 Low 下运行时，
+可在准备新目录时加 `-MediumIntegrityHost` 退回原来的同级运行（第 2～4 项仍然有效）；这个选择同样被封存，运行后不能切换。
+
+边界：这里防的是“MC 里的代码攻击内核”。它不能区分 MC 内部的脚本与玩家在 MC 窗口里的真实操作：
+两者走同一个进程，只能靠第 2～3 项限制其影响。它也不防同一 Windows 用户下 MC 之外另起的恶意程序，
+以及内核级漏洞；那需要单独账户或虚拟机。
+
 ## 准备、启动和更新
 
 需要 Windows 10/11、.NET Framework 4.8、Java 17 JDK 和 Node.js 22+。首次 Fabric/Gradle 依赖准备需要网络。守护源码位于 `runtime/guard/WindowsGuard.cs`，构建不下载第三方守护二进制。
@@ -97,4 +129,4 @@ Windows 构建包含原生守护检查：实际禁止写入/删除/替换代码�
 
 同 Windows 用户权限下，能任意操纵操作系统、守护内存或启动器的攻击者，仍可突破这一可信边界。DPAPI 不隔离同一用户的任意恶意程序，Job Object 也不是安全沙箱。这个版本加强的是代码文件的运行期写保护、可观察故障后的恢复和提交连续性，不承诺无缝接管任意 MC 内存或对所有运行层攻击免疫。
 
-实现依据：[Windows Job Objects](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects)、[文件共享与打开语义](https://learn.microsoft.com/en-us/windows/win32/fileio/creating-and-opening-files)。
+实现依据：[强制完整性控制](https://learn.microsoft.com/en-us/windows/win32/secauthz/mandatory-integrity-control)、[以低完整性运行](https://learn.microsoft.com/en-us/previous-versions/dotnet/articles/bb625960(v=msdn.10))、[Windows Job Objects](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects)、[文件共享与打开语义](https://learn.microsoft.com/en-us/windows/win32/fileio/creating-and-opening-files)。

@@ -62,6 +62,8 @@ refuse ending.owned;
 .\start-protected.ps1 -Verify -AllowRuleFallback -Jdk C:\路径\jdk-17 -Directory C:\路径\EFF-Forge-QA-Rule
 ```
 
+受保护入口默认让 MC 以 Windows 低完整性运行，内核（守护、控制器、工作 JVM、账本）在其之上，MC 内加载的任何代码都无法打开或改写它们；详见 [内核入侵防御](../mc-1.20.1/PROTECTED_RUNTIME.md#内核入侵防御)。个别显卡驱动或模组不兼容时，准备新目录时加 `-MediumIntegrityHost`。
+
 封存仅在新部署时建立信任基线；开始游玩不会自动重封存或重置战果。增加或更新模组必须准备新实例，不可把可写的 Gradle 缓存当作保护后的执行来源。完整性保护不提供对同账户或管理员的绝对防御。
 
 低内存受保护入口保留 MC 768 MiB 堆、工作 JVM 各 64 MiB 堆、控制器及剧情桥各 96 MiB V8 堆预算，使用平坦的专用引导世界。原生内存、Forge 及其他模组和本地模型仍另占内存；这些数值不是整机占用上限。实际战斗在 `eff:phenomenon` 维度中进行。

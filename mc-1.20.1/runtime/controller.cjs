@@ -3,6 +3,7 @@ const fs = require("node:fs"), path = require("node:path"), http = require("node
 const { spawn } = require("node:child_process"), { randomBytes, createHash, createHmac, timingSafeEqual } = require("node:crypto");
 const { createInterface } = require("node:readline");
 const Engines = require("./engine-lineage.cjs");
+const { HostFirewall, assertNoInjection } = require("./intrusion-defense.cjs");
 const monotonic = () => Number(process.hrtime.bigint()/1000000n);
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const cleanEnv = () => { const env={...process.env}; for(const k of Object.keys(env)) if(["JAVA_TOOL_OPTIONS","JDK_JAVA_OPTIONS","_JAVA_OPTIONS","CLASSPATH","NODE_OPTIONS","NODE_PATH"].includes(k.toUpperCase()) || k.toUpperCase().startsWith("EFF_")) delete env[k]; return env; };
@@ -87,7 +88,7 @@ class Controller {
     this.ruleset=Engines.hash(fs.readFileSync(config.workerJar));
     this.initialEngines=Engines.roots(this.ruleset);
     this.session=randomBytes(16).toString("hex");this.token=randomBytes(32).toString("hex");this.hostEpoch=0;
-    this.workers={policy:new WorkerSlot(this,"policy"),execution:new WorkerSlot(this,"execution")};this.events=[];this.serial=Promise.resolve();this.closed=false;this.hostFailures=[];this.seenRequests=new Set();this.candidates=new Set();
+    this.workers={policy:new WorkerSlot(this,"policy"),execution:new WorkerSlot(this,"execution")};this.events=[];this.firewall=new HostFirewall(monotonic);this.serial=Promise.resolve();this.closed=false;this.hostFailures=[];this.seenRequests=new Set();this.candidates=new Set();
   }
   event(type,details={}){this.events.push({time:Date.now(),type,...details});if(this.events.length>128)this.events.shift();}
   queue(fn){const p=this.serial.then(fn);this.serial=p.catch(()=>{});return p;}
@@ -135,6 +136,8 @@ class Controller {
       const chunks=[];let bytes=0;for await(const chunk of req){bytes+=chunk.length;if(bytes>65536)throw Error("REQUEST_BUDGET");chunks.push(chunk);}req.setTimeout(0);
       const raw=Buffer.concat(chunks);if(!this.authorized(req,raw))throw Error("INVALID_HOST_SIGNATURE");
       const r=JSON.parse(raw.toString("utf8"));if(r.session!==this.session||r.epoch!==this.hostEpoch)throw Error("STALE_HOST_EPOCH");
+      // Signed only proves the request came from inside MC; admission is decided out here.
+      try{this.firewall.admit(r);}catch(e){if(e.intrusion)this.intrusion(e.message,this.hostEpoch);throw e;}
       if(typeof r.requestId!=="string"||!/^[-a-zA-Z0-9]{16,64}$/.test(r.requestId))throw Error("INVALID_REQUEST_ID");
       if(this.seenRequests.has(r.requestId))throw Error("REQUEST_REPLAY");this.seenRequests.add(r.requestId);if(this.seenRequests.size>512)this.seenRequests.delete(this.seenRequests.values().next().value);
       const key=this.token,epoch=this.hostEpoch;
@@ -148,13 +151,15 @@ class Controller {
       case "heartbeat":
         if(!Number.isSafeInteger(r.clientTick)||!Number.isSafeInteger(r.serverTick)||r.clientTick<0||r.serverTick<0||!Number.isSafeInteger(r.sequence))throw Error("INVALID_PROGRESS");
         if(r.sequence<=(this.lastHeartbeatSequence||0)||this.progress&&(r.clientTick<this.progress.clientTick||r.serverTick<this.progress.serverTick))throw Error("HEARTBEAT_REPLAY");
+        try{this.firewall.checkHeartbeat(r.clientTick);}catch(e){this.intrusion(e.message,this.hostEpoch);throw e;}
         this.lastHeartbeatSequence=r.sequence;
         this.lastContact=monotonic();if(r.active===true)this.hostReady=true;
         if(this.progress?.clientTick!==r.clientTick){this.clientProgress=monotonic();}
         if(this.progress?.serverTick!==r.serverTick){this.serverProgress=monotonic();}
         this.progress={clientTick:r.clientTick,serverTick:r.serverTick,paused:r.paused===true,active:r.active===true};
         return {commit:this.durable.commit};
-      case "goodbye":this.userStopped=true;this.event("host-user-stop",{epoch:this.hostEpoch});if(this.onUserStop)setTimeout(()=>this.onUserStop(),50);return {stopped:true};
+      // Not a stop yet: the controller waits for the process to actually exit (see monitor/host exit).
+      case "goodbye":this.firewall.noteGoodbye();this.event("host-goodbye",{epoch:this.hostEpoch});return {stopping:true};
       case "snapshot":return this.snapshot();
       case "execute":return this.transition(r);
       default:throw Error("CONTROLLER_OP_NOT_ALLOWED");
@@ -223,25 +228,53 @@ class Controller {
     }catch(e){for(const [role,child]of Object.entries(staged))if(this.workers[role]!==child)await child.close();throw e;}
     finally{for(const child of Object.values(staged))this.candidates.delete(child);this.generating=false;}
   }
+  userStop(){
+    if(this.userStopped)return;this.userStopped=true;this.event("host-user-stop",{epoch:this.hostEpoch});if(this.onUserStop)setTimeout(()=>this.onUserStop(),50);
+  }
+  // A host that tried to disguise or flood commands is fenced from outside: its lease is rotated at once,
+  // so nothing it already holds can sign another request, and the process tree is replaced.
+  intrusion(reason,epoch){
+    this.event("host-intrusion",{reason,epoch});
+    if(!this.firewall.quarantined||this.quarantining||epoch!==this.hostEpoch||!this.host)return;
+    this.quarantining=true;this.token=randomBytes(32).toString("hex");
+    this.event("host-quarantined",{reason:this.firewall.quarantined,epoch,pid:this.host.pid});
+    setImmediate(()=>this.queue(()=>this.replaceHost("intrusion-quarantine:"+this.firewall.quarantined)).catch(e=>this.event("host-circuit",{reason:e.message})).finally(()=>{this.quarantining=false;}));
+  }
+  hostLaunch(){
+    const h=this.config.host;assertNoInjection(h.args);
+    let args=h.args;
+    // Low integrity: the guard's helper labels mc-host writable for Low, drops its own token to Low and runs MC
+    // under it. Windows mandatory integrity control then denies MC (and anything loaded into it) any write or read
+    // handle on this controller, the guard, the worker JVMs and the authority directory.
+    const low=h.lowIntegrity===true;
+    if(low&&(process.platform!=="win32"||typeof h.integrityHelper!=="string"))throw Error("LOW_INTEGRITY_HOST_UNAVAILABLE");
+    if(h.useArgFile){
+      // The argument file must be readable by a Low process but never writable by it, so it cannot sit in mc-host.
+      const dir=low?path.join(path.dirname(this.directory),"host-launch"):this.directory;fs.mkdirSync(dir,{recursive:true});
+      const file=path.join(dir,"host-launch.args");
+      fs.writeFileSync(file,h.args.map(a=>'"'+String(a).replace(/\\/g,"\\\\").replace(/"/g,'\\"')+'"').join("\n"),{mode:0o600});
+      args=["@"+file];
+    }
+    return low?{command:h.integrityHelper,args:["--low-integrity-host",h.cwd,h.command,...args]}:{command:h.command,args};
+  }
   async spawnHost(){
     const h=this.config.host;
     if(this.closed||this.host)throw Error("HOST_ALREADY_ACTIVE");
     await this.config.store?.verify();
-    this.hostEpoch++;this.seenRequests.clear();this.lastHeartbeatSequence=0;this.token=randomBytes(32).toString("hex");
+    const launch=this.hostLaunch();
+    this.hostEpoch++;this.seenRequests.clear();this.lastHeartbeatSequence=0;this.token=randomBytes(32).toString("hex");this.firewall.reset();
     const env={...cleanEnv(),...(h.env||{}),EFF_RUNTIME_ENDPOINT:this.endpoint,EFF_RUNTIME_SESSION:this.session,EFF_RUNTIME_LEASE:this.token,EFF_RUNTIME_EPOCH:String(this.hostEpoch),EFF_RUNTIME_GUARD_GENERATION:String(this.config.protectedGeneration||0)};
     // A fixed, locally produced launch manifest. No executable/argument input comes from gameplay or a model.
-    let args=h.args;
-    if(h.useArgFile){
-      const file=path.join(this.directory,"host-launch.args");
-      fs.writeFileSync(file,h.args.map(a=>'"'+String(a).replace(/\\/g,"\\\\").replace(/"/g,'\\"')+'"').join("\n"),{mode:0o600});
-      args=["@"+file];
-    }
-    const child=spawn(h.command,args,{cwd:h.cwd,env,stdio:["ignore","pipe","pipe"],windowsHide:true});this.host=child;
+    const child=spawn(launch.command,launch.args,{cwd:h.cwd,env,stdio:["ignore","pipe","pipe"],windowsHide:true});this.host=child;
     this.hostStarted=monotonic();this.lastContact=0;this.hostReady=false;this.clientProgress=monotonic();this.serverProgress=monotonic();this.progress=null;
     const log=fs.createWriteStream(path.join(this.directory,`host-${this.hostEpoch}.log`),{flags:"a"});
     child.stdout.pipe(log,{end:false});child.stderr.pipe(log,{end:false});
     child.on("error",()=>this.event("host-start-failed"));
-    child.on("exit",()=>{log.end();this.event("host-exit",{pid:child.pid,epoch:this.hostEpoch});if(this.host===child&&!this.closed&&!this.userStopped)this.queue(()=>this.host===child?this.replaceHost("process-exited"):undefined).catch(e=>this.event("host-circuit",{reason:e.message}));});
+    child.on("exit",()=>{log.end();this.event("host-exit",{pid:child.pid,epoch:this.hostEpoch});
+      if(this.host!==child||this.closed||this.userStopped)return;
+      // Only an actual exit after goodbye is the player quitting; a goodbye alone never stops the kernel.
+      if(this.firewall.goodbye&&!this.firewall.quarantined){this.host=null;this.userStop();return;}
+      this.queue(()=>this.host===child?this.replaceHost("process-exited"):undefined).catch(e=>this.event("host-circuit",{reason:e.message}));});
     this.event("host-start",{pid:child.pid,epoch:this.hostEpoch});
   }
   async replaceHost(reason){
@@ -255,6 +288,8 @@ class Controller {
   async monitor(){
     if(!this.host||this.closed||this.replacing||this.userStopped)return;
     const now=monotonic(), startup=this.config.startupTimeout||180000,timeout=this.config.progressTimeout||12000;
+    // Goodbye but still running long after: stop it the way the old immediate goodbye did, without trusting it earlier.
+    if(this.firewall.goodbye){if(this.firewall.goodbyeExpired()){this.event("host-goodbye-timeout",{epoch:this.hostEpoch});this.userStop();}return;}
     let reason="";
     if(!this.hostReady){if(now-this.hostStarted>startup)reason="HOST_STARTUP_TIMEOUT";}
     else if(now-this.lastContact>timeout||now-this.clientProgress>timeout||this.progress?.active&&!this.progress.paused&&now-this.serverProgress>timeout)reason="HOST_PROGRESS_TIMEOUT";
