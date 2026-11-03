@@ -1,5 +1,5 @@
 plugins { id 'fabric-loom' version '1.10.5' }
-version = '0.5.1+mc1.20.1'
+version = '0.6.0+mc1.20.1'
 group = 'eff.minecraft'
 base { archivesName = 'eff-minecraft-runtime-1.20.1' }
 repositories { mavenCentral() }
@@ -137,7 +137,7 @@ tasks.register('exportManagedLaunch') {
   args += run.args
   run.argumentProviders.each { args.addAll(it.asArguments()) }
   def command = javaToolchains.launcherFor(java.toolchain).get().executablePath.asFile.absolutePath
-  def config = [java:command, workerJar:tasks.named('runtimeKernelJar').get().archiveFile.get().asFile.absolutePath,
+  def config = [ java:command, workerJar:tasks.named('runtimeKernelJar').get().archiveFile.get().asFile.absolutePath,
     directory:new File(directory,'authority').absolutePath,
     host:[command:command,args:args,cwd:game.absolutePath,env:run.internalEnvironmentVars.get(),useArgFile:true]]
   def target = new File(directory,'private-launch.json')
@@ -169,3 +169,5 @@ if (System.getProperty('os.name').toLowerCase().contains('windows')) {
  }
  check { dependsOn guardianTest }
 }
+
+apply from: 'anti-death.gradle'

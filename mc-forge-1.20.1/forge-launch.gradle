@@ -15,6 +15,9 @@ tasks.register('exportManagedLaunch') {
   } else args += ['-Xms128m','-Xmx2G']
   args += ['-XX:+DisableAttachMechanism','-XX:+ExitOnOutOfMemoryError','-Deff.lowMemory='+lowMemory,'-Deff.preview=true','-Deff.previewResearch=true']
   if(project.hasProperty('effManagedTest')) args += '-Deff.managedSelftest=true'
+  if(project.hasProperty('effEntityGuardTest')) args += '-Deff.entityGuardSelftest=true'
+  if(project.hasProperty('effEntityGuardCase')) { def profile=project.property('effEntityGuardCase').toString(); if(!(profile in ['dying','zero-health','nan','removed','player'])) throw new GradleException('Unknown native guard case'); args += '-Deff.entityGuardCase='+profile }
+  if(project.hasProperty('effPig2Lab')) args += '-Deff.pig2Lab=true'
   if(project.hasProperty('effGuardedTest')) args += '-Deff.guardedSelftest=true'
   if(project.hasProperty('effGuardedFallbackTest')) args += '-Deff.guardedAllowFallback=true'
   args += ['-cp',resolved.classpath,resolved.main]

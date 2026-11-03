@@ -98,3 +98,7 @@ Windows 构建包含原生守护检查：实际禁止写入/删除/替换代码�
 同 Windows 用户权限下，能任意操纵操作系统、守护内存或启动器的攻击者，仍可突破这一可信边界。DPAPI 不隔离同一用户的任意恶意程序，Job Object 也不是安全沙箱。这个版本加强的是代码文件的运行期写保护、可观察故障后的恢复和提交连续性，不承诺无缝接管任意 MC 内存或对所有运行层攻击免疫。
 
 实现依据：[Windows Job Objects](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects)、[文件共享与打开语义](https://learn.microsoft.com/en-us/windows/win32/fileio/creating-and-opening-files)。
+
+## 0.6 实体故障入口
+
+玩家死亡、投影死亡或生命值异常、登记丢失和战场外移除现在也能触发外层恢复。受保护模式的宿主退出、停滞与显式宿主替换统一通过整棵 Job 清理后再启动，防止原宿主的自重启子 JVM 留存。实体事故额外使用外层账本中的持久化计数，第三次停止自动恢复；合法身体删除、恢复权限撤销与终局保留。实现、原样 pig2 实验及观测边界见 [反秒杀守护](./ANTI_INSTANT_KILL.md)。

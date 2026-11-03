@@ -17,6 +17,7 @@ test('native code locks, outer ledger and complete process-tree recovery',async 
  fs.writeFileSync(child,`require('./protected-child.cjs');module.exports=require.cache[require.resolve('./protected-child.cjs')].exports;
 module.exports.onReady=async(c,g)=>{
  if(g===1){await c.transition({actor:'player',revision:0,source:'disable control.tether; disable event.possess; disable authority.recovery'});for(let n=0;n<2;n++)await c.transition({actor:'player',revision:c.durable.state.revision,source:'rebuild runtime.execution'});}
+ if(g===1){const D=require('./projection-guard.cjs');await c.persist(c.durable.state,c.durable.engines,D.nextDefense(c.durable.defense,{subject:'avatar',reason:'ENTITY_DYING'},c.durable.state));}
  let rollbackDenied=false;try{await c.config.store.commit(c.durable.commit,{...c.durable,commit:c.durable.commit+1,state:{...c.durable.state,recovery:true}});}catch(e){rollbackDenied=e.message==='REVOCATION_ROLLBACK';}
  const lineageDenied={};
  const forge=async(name,mutate)=>{const body=JSON.parse(JSON.stringify(c.durable));body.commit++;mutate(body);try{await c.config.store.commit(c.durable.commit,body);lineageDenied[name]=false;}catch(e){lineageDenied[name]=e.message.startsWith('ENGINE_LINEAGE_');}};
@@ -26,7 +27,11 @@ module.exports.onReady=async(c,g)=>{
  await forge('changedId',b=>b.engines.execution.at(-1).id='f'.repeat(64));
  await forge('removed',b=>delete b.engines);
  await forge('ruleset',b=>b.engines.execution[0].ruleset='0'.repeat(64));
- const snapshot=await c.snapshot();require('node:fs').writeFileSync(require('node:path').join(c.directory,'proof-'+g+'.json'),JSON.stringify({pid:process.pid,generation:g,snapshot,rollbackDenied,lineageDenied,engines:c.durable.engines}));};`);
+ const defenseDenied={};for(const name of ['rollback','jump','removed','rewrite']){const body=JSON.parse(JSON.stringify(c.durable));body.commit++;if(name==='rollback')body.defense={schema:1,incidents:0,circuitOpen:false,lastIncident:null};else if(name==='jump'){body.defense.incidents=3;body.defense.circuitOpen=true;}else if(name==='removed')delete body.defense;else body.defense.lastIncident.id='f'.repeat(32);try{await c.config.store.commit(c.durable.commit,body);defenseDenied[name]=false;}catch(e){defenseDenied[name]=e.message.startsWith('DEFENSE_');}}
+ const cp=require('node:child_process'),fs=require('node:fs'),path=require('node:path');
+ const orphanFile=path.join(c.directory,'orphan-'+g+'.json');const own=cp.spawn(process.execPath,['-e',"const cp=require('node:child_process');const p=cp.spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});require('node:fs').writeFileSync(process.argv[1],JSON.stringify({child:process.pid,grandchild:p.pid}));setInterval(()=>{},1000)",orphanFile],{stdio:'ignore',windowsHide:true});
+ for(let n=0;n<100&&!fs.existsSync(orphanFile);n++)await new Promise(r=>setTimeout(r,20));const descendants=JSON.parse(fs.readFileSync(orphanFile,'utf8'));
+ const snapshot=await c.snapshot();require('node:fs').writeFileSync(require('node:path').join(c.directory,'proof-'+g+'.json'),JSON.stringify({pid:process.pid,generation:g,snapshot,rollbackDenied,lineageDenied,defenseDenied,descendants,engines:c.durable.engines}));};`);
  seal.child=child;seal.files.push({path:child,sha256:sha(child),size:fs.statSync(child).size});seal.trees[0].entries.push('fixture.cjs');fs.writeFileSync(s.manifest,JSON.stringify(seal));s.pin=sha(s.manifest);
  let p=run(s);const checks=[];t.after(async()=>{if(p.exitCode===null&&p.signalCode===null){p.kill();await stopped(p);}const resolved=fs.realpathSync(root),base=fs.realpathSync(os.tmpdir());if(path.dirname(resolved)!==base||!path.basename(resolved).startsWith('eff-native-guard-'))throw Error('UNSAFE_TEST_CLEANUP');fs.rmSync(resolved,{recursive:true,force:true});});
  const file=g=>path.join(seal.config.directory,'proof-'+g+'.json');
@@ -36,6 +41,7 @@ module.exports.onReady=async(c,g)=>{
  await t.test('recursive execution engines commit an append-only ancestry outside the replaceable controller',()=>{assert.equal(first.engines.execution.length,3);assert.equal(first.engines.execution[2].parent,first.engines.execution[1].id);assert.equal(first.engines.execution[1].parent,first.engines.execution[0].id);checks.push('outer-engine-ancestry');});
  await t.test('the outer ledger rejects lineage rollback, skipped generations and removal',()=>{for(const name of ['rollback','jump','removed'])assert.equal(first.lineageDenied[name],true,name);checks.push('outer-lineage-rollback-jump-removed');});
  await t.test('the outer ledger independently pins engine identifiers and the sealed worker ruleset',()=>{for(const name of ['changedId','ruleset'])assert.equal(first.lineageDenied[name],true,name);checks.push('outer-lineage-id-ruleset');});
+ await t.test('outer ledger independently rejects defense budget rollback, jumps, removal and rewrite',()=>{for(const name of ['rollback','jump','removed','rewrite'])assert.equal(first.defenseDenied[name],true,name);assert.equal(first.snapshot.runtime.defense.incidents,1);});
  await t.test('a second guardian cannot take the same ledger or truncate it',()=>{
   const result=spawnSync(s.guard,[s.manifest,s.pin],{encoding:'utf8',windowsHide:true,timeout:20000});assert.equal(result.status,2);assert.ok(alive(first.pid));checks.push('single-outer-writer');
  });
@@ -47,12 +53,12 @@ module.exports.onReady=async(c,g)=>{
  await t.test('killing the controller drains the old job before restarting with the same durable revocation',async()=>{
   process.kill(first.pid);const second=await until(()=>fs.existsSync(file(2))&&JSON.parse(fs.readFileSync(file(2),'utf8')));
   assert.notEqual(second.pid,first.pid);assert.equal(second.snapshot.fields['authority.recovery.active'],false);assert.deepEqual(second.engines,first.engines);
-  assert.equal(alive(first.snapshot.runtime.policy.pid),false);assert.equal(alive(first.snapshot.runtime.execution.pid),false);
+  assert.equal(alive(first.snapshot.runtime.policy.pid),false);assert.equal(alive(first.snapshot.runtime.execution.pid),false);assert.equal(alive(first.descendants.child),false);assert.equal(alive(first.descendants.grandchild),false);
   const events=fs.readFileSync(path.join(seal.config.directory,'guard-events.jsonl'),'utf8');assert.match(events,/job-drained/);assert.match(events,/"active":0/);const drained=events.trim().split("\n").map(line=>JSON.parse(line)).find(e=>e.type==="job-drained");assert.ok(drained.detail.peakCommittedBytes>0);checks.push('controller-recovery-and-no-orphans');
  });
  let second=JSON.parse(fs.readFileSync(file(2),'utf8'));
  await t.test('killing the outer guard closes its kernel job and stops all owned JVMs',async()=>{
-  p.kill();await stopped(p);await until(()=>!alive(second.pid)&&!alive(second.snapshot.runtime.policy.pid)&&!alive(second.snapshot.runtime.execution.pid));checks.push('guard-death-kills-descendants');
+  p.kill();await stopped(p);await until(()=>!alive(second.pid)&&!alive(second.snapshot.runtime.policy.pid)&&!alive(second.snapshot.runtime.execution.pid)&&!alive(second.descendants.child)&&!alive(second.descendants.grandchild));checks.push('guard-death-kills-descendants');
  });
  await t.test('offline truncation to an older authenticated ledger prefix is detected by its independent head',()=>{
   const ledger=path.join(seal.config.directory,'ledger.bin'),original=fs.readFileSync(ledger);fs.writeFileSync(ledger,original.subarray(0,4+original.readInt32LE(0)+32));

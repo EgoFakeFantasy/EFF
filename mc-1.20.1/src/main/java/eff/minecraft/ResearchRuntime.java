@@ -70,7 +70,16 @@ public final class ResearchRuntime implements ResearchSession {
   }
 
   private boolean alive() {
-    return avatar != null && !avatar.isRemoved();
+    return ProjectionProbe.healthy(avatar, arena.world, arena.researchAnchor());
+  }
+
+  private void discardAvatar() {
+    if (avatar == null) return;
+    if (!avatar.isRemoved()) avatar.discard();
+    // Keep the object if a removal hook was cancelled or replaced. Forgetting it would falsely
+    // report successful erasure while the entity is still present in either world index.
+    if (arena.world.getEntity(avatar.getUUID()) != avatar
+        && arena.world.getEntity(avatar.getId()) != avatar) avatar = null;
   }
 
   private void note(String text) {
@@ -81,7 +90,9 @@ public final class ResearchRuntime implements ResearchSession {
   private void spawn() {
     if (alive()) throw new IllegalArgumentException("ENTITY_ALREADY_ALIVE");
     Vec3 p = arena.researchAnchor().add(3, 0, -3);
-    avatar = new ArmorStand(arena.world, p.x, p.y, p.z);
+    discardAvatar();
+    if (avatar != null) throw new IllegalStateException("PROJECTION_REMOVAL_BLOCKED");
+    avatar = EffEntities.createProjection(arena.world, p);
     avatar.setCustomName(Component.literal("外来者投影 · entity.avatar"));
     avatar.setCustomNameVisible(true);
     avatar.setNoGravity(true);
@@ -514,7 +525,7 @@ public final class ResearchRuntime implements ResearchSession {
         throw new IllegalArgumentException("CHECKPOINT_CHANGED");
       if (op.equals("rebuild")) {
         if (replacements >= 4) throw new IllegalArgumentException("INSTANCE_BUDGET");
-        if (alive()) avatar.discard();
+        discardAvatar();
         instance.handlers.clear();
         instance = new ExecutionInstance(saved.tether(), saved.possess());
         replacements++;
@@ -534,8 +545,8 @@ public final class ResearchRuntime implements ResearchSession {
               });
         }
         if (saved.avatar() && !alive()) spawn();
-        if (!saved.avatar() && alive()) {
-          avatar.discard();
+        if (!saved.avatar()) {
+          discardAvatar();
           knownAlive = false;
         }
         note("已从真实检查点 " + key + " 恢复。");
@@ -690,8 +701,13 @@ public final class ResearchRuntime implements ResearchSession {
   public void close() {
     closed = true;
     dirty = false;
-    if (alive()) avatar.discard();
-    instance.handlers.clear();
-    watches.clear();
+    try {
+      discardAvatar();
+    } finally {
+      avatar = null;
+      knownAlive = false;
+      instance.handlers.clear();
+      watches.clear();
+    }
   }
 }

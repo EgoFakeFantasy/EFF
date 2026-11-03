@@ -38,5 +38,10 @@ test('Forge sealing closes module, legacy, mapping, native and mod code paths',t
  const ambiguous=structuredClone(config);ambiguous.host.args.splice(0,0,'--module-path='+module);fs.writeFileSync(input,JSON.stringify(ambiguous));assert.throws(()=>provision(input,path.join(root,'bad-module'),guard),/FORGE_AMBIGUOUS_CODE_PATH/);
  const unexpected=structuredClone(config);unexpected.host.env.CLASSPATH=module;fs.writeFileSync(input,JSON.stringify(unexpected));assert.throws(()=>provision(input,path.join(root,'bad-env'),guard),/FORGE_UNAPPROVED_ENV/);
  const bad=structuredClone(config);bad.host.env.MOD_CLASSES+=';other%%'+classes;fs.writeFileSync(input,JSON.stringify(bad));assert.throws(()=>provision(input,path.join(root,'bad-mod'),guard),/FORGE_MOD_ROOTS_REQUIRED/);
+ const research=structuredClone(config);research.researchLab=true;research.host.researchMods=[{path:library,sha256:sha(library)}];fs.writeFileSync(input,JSON.stringify(research));
+ const labSeal=provision(input,path.join(root,'research-lab'),guard),lab=JSON.parse(fs.readFileSync(labSeal.manifest,'utf8'));
+ const labMod=lab.config.host.researchMods[0];assert.equal(sha(labMod.path),research.host.researchMods[0].sha256);assert.ok(lab.files.some(x=>x.path===labMod.path));assert.deepEqual(lab.trees.find(x=>x.root===path.join(lab.config.host.cwd,'mods')).entries,['client-extra.jar']);assert.ok(lab.config.host.args.includes('-Djava.io.tmpdir='+path.join(lab.config.host.cwd,'temp')));
+ const unapproved=structuredClone(research);delete unapproved.researchLab;fs.writeFileSync(input,JSON.stringify(unapproved));assert.throws(()=>provision(input,path.join(root,'unapproved-lab'),guard),/RESEARCH_MODS_NOT_APPROVED/);
+ const hashMismatch=structuredClone(research);hashMismatch.host.researchMods[0].sha256='0'.repeat(64);fs.writeFileSync(input,JSON.stringify(hashMismatch));assert.throws(()=>provision(input,path.join(root,'bad-mod-hash'),guard),/RESEARCH_MOD_HASH/);
  fs.writeFileSync(path.join(resources,'eff-1201-refmap.json'),'{}');fs.writeFileSync(input,JSON.stringify(config));assert.throws(()=>provision(input,path.join(root,'conflicting-refmap'),guard),/FORGE_REFMAP_CONFLICT/);
 });

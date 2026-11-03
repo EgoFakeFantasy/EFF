@@ -26,10 +26,17 @@ public final class EffClient {
     menu = new KeyMapping("key.eff.menu", InputConstants.KEY_R, "key.categories.gameplay");
     interact = new KeyMapping("key.eff.interact", InputConstants.KEY_V, "key.categories.gameplay");
     FMLJavaModLoadingContext.get().getModEventBus().addListener(EffClient::registerKeys);
+    FMLJavaModLoadingContext.get().getModEventBus().addListener(EffClient::registerRenderers);
     EffPackets.setClientReceiver(EffClient::receive);
     MinecraftForge.EVENT_BUS.addListener(EffClient::tick);
     MinecraftForge.EVENT_BUS.addListener(EffClient::renderHud);
     MinecraftForge.EVENT_BUS.addListener(EffClient::shutdown);
+  }
+
+  private static void registerRenderers(
+      net.minecraftforge.client.event.EntityRenderersEvent.RegisterRenderers event) {
+    event.registerEntityRenderer(
+        EffEntities.PROJECTION, net.minecraft.client.renderer.entity.ArmorStandRenderer::new);
   }
 
   private static void registerKeys(RegisterKeyMappingsEvent event) {
@@ -117,6 +124,7 @@ public final class EffClient {
     LegacyDev.prepare(mc);
     ManagedSelfTest.tick(mc);
     GuardedSelfTest.tick(mc);
+    EntityGuardSelfTest.tick(mc);
     EffSelfTest.tick(mc);
     ResearchSelfTest.tick(mc);
     EffPreview.tick(mc);

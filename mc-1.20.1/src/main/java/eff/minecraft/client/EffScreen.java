@@ -210,6 +210,16 @@ public final class EffScreen extends Screen {
                   "\n"
                       + "换代引擎：rebuild runtime.policy; rebuild runtime.execution；换宿主：rebuild"
                       + " runtime.host");
+          JsonObject defense = Jsons.o(rt, "defense");
+          if (defense.size() > 0) {
+            JsonObject incident = Jsons.o(defense, "lastIncident");
+            text.append("\n实体守护：故障 ").append(Jsons.i(defense, "incidents")).append(" / 3（第三次停止恢复）");
+            if (incident.size() > 0)
+              text.append(" · ")
+                  .append(Jsons.s(incident, "subject"))
+                  .append(" / ")
+                  .append(Jsons.s(incident, "reason"));
+          }
           for (String role : new String[] {"policy", "execution"}) {
             JsonObject engine = Jsons.o(Jsons.o(rt, role), "engine");
             if (engine.size() == 0) continue;

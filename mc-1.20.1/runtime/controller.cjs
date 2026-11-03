@@ -3,6 +3,7 @@ const fs = require("node:fs"), path = require("node:path"), http = require("node
 const { spawn } = require("node:child_process"), { randomBytes, createHash, createHmac, timingSafeEqual } = require("node:crypto");
 const { createInterface } = require("node:readline");
 const Engines = require("./engine-lineage.cjs");
+const Defense = require("./projection-guard.cjs");
 const monotonic = () => Number(process.hrtime.bigint()/1000000n);
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const cleanEnv = () => { const env={...process.env}; for(const k of Object.keys(env)) if(["JAVA_TOOL_OPTIONS","JDK_JAVA_OPTIONS","_JAVA_OPTIONS","CLASSPATH","NODE_OPTIONS","NODE_PATH"].includes(k.toUpperCase()) || k.toUpperCase().startsWith("EFF_")) delete env[k]; return env; };
@@ -76,7 +77,8 @@ class WorkerSlot {
 }
 async function terminate(child) {
   if(child.exitCode!==null || child.signalCode!==null)return;
-  const stopped=new Promise(resolve=>child.once("exit",resolve));child.kill();
+  const stopped=new Promise(resolve=>child.once("exit",resolve));
+  child.kill();
   await Promise.race([stopped,wait(3000)]);
   if(child.exitCode===null && child.signalCode===null){child.kill("SIGKILL");await Promise.race([stopped,wait(3000)]);}
   if(child.exitCode===null&&child.signalCode===null)throw Error("OLD_PROCESS_DID_NOT_EXIT");
@@ -86,15 +88,16 @@ class Controller {
     this.config=config;this.directory=path.resolve(config.directory);fs.mkdirSync(this.directory,{recursive:true});
     this.ruleset=Engines.hash(fs.readFileSync(config.workerJar));
     this.initialEngines=Engines.roots(this.ruleset);
-    this.session=randomBytes(16).toString("hex");this.token=randomBytes(32).toString("hex");this.hostEpoch=0;
+    this.session=randomBytes(16).toString("hex");this.token=randomBytes(32).toString("hex");this.hostEpoch=0;this.projectionGuard=new Defense.ProjectionGuard(config.projectionGuard);
     this.workers={policy:new WorkerSlot(this,"policy"),execution:new WorkerSlot(this,"execution")};this.events=[];this.serial=Promise.resolve();this.closed=false;this.hostFailures=[];this.seenRequests=new Set();this.candidates=new Set();
   }
   event(type,details={}){this.events.push({time:Date.now(),type,...details});if(this.events.length>128)this.events.shift();}
   queue(fn){const p=this.serial.then(fn);this.serial=p.catch(()=>{});return p;}
   activeEngine(role){return (this.durable?.engines||this.initialEngines)[role].at(-1);}
-  async persist(state,engines=this.durable?.engines||this.initialEngines){
+  async persist(state,engines=this.durable?.engines||this.initialEngines,defense=this.durable?.defense||Defense.initialDefense()){
     Engines.validateLineage(engines,this.ruleset);
-    const body={schema:1,commit:(this.durable?.commit||0)+1,state,engines};
+    Defense.validateDefense(defense);
+    const body={schema:1,commit:(this.durable?.commit||0)+1,state,engines,defense};
     if(this.config.store) await this.config.store.commit(this.durable?.commit||0,body);
     else atomic(path.join(this.directory,"committed.json"),{body,sha256:digest(body)});this.durable=body;
   }
@@ -109,6 +112,9 @@ class Controller {
       else if(fs.existsSync(saved)) {const parsed=JSON.parse(fs.readFileSync(saved,"utf8"));if(parsed.sha256!==digest(parsed.body)||parsed.body.schema!==1)throw Error("COMMITTED_STATE_CORRUPT");this.durable=parsed.body;}
       else await this.persist(await this.workers.execution.rpc({op:"initial"}));
       if(!this.durable.engines)await this.persist(this.durable.state,this.initialEngines);
+      if(!this.durable.defense)await this.persist(this.durable.state);
+      Defense.validateDefense(this.durable.defense);
+      if(this.durable.defense.circuitOpen)throw Error("PROJECTION_RESTART_CIRCUIT");
       Engines.validateLineage(this.durable.engines,this.ruleset);
       await this.workers.policy.rpc({op:"snapshot",state:this.durable.state});
       this.server=http.createServer({maxHeaderSize:4096,headersTimeout:3000,requestTimeout:5000},(req,res)=>this.handle(req,res));
@@ -148,6 +154,7 @@ class Controller {
       case "heartbeat":
         if(!Number.isSafeInteger(r.clientTick)||!Number.isSafeInteger(r.serverTick)||r.clientTick<0||r.serverTick<0||!Number.isSafeInteger(r.sequence))throw Error("INVALID_PROGRESS");
         if(r.sequence<=(this.lastHeartbeatSequence||0)||this.progress&&(r.clientTick<this.progress.clientTick||r.serverTick<this.progress.serverTick))throw Error("HEARTBEAT_REPLAY");
+        if(r.projection!==undefined)this.projectionGuard.observe(r.projection,this.durable.state,monotonic());
         this.lastHeartbeatSequence=r.sequence;
         this.lastContact=monotonic();if(r.active===true)this.hostReady=true;
         if(this.progress?.clientTick!==r.clientTick){this.clientProgress=monotonic();}
@@ -163,7 +170,7 @@ class Controller {
   async snapshot(){
     if(this.closed)throw Error(this.fatalError||"CONTROLLER_STOPPED");
     const result=await this.workers.execution.rpc({op:"snapshot",state:this.durable.state});
-    result.runtime={session:this.session,hostEpoch:this.hostEpoch,hostPid:this.host?.pid||0,commit:this.durable.commit,
+    result.runtime={session:this.session,hostEpoch:this.hostEpoch,hostPid:this.host?.pid||0,commit:this.durable.commit,defense:structuredClone(this.durable.defense),
       policy:{pid:this.workers.policy.child?.pid,epoch:this.workers.policy.epoch,engine:this.workers.policy.engineProof},execution:{pid:this.workers.execution.child?.pid,epoch:this.workers.execution.epoch,engine:this.workers.execution.engineProof},events:this.events.slice(-12)};
     return result;
   }
@@ -227,7 +234,7 @@ class Controller {
     const h=this.config.host;
     if(this.closed||this.host)throw Error("HOST_ALREADY_ACTIVE");
     await this.config.store?.verify();
-    this.hostEpoch++;this.seenRequests.clear();this.lastHeartbeatSequence=0;this.token=randomBytes(32).toString("hex");
+    this.hostEpoch++;this.seenRequests.clear();this.lastHeartbeatSequence=0;this.projectionGuard.reset();this.hostJvmPid=0;this.token=randomBytes(32).toString("hex");
     const env={...cleanEnv(),...(h.env||{}),EFF_RUNTIME_ENDPOINT:this.endpoint,EFF_RUNTIME_SESSION:this.session,EFF_RUNTIME_LEASE:this.token,EFF_RUNTIME_EPOCH:String(this.hostEpoch),EFF_RUNTIME_GUARD_GENERATION:String(this.config.protectedGeneration||0)};
     // A fixed, locally produced launch manifest. No executable/argument input comes from gameplay or a model.
     let args=h.args;
@@ -245,6 +252,7 @@ class Controller {
     this.event("host-start",{pid:child.pid,epoch:this.hostEpoch});
   }
   async replaceHost(reason){
+    if(this.config.store&&!this.closed){this.event("host-job-recovery",{reason});return this.failClosed("HOST_JOB_RECOVERY");}
     const old=this.host;this.host=null;this.token=randomBytes(32).toString("hex"); // Fence first, including queued HTTP requests.
     if(old)await terminate(old);
     this.hostFailures=this.hostFailures.filter(t=>monotonic()-t<60000);
@@ -252,9 +260,24 @@ class Controller {
     this.hostFailures.push(monotonic());await wait(500);
     if(!this.closed){await this.spawnHost();this.event("host-replaced",{oldPid:old?.pid,pid:this.host?.pid,epoch:this.hostEpoch,reason});}
   }
+  async recoverProjection(fault,epoch){
+    if(epoch!==this.hostEpoch||!this.host||this.userStopped||this.closed)return;
+    const state=this.durable.state;
+    if(state.instance!==fault.instance||state.revision!==fault.revision||!Defense.eligible(fault.subject,state,fault))return;
+    const next=Defense.nextDefense(this.durable.defense,fault,state);
+    // Reserve the attempt in the outer ledger before any process migration. A controller restart
+    // cannot reset the budget or resurrect already revoked recovery authority.
+    await this.persist(state,this.durable.engines,next);
+    this.event("projection-fault",{...next.lastIncident,attempt:next.incidents,circuitOpen:next.circuitOpen});
+    if(next.circuitOpen)return this.failClosed("PROJECTION_RESTART_CIRCUIT");
+    await this.regenerate(["execution"],state,"projection-"+fault.reason);
+    await this.replaceHost("projection-"+fault.reason);
+  }
   async monitor(){
     if(!this.host||this.closed||this.replacing||this.userStopped)return;
     const now=monotonic(), startup=this.config.startupTimeout||180000,timeout=this.config.progressTimeout||12000;
+    const fault=this.projectionGuard.poll(this.durable.state,this.progress,now);
+    if(fault){this.replacing=true;const epoch=this.hostEpoch;try{await this.queue(()=>this.recoverProjection(fault,epoch));}finally{this.replacing=false;}return;}
     let reason="";
     if(!this.hostReady){if(now-this.hostStarted>startup)reason="HOST_STARTUP_TIMEOUT";}
     else if(now-this.lastContact>timeout||now-this.clientProgress>timeout||this.progress?.active&&!this.progress.paused&&now-this.serverProgress>timeout)reason="HOST_PROGRESS_TIMEOUT";

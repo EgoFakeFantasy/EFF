@@ -8,7 +8,7 @@ plugins {
  id 'net.minecraftforge.gradle' version '6.0.54'
 }
 apply plugin: 'org.spongepowered.mixin'
-version='0.5.2+mc1.20.1-forge'
+version='0.6.0+mc1.20.1-forge'
 group='eff.minecraft'
 base { archivesName='eff-minecraft-forge-1.20.1' }
 java { toolchain.languageVersion=JavaLanguageVersion.of(17); withSourcesJar() }
@@ -98,3 +98,5 @@ tasks.matching { it.name=='runClient' }.configureEach {
 
 apply from: 'verification.gradle'
 apply from: 'forge-seal-test.gradle'
+
+apply from: '../mc-1.20.1/anti-death.gradle'

@@ -10,6 +10,12 @@ import net.minecraft.commands.Commands;
 
 public final class EffMod implements ModInitializer {
   public void onInitialize() {
+    net.minecraft.core.Registry.register(
+        net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE,
+        new net.minecraft.resources.ResourceLocation("eff", "projection"),
+        EffEntities.PROJECTION);
+    net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry.register(
+        EffEntities.PROJECTION, EffEntities.attributes());
     EffPackets.register();
     ServerPlayNetworking.registerGlobalReceiver(
         EffPackets.ACTION,

@@ -72,7 +72,23 @@ public sealed class Ledger : IDisposable {
    }
   }
  }
- void Validate(Dictionary<string,object> body){long expected=Current==null?1:Convert.ToInt64(Current["commit"])+1;if(Convert.ToInt32(body["schema"])!=1||Convert.ToInt64(body["commit"])!=expected)throw new IOException("LEDGER_REVISION_MISMATCH");var next=Map(body["state"]);if(Current!=null){var old=Map(Current["state"]);if(!Convert.ToBoolean(old["recovery"])&&Convert.ToBoolean(next["recovery"]))throw new IOException("REVOCATION_ROLLBACK");if(Convert.ToInt64(next["revision"])<Convert.ToInt64(old["revision"]))throw new IOException("STATE_ROLLBACK");if(Convert.ToString(old["outcome"])!="pending"&&Convert.ToString(old["outcome"])!=Convert.ToString(next["outcome"]))throw new IOException("ENDING_ROLLBACK");}ValidateEngines(body);}
+ void ValidateDefense(Dictionary<string,object> body){
+  bool had=Current!=null&&Current.ContainsKey("defense"),has=body.ContainsKey("defense");
+  if(!has){if(had)throw new IOException("DEFENSE_REMOVED");return;}
+  var d=Map(body["defense"]);
+  if(d.Count!=4||!d.ContainsKey("schema")||!d.ContainsKey("incidents")||!d.ContainsKey("circuitOpen")||!d.ContainsKey("lastIncident")||EngineInteger(d["schema"])!=1||!(d["circuitOpen"] is bool))throw new IOException("DEFENSE_RECORD_INVALID");
+  long count=EngineInteger(d["incidents"]);if(count<0||count>3||(bool)d["circuitOpen"]!=(count==3))throw new IOException("DEFENSE_BUDGET_INVALID");
+  if(!had&&count!=0)throw new IOException("DEFENSE_GENESIS_INVALID");
+  if(had){var prior=Map(Current["defense"]);long old=EngineInteger(prior["incidents"]);if(count<old)throw new IOException("DEFENSE_ROLLBACK");if(count>old+1)throw new IOException("DEFENSE_JUMP");if(count==old&&json.Serialize(d)!=json.Serialize(prior))throw new IOException("DEFENSE_REWRITE");}
+  if(count==0){if(d["lastIncident"]!=null)throw new IOException("DEFENSE_GENESIS_INVALID");return;}
+  var x=Map(d["lastIncident"]);if(x.Count!=5||!x.ContainsKey("id")||!x.ContainsKey("instance")||!x.ContainsKey("revision")||!x.ContainsKey("subject")||!x.ContainsKey("reason"))throw new IOException("DEFENSE_INCIDENT_INVALID");
+  string id=EngineText(x,"id"),subject=EngineText(x,"subject"),reason=EngineText(x,"reason"),instance=EngineText(x,"instance");
+  if(!System.Text.RegularExpressions.Regex.IsMatch(id,"^[a-f0-9]{32}$")||!System.Text.RegularExpressions.Regex.IsMatch(instance,"^[-a-zA-Z0-9]{16,96}$")||EngineInteger(x["revision"])<0||Array.IndexOf(new[]{"player","avatar","observer"},subject)<0||Array.IndexOf(new[]{"ENTITY_REMOVED","ENTITY_DYING","ENTITY_ZERO_HEALTH","ENTITY_INVALID_HEALTH","ENTITY_UNREGISTERED","ENTITY_DISPLACED","ENTITY_UNEXPECTED","OBSERVER_STALE"},reason)<0)throw new IOException("DEFENSE_INCIDENT_INVALID");
+  if(had&&count>EngineInteger(Map(Current["defense"])["incidents"])){
+   var state=Map(Current["state"]);if(instance!=Convert.ToString(state["instance"])||EngineInteger(x["revision"])!=Convert.ToInt64(state["revision"])||(Convert.ToString(state["outcome"])!="pending"&&!(Convert.ToString(state["outcome"])=="won"&&subject=="avatar"&&reason=="ENTITY_UNEXPECTED")))throw new IOException("DEFENSE_OBSERVATION_STALE");
+  }
+ }
+ void Validate(Dictionary<string,object> body){long expected=Current==null?1:Convert.ToInt64(Current["commit"])+1;if(Convert.ToInt32(body["schema"])!=1||Convert.ToInt64(body["commit"])!=expected)throw new IOException("LEDGER_REVISION_MISMATCH");var next=Map(body["state"]);if(Current!=null){var old=Map(Current["state"]);if(!Convert.ToBoolean(old["recovery"])&&Convert.ToBoolean(next["recovery"]))throw new IOException("REVOCATION_ROLLBACK");if(Convert.ToInt64(next["revision"])<Convert.ToInt64(old["revision"]))throw new IOException("STATE_ROLLBACK");if(Convert.ToString(old["outcome"])!="pending"&&Convert.ToString(old["outcome"])!=Convert.ToString(next["outcome"]))throw new IOException("ENDING_ROLLBACK");}ValidateEngines(body);ValidateDefense(body);}
  public object Commit(long observed,Dictionary<string,object> body){if(observed!=(Current==null?0:Convert.ToInt64(Current["commit"])))throw new IOException("STALE_LEDGER_COMMIT");Validate(body);var entry=new Dictionary<string,object>{{"previous",previous},{"body",body}};byte[] data=Encoding.UTF8.GetBytes(json.Serialize(entry));if(data.Length>131072)throw new IOException("LEDGER_BUDGET");byte[] mac=Mac(data);long offset=file.Length;
   try{file.Position=offset;var w=new BinaryWriter(file,Encoding.UTF8,true);w.Write(data.Length);w.Write(data);w.Write(mac);w.Flush();file.Flush(true);}catch{try{file.SetLength(offset);file.Flush(true);}catch{}throw;}
   Current=body;previous=Hex(mac);WriteHead();return body;}
@@ -112,7 +128,7 @@ public static class Program {
        if(line.IsCompleted){string raw=line.Result;if(raw==null)break;if(raw.Length>262144)throw new IOException("GUARD_MESSAGE_BUDGET");var r=M(Json.DeserializeObject(raw));string op=Convert.ToString(r["op"]);object result=null;string error=null;
         if(op=="pulse"){last=clock.ElapsedMilliseconds;ready=true;}
         else if(op=="load")result=ledger.Current;
-        else if(op=="commit"){try{result=ledger.Commit(Convert.ToInt64(r["previous"]),M(r["body"]));}catch(IOException e){if(!(e.Message.StartsWith("STALE_")||e.Message.StartsWith("STATE_")||e.Message.StartsWith("ENDING_")||e.Message.StartsWith("REVOCATION_")||e.Message.StartsWith("LEDGER_REVISION")||e.Message.StartsWith("ENGINE_LINEAGE_")))throw;error=e.Message;}}
+        else if(op=="commit"){try{result=ledger.Commit(Convert.ToInt64(r["previous"]),M(r["body"]));}catch(IOException e){if(!(e.Message.StartsWith("STALE_")||e.Message.StartsWith("STATE_")||e.Message.StartsWith("ENDING_")||e.Message.StartsWith("REVOCATION_")||e.Message.StartsWith("LEDGER_REVISION")||e.Message.StartsWith("ENGINE_LINEAGE_")||e.Message.StartsWith("DEFENSE_")))throw;error=e.Message;}}
         else if(op=="verify"){CheckTrees(seal["trees"]);result=new {verified=true};}
         else if(op=="stopped"){graceful=true;break;}
         else throw new IOException("GUARD_OP_NOT_ALLOWED");

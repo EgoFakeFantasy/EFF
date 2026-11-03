@@ -16,7 +16,7 @@ function provision(source,destination,guardBinary){
  function copy(source,name){const target=path.join(payload,name);fs.copyFileSync(source,target);pin(target);return target;}
  const guard=copy(guardBinary,'eff-guard.exe');
  const guardConfig=copy(path.join(__dirname,'guard/WindowsGuard.exe.config'),'eff-guard.exe.config');
- for(const name of ['controller.cjs','protected-child.cjs','engine-lineage.cjs'])copy(path.join(__dirname,name),name);
+ for(const name of ['controller.cjs','protected-child.cjs','engine-lineage.cjs','projection-guard.cjs'])copy(path.join(__dirname,name),name);
  config.workerJar=copy(config.workerJar,'workers.jar');pin(process.execPath);
  const executables=new Set([config.java,...Object.values(config.javaByRole||{})]);if(config.host)executables.add(config.host.command);
  for(const executable of executables){pin(executable);if(path.basename(executable).toLowerCase()==='java.exe'){const root=path.resolve(executable,'..','..');for(const dir of ['bin','lib','conf'])for(const f of walk(path.join(root,dir)))pin(f);if(fs.existsSync(path.join(root,'release')))pin(path.join(root,'release'));}}
@@ -97,7 +97,17 @@ function provision(source,destination,guardBinary){
   execFileSync(path.join(config.java,'..','jar.exe'),[...jarMemory,'xf',bundle],{cwd:story,windowsHide:true});
   for(const file of walk(story))pin(file);
   h.env={...(h.env||{}),EFF_STORY_RUNTIME:story};args.splice(cp,0,'-Deff.node='+process.execPath);
-  const mods=path.join(h.cwd,'mods');fs.mkdirSync(mods);trees.push({root:mods,entries:[]});
+  const mods=path.join(h.cwd,'mods');fs.mkdirSync(mods);
+  if(h.researchMods!==undefined){
+   if(config.researchLab!==true||!Array.isArray(h.researchMods)||h.researchMods.length>4)throw Error('RESEARCH_MODS_NOT_APPROVED');
+   const seen=new Set();h.researchMods=h.researchMods.map(m=>{
+    if(!m||Object.keys(m).sort().join(',')!=='path,sha256'||typeof m.path!=='string'||!/^[a-f0-9]{64}$/.test(m.sha256))throw Error('RESEARCH_MOD_DESCRIPTOR');
+    const name=path.basename(m.path);if(!/^[a-zA-Z0-9._+-]+\.jar$/.test(name)||seen.has(name.toLowerCase())||sha(m.path)!==m.sha256)throw Error('RESEARCH_MOD_HASH');
+    seen.add(name.toLowerCase());const target=path.join(mods,name);fs.copyFileSync(m.path,target);pin(target);return {path:target,sha256:m.sha256};
+   });
+  }
+  const temp=path.join(h.cwd,'temp');fs.mkdirSync(temp);args.splice(args.indexOf('-cp'),0,'-Djava.io.tmpdir='+temp);
+  trees.push({root:mods,entries:walk(mods).map(f=>path.relative(mods,f))});
  }
  // The payload tree itself is closed: an added helper, mod or package file is a deployment change.
  const entries=walk(payload).map(f=>path.relative(payload,f));trees.push({root:payload,entries});

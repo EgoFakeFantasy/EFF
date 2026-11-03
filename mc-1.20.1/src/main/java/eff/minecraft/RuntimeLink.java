@@ -22,8 +22,24 @@ public final class RuntimeLink {
       HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(1)).build();
   private static final AtomicLong CLIENT = new AtomicLong(),
       SERVER = new AtomicLong(),
-      HEARTBEAT = new AtomicLong();
+      HEARTBEAT = new AtomicLong(),
+      PROJECTION_SEQUENCE = new AtomicLong();
   private static volatile boolean paused, active, started;
+  private static volatile JsonObject projection =
+      Jsons.obj("schema", 1, "sequence", 0, "enabled", false);
+
+  /** Called only on the server thread; the heartbeat thread reads this immutable copy. */
+  public static void publishProjection(JsonObject sample) {
+    if (!enabled()) return;
+    JsonObject next = sample.deepCopy();
+    next.addProperty("schema", 1);
+    next.addProperty("sequence", PROJECTION_SEQUENCE.incrementAndGet());
+    projection = next;
+  }
+
+  public static void clearProjection() {
+    publishProjection(Jsons.obj("enabled", false));
+  }
 
   public static boolean enabled() {
     return ENDPOINT != null && SESSION != null && LEASE != null;
@@ -59,7 +75,9 @@ public final class RuntimeLink {
                       "paused",
                       paused,
                       "active",
-                      active));
+                      active,
+                      "projection",
+                      projection.deepCopy()));
             } catch (Exception ignored) {
             }
           },

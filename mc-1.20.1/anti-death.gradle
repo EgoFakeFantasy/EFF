@@ -1,0 +1,10 @@
+tasks.register('projectionGuardTest',Exec) {
+ commandLine 'node','--test',file('../mc-1.20.1/runtime/projection-guard.test.cjs').absolutePath
+}
+tasks.register('projectionControllerTest',Exec) {
+ dependsOn 'runtimeKernelJar'
+ environment 'EFF_TEST_JAVA',javaToolchains.launcherFor(java.toolchain).get().executablePath.asFile.absolutePath
+ environment 'EFF_TEST_WORKERS',tasks.named('runtimeKernelJar').get().archiveFile.get().asFile.absolutePath
+ commandLine 'node','--test',file('../mc-1.20.1/runtime/controller-projection.test.cjs').absolutePath
+}
+check { dependsOn 'projectionGuardTest','projectionControllerTest' }
