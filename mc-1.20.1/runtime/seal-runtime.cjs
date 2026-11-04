@@ -9,7 +9,7 @@ function walk(root){if(!fs.existsSync(root))return [];let list=[];for(const e of
 function provision(source,destination,guardBinary,options={}){
  if(process.platform!=='win32')throw Error('WINDOWS_GUARD_REQUIRED');
  destination=path.resolve(destination);fs.mkdirSync(destination);fs.writeFileSync(path.join(destination,'.gitignore'),'*\n');const payload=path.join(destination,'payload');fs.mkdirSync(payload);
- const config=JSON.parse(fs.readFileSync(source,'utf8'));config.admission={schema:1,hostMutation:'enabled',quarantineOnFault:false,mods:[]};config.directory=path.join(destination,'authority');fs.mkdirSync(config.directory);
+ const config=JSON.parse(fs.readFileSync(source,'utf8'));config.integrityBoundary=false;config.admission={schema:1,hostMutation:'enabled',quarantineOnFault:false,mods:[]};config.directory=path.join(destination,'authority');fs.mkdirSync(config.directory);
  const pinned=new Set(),trees=[],dependencies=new Map();
  const dependencyDir=path.join(payload,'dependencies');fs.mkdirSync(dependencyDir);
  function dependency(file){file=path.resolve(file);const key=file.toLowerCase();if(dependencies.has(key))return dependencies.get(key);const dir=path.join(dependencyDir,String(dependencies.size).padStart(4,'0'));fs.mkdirSync(dir);const target=path.join(dir,path.basename(file));fs.copyFileSync(file,target);dependencies.set(key,target);pin(target);return target;}

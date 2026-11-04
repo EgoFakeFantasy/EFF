@@ -11,7 +11,7 @@ lines.on('line',async raw=>{
   if(raw.length>262144)throw Error('GUARD_REPLY_BUDGET');const message=JSON.parse(raw);
   if(!booted){if(message.op!=='boot')throw Error('OUTER_GUARD_REQUIRED');booted=true;
    const {Controller}=require('./controller.cjs');
-   const store={load:()=>rpc('load'),commit:(previous,body)=>rpc('commit',{previous,body}),verify:()=>rpc('verify')};
+   const store={load:()=>rpc('load'),commit:(previous,body)=>rpc('commit',{previous,body}),verify:()=>rpc('verify'),protect:pid=>rpc('protect',{pid})};
    controller=new Controller({...message.config,protectedGeneration:message.generation,store});
    controller.onFatal=()=>process.exit(2);
    pulse=setInterval(()=>send({op:'pulse'}),1000);

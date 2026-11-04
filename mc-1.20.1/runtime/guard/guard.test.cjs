@@ -58,12 +58,14 @@ module.exports.onReady=async(c,g)=>{
  [DllImport("advapi32.dll",SetLastError=true)]static extern bool GetTokenInformation(IntPtr t,int c,IntPtr b,uint l,out uint n);
  [DllImport("advapi32.dll")]static extern IntPtr GetSidSubAuthorityCount(IntPtr s);
  [DllImport("advapi32.dll")]static extern IntPtr GetSidSubAuthority(IntPtr s,uint i);
- static int Main(){IntPtr t; if(!OpenProcessToken(GetCurrentProcess(),8,out t))return 3;
+ static int Main(string[] args){IntPtr t; if(!OpenProcessToken(GetCurrentProcess(),8,out t))return 3;
  try{foreach(int c in new[]{25,27,3}){uint n;GetTokenInformation(t,c,IntPtr.Zero,0,out n);IntPtr b=Marshal.AllocHGlobal((int)n);try{if(!GetTokenInformation(t,c,b,n,out n))return 4;if(c==25){IntPtr sid=Marshal.ReadIntPtr(b);uint count=Marshal.ReadByte(GetSidSubAuthorityCount(sid));Console.WriteLine("integrity:"+Marshal.ReadInt32(GetSidSubAuthority(sid,count-1)));}else Console.WriteLine("token"+c+":"+Marshal.ReadInt32(b));}finally{Marshal.FreeHGlobal(b);}}}finally{CloseHandle(t);}
- bool opened=false;foreach(uint a in new uint[]{1,2,8,16,32,64}){IntPtr h=OpenProcess(a,false,${first.pid});Console.WriteLine(a+":"+(h==IntPtr.Zero?"denied":"allowed"));if(h!=IntPtr.Zero){CloseHandle(h);opened=true;}}return opened?2:0;}}`);
+ bool opened=false;foreach(uint a in new uint[]{1,2,8,16,32,64}){IntPtr h=OpenProcess(a,false,Int32.Parse(args[0]));Console.WriteLine(a+":"+(h==IntPtr.Zero?"denied":"allowed"));if(h!=IntPtr.Zero){CloseHandle(h);opened=true;}}return opened?2:0;}}`);
   const compiler=path.join(process.env.SystemRoot,'Microsoft.NET/Framework64/v4.0.30319/csc.exe');
   const compiled=spawnSync(compiler,['/nologo','/platform:x64','/out:'+accessExe,accessSource],{encoding:'utf8',windowsHide:true,timeout:20000});assert.equal(compiled.status,0,compiled.stdout+compiled.stderr);
-  const handles=spawnSync(s.guard,['--low-integrity-host',game,accessExe],{encoding:'utf8',windowsHide:true,timeout:20000});assert.equal(handles.status,0,handles.stdout+handles.stderr);for(const a of [1,2,8,16,32,64])assert.ok(handles.stdout.includes(a+':denied'));
+  for(const pid of [p.pid,first.pid,first.snapshot.runtime.policy.pid,first.snapshot.runtime.execution.pid]){
+   const handles=spawnSync(s.guard,['--low-integrity-host',game,accessExe,String(pid)],{encoding:'utf8',windowsHide:true,timeout:20000});assert.equal(handles.status,0,'target '+pid+': '+handles.stdout+handles.stderr);assert.ok(handles.stdout.includes('integrity:4096'));assert.ok(handles.stdout.includes('token3:0'));for(const a of [1,2,8,16,32,64])assert.ok(handles.stdout.includes(a+':denied'));
+  }
   const authority=seal.config.directory,leaked=[path.join(authority,'low-probe.txt'),path.join(seal.payload,'low-probe.txt')],probe=path.join(game,'probe.cjs');
   // Stands in for a script loaded into MC: arbitrary code with MC's process rights, trying to reach the kernel.
   fs.writeFileSync(probe,`const fs=require('fs'),path=require('path');const r={};const t=(k,f)=>{try{f();r[k]='allowed';}catch(e){r[k]=e.code||e.message;}};

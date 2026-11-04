@@ -26,7 +26,15 @@ public sealed class NativeJob : IDisposable {
  IntPtr handle;
  public NativeJob(){handle=CreateJobObject(IntPtr.Zero,null);if(handle==IntPtr.Zero)throw new IOException("JOB_CREATE_FAILED");var l=new Limits();l.Basic.Flags=0x2000|0x8|0x200;l.Basic.Active=16;l.JobMemory=new UIntPtr(8UL*1024*1024*1024); // KILL_ON_JOB_CLOSE, no breakaway flags
   int size=Marshal.SizeOf(l);IntPtr ptr=Marshal.AllocHGlobal(size);try{Marshal.StructureToPtr(l,ptr,false);if(!SetInformationJobObject(handle,9,ptr,(uint)size))throw new IOException("JOB_LIMIT_FAILED");}finally{Marshal.FreeHGlobal(ptr);}}
- public void Add(Process process){if(!AssignProcessToJobObject(handle,process.Handle))throw new IOException("JOB_ASSIGN_FAILED_"+Marshal.GetLastWin32Error());}
+ public void Add(Process process){if(!AssignProcessToJobObject(handle,process.Handle))throw new IOException("JOB_ASSIGN_FAILED_"+Marshal.GetLastWin32Error());
+#if EFF_LOW_INTEGRITY_EXPERIMENTAL
+  if(IntegrityBoundary.Current()>=IntegrityBoundary.Medium)IntegrityBoundary.ProtectProcess(process);
+#endif
+ }
+#if EFF_LOW_INTEGRITY_EXPERIMENTAL
+ [DllImport("kernel32.dll",SetLastError=true)] static extern bool IsProcessInJob(IntPtr process,IntPtr job,out bool member);
+ public void ProtectOwned(int pid){if(pid<=0)throw new IOException("PROCESS_PROTECTION_PID");using(var p=Process.GetProcessById(pid)){bool member;if(!IsProcessInJob(p.Handle,handle,out member)||!member)throw new IOException("PROCESS_PROTECTION_NOT_OWNED");IntegrityBoundary.ProtectProcess(p);}}
+#endif
  public uint Active(){int size=Marshal.SizeOf(typeof(Accounting));IntPtr ptr=Marshal.AllocHGlobal(size);try{if(!QueryInformationJobObject(handle,1,ptr,(uint)size,IntPtr.Zero))throw new IOException("JOB_QUERY_FAILED");return ((Accounting)Marshal.PtrToStructure(ptr,typeof(Accounting))).active;}finally{Marshal.FreeHGlobal(ptr);}}
  public ulong PeakMemoryBytes(){int size=Marshal.SizeOf(typeof(Limits));IntPtr ptr=Marshal.AllocHGlobal(size);try{if(!QueryInformationJobObject(handle,9,ptr,(uint)size,IntPtr.Zero))throw new IOException("JOB_MEMORY_QUERY_FAILED");return ((Limits)Marshal.PtrToStructure(ptr,typeof(Limits))).PeakJob.ToUInt64();}finally{Marshal.FreeHGlobal(ptr);}}
  public void Drain(){if(handle==IntPtr.Zero)return;if(!TerminateJobObject(handle,71))throw new IOException("JOB_TERMINATE_FAILED");var watch=Stopwatch.StartNew();while(Active()!=0){if(watch.ElapsedMilliseconds>10000)throw new IOException("OLD_JOB_NOT_EMPTY");Thread.Sleep(20);}}
@@ -105,6 +113,7 @@ public static class IntegrityBoundary {
  [DllImport("advapi32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool ConvertStringSecurityDescriptorToSecurityDescriptorW(string sddl,uint revision,out IntPtr descriptor,IntPtr size);
  [DllImport("advapi32.dll",SetLastError=true)] static extern bool GetSecurityDescriptorSacl(IntPtr descriptor,out bool present,out IntPtr sacl,out bool defaulted);
  [DllImport("advapi32.dll",CharSet=CharSet.Unicode)] static extern uint SetNamedSecurityInfoW(string name,int type,uint info,IntPtr owner,IntPtr group,IntPtr dacl,IntPtr sacl);
+ [DllImport("advapi32.dll")] static extern uint SetSecurityInfo(IntPtr handle,int type,uint info,IntPtr owner,IntPtr group,IntPtr dacl,IntPtr sacl);
  [DllImport("advapi32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool ConvertStringSidToSidW(string sid,out IntPtr psid);
  [DllImport("advapi32.dll")] static extern uint GetLengthSid(IntPtr sid);
  [DllImport("advapi32.dll")] static extern IntPtr GetSidSubAuthorityCount(IntPtr sid);
@@ -127,6 +136,13 @@ public static class IntegrityBoundary {
  // Medium label with no-read-up, no-write-up and no-execute-up, inherited by every file: a Low process
  // can neither read the ledger key/state nor write anything here. Medium kernel processes are unaffected.
  public static void SealAuthority(string directory){Label(directory,"S:(ML;OICI;NRNWNX;;;ME)");}
+ public static void ProtectProcess(Process process){
+  // PROCESS_TERMINATE is not stopped by the default process NR/NW label. Explicit NX is required.
+  // Equal-integrity user tools and the supervisor's owned handles remain usable.
+  IntPtr descriptor;if(!ConvertStringSecurityDescriptorToSecurityDescriptorW("S:(ML;;NRNWNX;;;"+(Current()>=0x3000?"HI":"ME")+")",1,out descriptor,IntPtr.Zero))throw new IOException("PROCESS_LABEL_SDDL");
+  try{bool present,defaulted;IntPtr sacl;if(!GetSecurityDescriptorSacl(descriptor,out present,out sacl,out defaulted)||!present)throw new IOException("PROCESS_LABEL_SACL");uint error=SetSecurityInfo(process.Handle,6,LabelInformation,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero,sacl);if(error!=0)throw new IOException("PROCESS_LABEL_FAILED_"+error);}
+  finally{LocalFree(descriptor);}
+ }
  // The only tree a Low MC may write: its own game directory.
  public static void OpenToLow(string directory){Label(directory,"S:(ML;OICI;NW;;;LW)");}
  public static uint Current(){
@@ -211,6 +227,7 @@ public static class Program {
   CheckTrees(seal["trees"]);var config=M(seal["config"]);directory=(string)config["directory"];NoReparse(directory);
 #if EFF_LOW_INTEGRITY_EXPERIMENTAL
   IntegrityBoundary.SealAuthority(directory);
+  IntegrityBoundary.ProtectProcess(Process.GetCurrentProcess());config["integrityBoundary"]=true;
 #endif
   Console.CancelKeyPress+=(s,e)=>{e.Cancel=true;stopping=true;};
   string ruleset=null;foreach(object item in (object[])seal["files"]){var f=M(item);if(String.Equals(Path.GetFullPath((string)f["path"]),Path.GetFullPath((string)config["workerJar"]),StringComparison.OrdinalIgnoreCase))ruleset=(string)f["sha256"];}if(ruleset==null)throw new IOException("WORKER_RULESET_NOT_SEALED");
@@ -231,6 +248,9 @@ public static class Program {
         if(op=="pulse"){last=clock.ElapsedMilliseconds;ready=true;}
         else if(op=="load")result=ledger.Current;
         else if(op=="commit"){try{result=ledger.Commit(Convert.ToInt64(r["previous"]),M(r["body"]));}catch(IOException e){if(!(e.Message.StartsWith("STALE_")||e.Message.StartsWith("STATE_")||e.Message.StartsWith("ENDING_")||e.Message.StartsWith("REVOCATION_")||e.Message.StartsWith("LEDGER_REVISION")||e.Message.StartsWith("ENGINE_LINEAGE_")||e.Message.StartsWith("DEFENSE_")))throw;error=e.Message;}}
+#if EFF_LOW_INTEGRITY_EXPERIMENTAL
+        else if(op=="protect"){try{if(!(r["pid"] is int))throw new IOException("PROCESS_PROTECTION_PID");job.ProtectOwned((int)r["pid"]);result=new {protectedPid=r["pid"]};}catch(IOException e){error=e.Message;}}
+#endif
         else if(op=="verify"){CheckTrees(seal["trees"]);result=new {verified=true};}
         else if(op=="stopped"){graceful=true;break;}
         else throw new IOException("GUARD_OP_NOT_ALLOWED");

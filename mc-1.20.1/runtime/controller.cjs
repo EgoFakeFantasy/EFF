@@ -47,6 +47,7 @@ class WorkerSlot {
       let at;
       while((at=buffered.indexOf("\n"))>=0){const line=buffered.slice(0,at);buffered=buffered.slice(at+1);try{this.deliver(JSON.parse(line),child,epoch);}catch{this.fail(child,"WORKER_BAD_JSON");child.kill();}}
     });
+    if(this.owner.config.integrityBoundary)await this.owner.config.store.protect(child.pid);
     this.owner.event("worker-start",{role:this.role,pid:child.pid,epoch});
     try{
       const descriptor=this.descriptorOverride||this.owner.activeEngine(this.role);
