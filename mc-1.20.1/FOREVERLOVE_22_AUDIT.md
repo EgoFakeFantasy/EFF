@@ -38,3 +38,18 @@ SHA256：`3bf3ba852bbafec9f4440210d4084bb92ba9586c9a146ae03ddf003f17f1b5f8`。
 已对同一 SHA256 的用户原包直接调用新版 `artifact-policy.cjs`，严格默认策略和显式 `allowRisky:false` 均返回 `UNAPPROVED_MOD_CAPABILITY`，检测到 10 类能力风险。该测试不提取执行、不启动 MC；不是“击败永爱”。原样本及 DLL/EXE、完整反汇编均未上传仓库。
 
 用户随后授权准备隔离 Windows 虚拟机。镜像下载／虚拟机创建／来宾系统启动／加载样本／真实交战需要分别验收；本报告的静态结论不随下载完成自动升级为动态结论。
+
+## 正常持剑攻击的独立实验入口
+
+新增 `runtime/guard/foreign-sword-native-test.cjs`，只接受上述固定 SHA256。它要求 Windows 与显式 `EFF_DISPOSABLE_VM_LAB=1`；这个环境变量是误操作防护，不是虚拟机证明，也不是安全边界。操作者必须另外核实可丢弃 VM、网络断开、无共享目录／剪贴板、无安装凭据残留和干净基线。
+
+测试仅在一次性 `observe-only`、Low 宿主、外部控制模式中逐项批准该样本已检出的能力，不修改默认准入策略。玩家装备注册物品 `forever_love_sword:forever_love_sword`，通过正常 `ServerPlayer.attack(target)` 进入 Forge 攻击事件与物品回调；目标只允许当前 EFF 战场唯一带标记的 ArmorStand。事件若被取消不会绕过，不调用样本私有击杀函数。启动期失败和攻击未发生必须保留为未完成交战。
+
+在来宾内准备好同版本可信启动配置和实验守护程序后运行：
+
+```powershell
+$env:EFF_DISPOSABLE_VM_LAB='1'
+node runtime/guard/foreign-sword-native-test.cjs C:\EFFLab\private-launch.json C:\EFFLab\foreverlove22-lab C:\EFFLab\guard\low.exe C:\EFFLab\specimen\foreverlove-2.2-public.jar
+```
+
+MC 内的 `sword-attack-started`、`sword-attack-returned` 和 30 秒观测文件属于不可信宿主观察，不能单独证明防御成功。驱动另外重启独立外层守护以验证封存文件与 HMAC 日志；恢复的实验会在启动 worker／MC 之前隔离，禁止自动再次加载样本。只有验证成功、日志字节不变且权威 avatar／recovery 状态仍有效时，才记录 `STATE_INTACT=true`。`HOST_RECOVERED` 和 `PLAYABLE_RESTORED` 不因隔离而置真。没有验证本地模型推理或权重训练。

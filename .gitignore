@@ -1,3 +1,6 @@
 dist/
 desktop/node_modules/
 *.tmp
+
+# Local VM images, guest credentials and disposable launch manifests
+/output/

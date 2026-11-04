@@ -276,7 +276,8 @@ public final class EffServer {
       if (run.research != null
           && !run.researchBusy
           && run.research.needsCounter()
-          && !Boolean.getBoolean("eff.pig2Lab")) researchPlan(run, "intruder", "");
+          && !Boolean.getBoolean("eff.pig2Lab")
+          && !Boolean.getBoolean("eff.foreverLoveLab")) researchPlan(run, "intruder", "");
       if (ticks % 2 == 0 && !run.polling && run.arena.ready()) {
         run.polling = true;
         run.bridge

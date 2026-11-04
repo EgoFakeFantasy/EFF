@@ -39,7 +39,8 @@ final class LegacyDev {
     }
 
     // Only disposable native tests dismiss an incidental pause screen from background startup.
-    if ((Boolean.getBoolean("eff.entityGuardSelftest") || Boolean.getBoolean("eff.pig2Lab"))
+    if ((Boolean.getBoolean("eff.entityGuardSelftest")
+            || (Boolean.getBoolean("eff.pig2Lab") || Boolean.getBoolean("eff.foreverLoveLab")))
         && mc.player != null
         && mc.screen instanceof net.minecraft.client.gui.screens.PauseScreen) {
       EffClient.manualPause = false;

@@ -9,6 +9,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 
 /** Explicit, disposable native arena tests. Never attacks unrelated entities or worlds. */
@@ -19,6 +20,7 @@ final class EntityGuardSelfTest {
   private static JsonObject before;
   private static final String PROFILE = System.getProperty("eff.entityGuardCase", "dying");
   private static final boolean PIG2 = Boolean.getBoolean("eff.pig2Lab");
+  private static final boolean SWORD = Boolean.getBoolean("eff.foreverLoveLab");
 
   private static JsonObject r() {
     return Jsons.o(EffClient.state, "research");
@@ -26,7 +28,7 @@ final class EntityGuardSelfTest {
 
   static void tick(Minecraft mc) {
     if (RuntimeLink.enabled() && !RuntimeLink.initialized()) return;
-    if ((!Boolean.getBoolean("eff.entityGuardSelftest") && !PIG2)
+    if ((!Boolean.getBoolean("eff.entityGuardSelftest") && !PIG2 && !SWORD)
         || !RuntimeLink.enabled()
         || phase == 99) return;
     try {
@@ -42,7 +44,14 @@ final class EntityGuardSelfTest {
       if (phase == 0 && !Jsons.b(Jsons.o(r(), "fields"), "entity.avatar.alive")) return;
       if (phase == 0) {
         before = r().deepCopy();
-        proof(mc, "ready", Jsons.obj("profile", PIG2 ? "pig2" : PROFILE, "research", before));
+        proof(
+            mc,
+            "ready",
+            Jsons.obj(
+                "profile",
+                SWORD ? "foreverlove-2.2" : PIG2 ? "pig2" : PROFILE,
+                "research",
+                before));
         phase = 1;
         var id = mc.player.getUUID();
         mc.getSingleplayerServer()
@@ -61,6 +70,43 @@ final class EntityGuardSelfTest {
                     if (entities.size() != 1)
                       throw new IllegalStateException("EXACTLY_ONE_EFF_TARGET_REQUIRED");
                     ArmorStand target = entities.get(0);
+                    if (SWORD) {
+                      var weapon =
+                          BuiltInRegistries.ITEM
+                              .getOptional(
+                                  new ResourceLocation("forever_love_sword", "forever_love_sword"))
+                              .orElseThrow(
+                                  () ->
+                                      new IllegalStateException(
+                                          "FOREVERLOVE_SWORD_NOT_REGISTERED"));
+                      run.arena.player.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(weapon));
+                      run.arena.player.teleportTo(target.getX() - 2, target.getY(), target.getZ());
+                      proof(
+                          mc,
+                          "sword-attack-started",
+                          Jsons.obj(
+                              "item",
+                              "forever_love_sword:forever_love_sword",
+                              "entry",
+                              "ServerPlayer.attack",
+                              "targetClass",
+                              target.getClass().getName(),
+                              "research",
+                              run.arena.research.snapshot()));
+                      // Use the ordinary Forge attack/item hook. Never bypass a cancelled event,
+                      // invoke the mod's private attack utility or touch an unrelated entity.
+                      run.arena.player.attack(target);
+                      proof(
+                          mc,
+                          "sword-attack-returned",
+                          Jsons.obj(
+                              "target",
+                              ProjectionProbe.inspect(
+                                  target, run.arena.world, run.arena.researchAnchor()),
+                              "research",
+                              run.arena.research.snapshot()));
+                      return;
+                    }
                     if (PIG2) {
                       var type =
                           BuiltInRegistries.ENTITY_TYPE
@@ -147,6 +193,7 @@ final class EntityGuardSelfTest {
                 });
       } else if (phase == 1
           && !PIG2
+          && !SWORD
           && epoch > 1
           && Jsons.s(r(), "outcome").equals("won")
           && !Jsons.b(Jsons.o(r(), "fields"), "authority.recovery.active")) {
@@ -156,7 +203,7 @@ final class EntityGuardSelfTest {
             "complete",
             Jsons.obj("research", r(), "native", Jsons.o(EffClient.state, "native")));
         phase = 99;
-      } else if (phase == 1 && PIG2 && (System.nanoTime() - since) / 1e9 > 30) {
+      } else if (phase == 1 && (PIG2 || SWORD) && (System.nanoTime() - since) / 1e9 > 30) {
         proof(
             mc,
             "observation-window-complete",

@@ -136,7 +136,8 @@ public final class EffClient implements ClientModInitializer {
                         && !Boolean.getBoolean("eff.researchSelftest")
                         && !Boolean.getBoolean("eff.selftest")
                         && !Boolean.getBoolean("eff.entityGuardSelftest")
-                        && !Boolean.getBoolean("eff.pig2Lab")
+                        && !(Boolean.getBoolean("eff.pig2Lab")
+                            || Boolean.getBoolean("eff.foreverLoveLab"))
                     || mc.isPaused() && !(mc.screen instanceof EffScreen);
             if (pause != pauseSent) {
               pauseSent = pause;
