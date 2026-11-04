@@ -31,7 +31,8 @@ module.exports.onReady=async(c,g)=>{
  const cp=require('node:child_process'),fs=require('node:fs'),path=require('node:path');
  const orphanFile=path.join(c.directory,'orphan-'+g+'.json');const own=cp.spawn(process.execPath,['-e',"const cp=require('node:child_process');const p=cp.spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});require('node:fs').writeFileSync(process.argv[1],JSON.stringify({child:process.pid,grandchild:p.pid}));setInterval(()=>{},1000)",orphanFile],{stdio:'ignore',windowsHide:true});
  for(let n=0;n<100&&!fs.existsSync(orphanFile);n++)await new Promise(r=>setTimeout(r,20));const descendants=JSON.parse(fs.readFileSync(orphanFile,'utf8'));
- const snapshot=await c.snapshot();require('node:fs').writeFileSync(require('node:path').join(c.directory,'proof-'+g+'.json'),JSON.stringify({pid:process.pid,generation:g,snapshot,rollbackDenied,lineageDenied,defenseDenied,descendants,engines:c.durable.engines}));};`);
+ let foreignProtectionDenied=null;if(c.config.integrityBoundary){try{await c.config.store.protect(process.ppid);foreignProtectionDenied=false;}catch(e){foreignProtectionDenied=e.message==='PROCESS_PROTECTION_NOT_OWNED';}}
+ const snapshot=await c.snapshot();require('node:fs').writeFileSync(require('node:path').join(c.directory,'proof-'+g+'.json'),JSON.stringify({pid:process.pid,generation:g,snapshot,rollbackDenied,lineageDenied,defenseDenied,foreignProtectionDenied,descendants,engines:c.durable.engines}));};`);
  seal.child=child;seal.files.push({path:child,sha256:sha(child),size:fs.statSync(child).size});seal.trees[0].entries.push('fixture.cjs');fs.writeFileSync(s.manifest,JSON.stringify(seal));s.pin=sha(s.manifest);
  let p=run(s);const checks=[];t.after(async()=>{if(p.exitCode===null&&p.signalCode===null){p.kill();await stopped(p);}const resolved=fs.realpathSync(root),base=fs.realpathSync(os.tmpdir());if(path.dirname(resolved)!==base||!path.basename(resolved).startsWith('eff-native-guard-'))throw Error('UNSAFE_TEST_CLEANUP');fs.rmSync(resolved,{recursive:true,force:true});});
  const file=g=>path.join(seal.config.directory,'proof-'+g+'.json');
@@ -46,6 +47,7 @@ module.exports.onReady=async(c,g)=>{
   const result=spawnSync(s.guard,[s.manifest,s.pin],{encoding:'utf8',windowsHide:true,timeout:20000});assert.equal(result.status,2);assert.ok(alive(first.pid));checks.push('single-outer-writer');
  });
  await t.test('MC launched through the low integrity helper runs below the kernel and the OS refuses it every kernel object',{skip:process.env.EFF_TEST_LOW_INTEGRITY!=='true'?'requires opt-in experimental guard build':false},()=>{
+  assert.equal(first.foreignProtectionDenied,true,'the outer process protector must reject processes outside its own Job');
   const game=path.join(root,'low-game');fs.mkdirSync(game);
   const level=spawnSync(s.guard,['--low-integrity-host',game,s.guard,'--integrity'],{encoding:'utf8',windowsHide:true,timeout:20000});
   assert.equal(level.status,0,level.stderr);assert.equal(level.stdout.trim(),'low');
