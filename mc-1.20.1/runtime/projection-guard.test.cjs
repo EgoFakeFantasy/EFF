@@ -31,9 +31,9 @@ test('cached heartbeats cannot hide stopped observation, but pause can stop samp
 test('death remains actionable while the death screen has paused the game',()=>{
  const g=new ProjectionGuard({confirmMs:50});g.observe(sample(1,{player:{...healthy(),health:0}}),state,10);assert.equal(g.poll(state,{...progress,paused:true},61).reason,'ENTITY_ZERO_HEALTH');
 });
-test('stale revision or instance cannot restart a changed or finished battle',()=>{
- const g=new ProjectionGuard({confirmMs:0});g.observe(sample(1,{avatar:{...healthy(),health:0}}),state,1);assert.equal(g.poll({...state,revision:5},progress,2),null);assert.equal(g.poll({...state,outcome:'won'},progress,2),null);
- g.observe(sample(2,{instance:'11234567-0123-0123-0123-012345678901'}),state,3);assert.equal(g.poll(state,progress,4),null);
+test('latched incidents survive unrelated revisions but not a changed instance or ending',()=>{
+ const g=new ProjectionGuard({confirmMs:0});g.observe(sample(1,{avatar:{...healthy(),health:0}}),state,1);assert.equal(g.poll({...state,revision:5},progress,2).revision,5);assert.equal(g.poll({...state,outcome:'won'},progress,2),null);
+ const stale=new ProjectionGuard({confirmMs:0});stale.observe(sample(2,{instance:'11234567-0123-0123-0123-012345678901'}),state,3);assert.equal(stale.poll(state,progress,4),null);
 });
 test('replay, malformed booleans and unbounded input fail closed',()=>{
  const g=new ProjectionGuard();g.observe(sample(3),state,0);assert.throws(()=>g.observe(sample(2),state,1),/REPLAY/);assert.throws(()=>g.observe(sample(4,{player:{...healthy(),alive:'true'}}),state,2),/INVALID_PROJECTION/);assert.throws(()=>g.observe(sample(4,{avatar:{...healthy(),health:NaN}}),state,2),/INVALID_PROJECTION/);

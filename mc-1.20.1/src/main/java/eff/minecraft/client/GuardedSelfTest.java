@@ -24,6 +24,7 @@ final class GuardedSelfTest {
   }
 
   static void tick(Minecraft mc) {
+    if (RuntimeLink.enabled() && !RuntimeLink.initialized()) return;
     if (!Boolean.getBoolean("eff.guardedSelftest") || GENERATION == 0 || phase == 99) return;
     try {
       if (since != 0 && (System.nanoTime() - since) / 1e9 > 160)

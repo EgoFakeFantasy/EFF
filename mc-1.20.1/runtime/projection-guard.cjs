@@ -34,23 +34,26 @@ class ProjectionGuard {
   if(!s||s.schema!==1||typeof s.enabled!=='boolean'||!Number.isSafeInteger(s.sequence)||s.sequence<0)throw Error('INVALID_PROJECTION_OBSERVATION');
   if(s.sequence<this.sequence)throw Error('PROJECTION_OBSERVATION_REPLAY');
   if(s.sequence===this.sequence)return;
-  if(!s.enabled){this.sequence=s.sequence;this.active=false;this.pending=null;this.sample=null;return;}
+  if(!s.enabled){this.sequence=s.sequence;if(this.hasFault(state))return;this.active=false;this.pending=null;this.sample=null;return;}
   if(!Number.isSafeInteger(s.revision)||s.revision<0||typeof s.instance!=='string'||!/^[-a-zA-Z0-9]{16,96}$/.test(s.instance))throw Error('INVALID_PROJECTION_OBSERVATION');
   validateProbe(s.player);validateProbe(s.avatar);
   if(!this.active){this.armedAt=now;this.matchingAt=now;}
   this.active=true;this.sequence=s.sequence;this.updatedAt=now;this.sample=structuredClone(s);
-  if(s.instance!==state.instance||s.revision!==state.revision){this.pending=null;return;}
+  if(s.instance!==state.instance||s.revision!==state.revision){if(!this.hasFault(state))this.pending=null;return;}
   this.matchingAt=now;
   let bad;
   for(const subject of ['player','avatar']){const why=subject==='avatar'&&state.avatar===false?(s.avatar.registered&&!s.avatar.removed?'ENTITY_UNEXPECTED':''):reason(s[subject],subject);if(why&&eligible(subject,state,{reason:why})){bad={subject,reason:why,instance:s.instance,revision:s.revision,uuid:s[subject].uuid};break;}}
+  if(this.hasFault(state))return;
   if(!bad){this.pending=null;return;}
   const key=JSON.stringify(bad);
   if(this.pending?.key!==key)this.pending={...bad,key,since:now};
  }
+ ready(state){return this.active&&this.sample?.enabled===true&&this.sample.instance===state.instance&&this.sample.revision===state.revision;}
+ hasFault(state){const b=this.pending;return !!(b&&b.instance===state.instance&&eligible(b.subject,state,b));}
  poll(state,progress,now){
-  if(!this.active||!progress?.active)return null;
   const bad=this.pending;
-  if(bad&&bad.instance===state.instance&&bad.revision===state.revision&&eligible(bad.subject,state,bad)&&now-bad.since>=this.confirmMs)return {...bad};
+  if(bad&&bad.instance===state.instance&&eligible(bad.subject,state,bad)&&now-bad.since>=this.confirmMs)return {...bad,revision:state.revision};
+  if(!this.active||!progress?.active)return null;
   // A paused world may legitimately stop server samples. A latched death above is still actionable.
   if(state.outcome==='pending'&&!progress.paused&&now-Math.min(this.updatedAt,this.matchingAt)>this.staleMs)return {subject:'observer',reason:'OBSERVER_STALE',instance:state.instance,revision:state.revision};
   return null;

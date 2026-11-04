@@ -39,6 +39,11 @@ test("independent JVMs, durable authority and fenced replacement",async t=>{
   peer.send=async body=>body.op==="snapshot"?{forged:true}:send(body);
   try{await assert.rejects(execute("rebuild runtime.execution"),/ENGINE_SNAPSHOT_MISMATCH/);assert.equal(JSON.stringify(c.durable),before);assert.equal(c.workers.execution.child.pid,oldPid);}finally{peer.send=send;}
  });
+ await t.test("tainted handoff is rejected before any successor starts",async()=>{
+  const before=JSON.stringify(c.durable),pid=c.workers.execution.child.pid;
+  for(const patch of [{ambientAuthorities:{markerOnly:true}},{recovery:"true"}])await assert.rejects(c.regenerate(["execution"],{...c.durable.state,...patch},"taint-test"),/STATE_/);
+  assert.equal(JSON.stringify(c.durable),before);assert.equal(c.workers.execution.child.pid,pid);
+ });
  await t.test("whole-program parsing rejects injection before mutation",async()=>{
   const before=JSON.stringify(c.durable);await assert.rejects(execute("erase entity.avatar; java.lang.Runtime.halt(0)"),/PROGRAM_SYNTAX|UNKNOWN_INTERVENTION/);assert.equal(JSON.stringify(c.durable),before);
  });

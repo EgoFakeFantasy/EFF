@@ -27,6 +27,8 @@ public final class ManagedResearchRuntime implements ResearchSession {
     this.arena = arena;
     state = RuntimeLink.call(Jsons.obj("op", "snapshot"));
     instance = Jsons.s(state, "instance");
+    if (Integer.parseInt(System.getenv().getOrDefault("EFF_RUNTIME_GUARD_GENERATION", "0")) > 0)
+      notes.add("受保护启动：退出游玩请关闭外层守护窗口或按 Ctrl+C；只关闭 MC 会触发恢复。");
     notes.add("多 JVM 托管：判定与执行可生成后继引擎，在独立 JVM 验证后接续；MC 可整体替换。已提交的权限撤销会持续保留。");
   }
 
@@ -137,7 +139,12 @@ public final class ManagedResearchRuntime implements ResearchSession {
   public void tick() {
     if (closed || !arena.ready()) return;
     ticks++;
-    if (knownAlive && !alive() && desired("avatar") && pending() && !desired("recovery")) {
+    if (RuntimeLink.initialized()
+        && knownAlive
+        && !alive()
+        && desired("avatar")
+        && pending()
+        && !desired("recovery")) {
       // Revoked recovery must remain revoked: a real external kill is now a semantic body loss.
       knownAlive = false;
       execute("entity.avatar removed externally", revision(), "native-observer");
@@ -175,7 +182,14 @@ public final class ManagedResearchRuntime implements ResearchSession {
   private void publishProjection() {
     RuntimeLink.publishProjection(
         Jsons.obj(
-            "enabled", !closed && arena.ready(),
+            "enabled",
+                !closed
+                    && arena.ready()
+                    && (!desired("avatar")
+                        || knownAlive
+                        || avatar != null
+                        || !ProjectionProbe.healthyPlayer(
+                            arena.player, arena.world, arena.researchAnchor())),
             "revision", revision(),
             "instance", instance,
             "player", ProjectionProbe.inspect(arena.player, arena.world, arena.researchAnchor()),
@@ -193,6 +207,7 @@ public final class ManagedResearchRuntime implements ResearchSession {
 
   public boolean needsCounter() {
     return !closed
+        && RuntimeLink.initialized()
         && !requested
         && desired("dirty")
         && Jsons.s(state, "outcome").equals("pending")

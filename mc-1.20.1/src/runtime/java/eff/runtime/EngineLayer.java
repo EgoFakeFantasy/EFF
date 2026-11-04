@@ -26,11 +26,15 @@ public class EngineLayer {
       throw new IllegalArgumentException("ENGINE_ROLE_MISMATCH");
     switch (s(body, "op")) {
       case "initial":
+        if (descriptor.get("generation").getAsInt() != 0)
+          throw new IllegalArgumentException("ENGINE_INITIAL_ONLY_AT_GENESIS");
         return Kernel.initial();
       case "snapshot":
-        return Kernel.snapshot(o(body, "state"));
+        return Kernel.snapshot(StateBoundary.checked(o(body, "state")));
       case "transition":
-        JsonObject calculated = Kernel.run(body);
+        JsonObject bounded = body.deepCopy();
+        bounded.add("state", StateBoundary.checked(o(body, "state")));
+        JsonObject calculated = Kernel.run(bounded);
         if (role.equals("policy") && body.has("candidate")) {
           if (!calculated.equals(o(body, "candidate")))
             throw new IllegalArgumentException("POLICY_TRANSITION_MISMATCH");

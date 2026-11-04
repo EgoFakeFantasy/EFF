@@ -24,6 +24,7 @@ final class ManagedSelfTest {
   }
 
   static void tick(Minecraft mc) {
+    if (RuntimeLink.enabled() && !RuntimeLink.initialized()) return;
     if (!Boolean.getBoolean("eff.managedSelftest") || !RuntimeLink.enabled() || phase == 99) return;
     try {
       if (!failure.isEmpty()) throw new IllegalStateException(failure);

@@ -4,9 +4,10 @@ const { spawn } = require("node:child_process"), { randomBytes, createHash, crea
 const { createInterface } = require("node:readline");
 const Engines = require("./engine-lineage.cjs");
 const Defense = require("./projection-guard.cjs");
+const StateBoundary = require("./state-boundary.cjs");
 const monotonic = () => Number(process.hrtime.bigint()/1000000n);
 const wait = ms => new Promise(r => setTimeout(r, ms));
-const cleanEnv = () => { const env={...process.env}; for(const k of Object.keys(env)) if(["JAVA_TOOL_OPTIONS","JDK_JAVA_OPTIONS","_JAVA_OPTIONS","CLASSPATH","NODE_OPTIONS","NODE_PATH"].includes(k.toUpperCase()) || k.toUpperCase().startsWith("EFF_")) delete env[k]; return env; };
+const {cleanEnv,workerEnv,assertHostArguments}=require("./launch-policy.cjs");
 function atomic(file, value) {
   const text=JSON.stringify(value), temp=file+".tmp";
   const fd=fs.openSync(temp,"w",0o600);
@@ -27,7 +28,9 @@ class WorkerSlot {
     await this.owner.config.store?.verify();
     if(this.owner.closed||this.stopped)throw Error("CONTROLLER_STOPPED");
     this.epoch++;
-    const child=spawn(this.owner.config.javaByRole?.[this.role] || this.owner.config.java,["-Xms16m","-Xmx64m","-XX:+UseSerialGC","-XX:ReservedCodeCacheSize=24m","-XX:ActiveProcessorCount=2","-XX:+DisableAttachMechanism","-XX:+ExitOnOutOfMemoryError","-XX:ErrorFile="+path.join(this.owner.directory,"worker-error-%p.log"),"-cp",this.owner.config.workerJar,"eff.runtime.Worker",this.role],{env:cleanEnv(),stdio:["pipe","pipe","pipe"],windowsHide:true});
+    const java=this.owner.config.javaByRole?.[this.role] || this.owner.config.java;
+    const privateDirectory=path.join(this.owner.directory,"worker-private",this.role+"-"+this.epoch+"-"+randomBytes(6).toString("hex"));fs.mkdirSync(privateDirectory,{recursive:true});
+    const child=spawn(java,["-Xms16m","-Xmx64m","-XX:+UseSerialGC","-XX:ReservedCodeCacheSize=24m","-XX:ActiveProcessorCount=2","-XX:+DisableAttachMechanism","-XX:+ExitOnOutOfMemoryError","-XX:ErrorFile="+path.join(this.owner.directory,"worker-error-%p.log"),"-cp",this.owner.config.workerJar,"eff.runtime.Worker",this.role],{env:workerEnv(java,privateDirectory),cwd:privateDirectory,stdio:["pipe","pipe","pipe"],windowsHide:true});
     this.child=child;
     const epoch=this.epoch;
     child.stderr.on("data",()=>{}); // never forward arbitrary process arguments or secrets
@@ -88,13 +91,14 @@ class Controller {
     this.config=config;this.directory=path.resolve(config.directory);fs.mkdirSync(this.directory,{recursive:true});
     this.ruleset=Engines.hash(fs.readFileSync(config.workerJar));
     this.initialEngines=Engines.roots(this.ruleset);
-    this.session=randomBytes(16).toString("hex");this.token=randomBytes(32).toString("hex");this.hostEpoch=0;this.projectionGuard=new Defense.ProjectionGuard(config.projectionGuard);
+    this.session=randomBytes(16).toString("hex");this.token=randomBytes(32).toString("hex");this.hostEpoch=0;this.requireProjection=!!config.host?.args?.includes("-Deff.previewResearch=true");this.projectionGuard=new Defense.ProjectionGuard(config.projectionGuard);
     this.workers={policy:new WorkerSlot(this,"policy"),execution:new WorkerSlot(this,"execution")};this.events=[];this.serial=Promise.resolve();this.closed=false;this.hostFailures=[];this.seenRequests=new Set();this.candidates=new Set();
   }
   event(type,details={}){this.events.push({time:Date.now(),type,...details});if(this.events.length>128)this.events.shift();}
   queue(fn){const p=this.serial.then(fn);this.serial=p.catch(()=>{});return p;}
   activeEngine(role){return (this.durable?.engines||this.initialEngines)[role].at(-1);}
   async persist(state,engines=this.durable?.engines||this.initialEngines,defense=this.durable?.defense||Defense.initialDefense()){
+    StateBoundary.validateContinuation(this.durable?.state,state);
     Engines.validateLineage(engines,this.ruleset);
     Defense.validateDefense(defense);
     const body={schema:1,commit:(this.durable?.commit||0)+1,state,engines,defense};
@@ -108,12 +112,14 @@ class Controller {
     }
     const saved=path.join(this.directory,"committed.json");
     try {
-      if(this.config.store){this.durable=await this.config.store.load();if(!this.durable)await this.persist(await this.workers.execution.rpc({op:"initial"}));}
-      else if(fs.existsSync(saved)) {const parsed=JSON.parse(fs.readFileSync(saved,"utf8"));if(parsed.sha256!==digest(parsed.body)||parsed.body.schema!==1)throw Error("COMMITTED_STATE_CORRUPT");this.durable=parsed.body;}
+      if(this.config.store){this.durable=await this.config.store.load();this.restored=!!this.durable;if(!this.durable)await this.persist(await this.workers.execution.rpc({op:"initial"}));}
+      else if(fs.existsSync(saved)) {const parsed=JSON.parse(fs.readFileSync(saved,"utf8"));if(parsed.sha256!==digest(parsed.body)||parsed.body.schema!==1)throw Error("COMMITTED_STATE_CORRUPT");this.durable=parsed.body;this.restored=true;}
       else await this.persist(await this.workers.execution.rpc({op:"initial"}));
+      StateBoundary.validateState(this.durable.state);
       if(!this.durable.engines)await this.persist(this.durable.state,this.initialEngines);
       if(!this.durable.defense)await this.persist(this.durable.state);
       Defense.validateDefense(this.durable.defense);
+      if(this.config.host&&this.config.admission?.quarantineOnFault&&(this.restored||this.durable.defense.incidents>0))throw Error("HOST_CAPABILITIES_QUARANTINED");
       if(this.durable.defense.circuitOpen)throw Error("PROJECTION_RESTART_CIRCUIT");
       Engines.validateLineage(this.durable.engines,this.ruleset);
       await this.workers.policy.rpc({op:"snapshot",state:this.durable.state});
@@ -156,21 +162,25 @@ class Controller {
         if(r.sequence<=(this.lastHeartbeatSequence||0)||this.progress&&(r.clientTick<this.progress.clientTick||r.serverTick<this.progress.serverTick))throw Error("HEARTBEAT_REPLAY");
         if(r.projection!==undefined)this.projectionGuard.observe(r.projection,this.durable.state,monotonic());
         this.lastHeartbeatSequence=r.sequence;
-        this.lastContact=monotonic();if(r.active===true)this.hostReady=true;
+        this.lastContact=monotonic();
+        if(r.active===true&&(!this.requireProjection||this.projectionGuard.ready(this.durable.state)))this.hostReady=true;
         if(this.progress?.clientTick!==r.clientTick){this.clientProgress=monotonic();}
         if(this.progress?.serverTick!==r.serverTick){this.serverProgress=monotonic();}
         this.progress={clientTick:r.clientTick,serverTick:r.serverTick,paused:r.paused===true,active:r.active===true};
-        return {commit:this.durable.commit};
-      case "goodbye":this.userStopped=true;this.event("host-user-stop",{epoch:this.hostEpoch});if(this.onUserStop)setTimeout(()=>this.onUserStop(),50);return {stopped:true};
+        return {commit:this.durable.commit,initialized:!!this.hostReady};
+      case "goodbye":
+        if(this.config.store)throw Error("HOST_STOP_REQUIRES_OUTER_CONTROL");
+        if(this.projectionGuard.hasFault(this.durable.state))throw Error("HOST_STOP_WITH_UNRESOLVED_FAULT");
+        this.userStopped=true;this.event("host-user-stop",{epoch:this.hostEpoch});if(this.onUserStop)setTimeout(()=>this.onUserStop(),50);return {stopped:true};
       case "snapshot":return this.snapshot();
-      case "execute":return this.transition(r);
+      case "execute":if(this.config.admission?.hostMutation==="disabled")throw Error("UNTRUSTED_HOST_READ_ONLY");if(this.requireProjection&&!this.hostReady)throw Error("HOST_NOT_INITIALIZED");return this.transition(r);
       default:throw Error("CONTROLLER_OP_NOT_ALLOWED");
     }
   }
   async snapshot(){
     if(this.closed)throw Error(this.fatalError||"CONTROLLER_STOPPED");
     const result=await this.workers.execution.rpc({op:"snapshot",state:this.durable.state});
-    result.runtime={session:this.session,hostEpoch:this.hostEpoch,hostPid:this.host?.pid||0,commit:this.durable.commit,defense:structuredClone(this.durable.defense),
+    result.runtime={session:this.session,hostEpoch:this.hostEpoch,hostPid:this.host?.pid||0,commit:this.durable.commit,admission:this.config.admission||{schema:1,hostMutation:"enabled",quarantineOnFault:false,mods:[]},initialized:!!this.hostReady,defense:structuredClone(this.durable.defense),
       policy:{pid:this.workers.policy.child?.pid,epoch:this.workers.policy.epoch,engine:this.workers.policy.engineProof},execution:{pid:this.workers.execution.child?.pid,epoch:this.workers.execution.epoch,engine:this.workers.execution.engineProof},events:this.events.slice(-12)};
     return result;
   }
@@ -191,6 +201,7 @@ class Controller {
     return {snapshot:await this.snapshot(),receipt:candidate.receipt};
   }
   async regenerate(roles,state,reason){
+    StateBoundary.validateContinuation(this.durable?.state,state);
     if(this.generating)throw Error("ENGINE_GENERATION_BUSY");
     this.generating=true;const staged={},chains=structuredClone(this.durable.engines);
     try{
@@ -232,6 +243,7 @@ class Controller {
   }
   async spawnHost(){
     const h=this.config.host;
+    if(h.args.includes("-Deff.previewResearch=true"))assertHostArguments(h.args);
     if(this.closed||this.host)throw Error("HOST_ALREADY_ACTIVE");
     await this.config.store?.verify();
     this.hostEpoch++;this.seenRequests.clear();this.lastHeartbeatSequence=0;this.projectionGuard.reset();this.hostJvmPid=0;this.token=randomBytes(32).toString("hex");
@@ -252,6 +264,7 @@ class Controller {
     this.event("host-start",{pid:child.pid,epoch:this.hostEpoch});
   }
   async replaceHost(reason){
+    if(this.config.admission?.quarantineOnFault&&!this.closed)return this.failClosed("HOST_CAPABILITIES_QUARANTINED");
     if(this.config.store&&!this.closed){this.event("host-job-recovery",{reason});return this.failClosed("HOST_JOB_RECOVERY");}
     const old=this.host;this.host=null;this.token=randomBytes(32).toString("hex"); // Fence first, including queued HTTP requests.
     if(old)await terminate(old);

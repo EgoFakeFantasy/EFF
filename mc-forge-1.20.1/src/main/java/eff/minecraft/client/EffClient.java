@@ -150,6 +150,8 @@ public final class EffClient {
               || !mc.isWindowActive()
                   && !Boolean.getBoolean("eff.researchSelftest")
                   && !Boolean.getBoolean("eff.selftest")
+                  && !Boolean.getBoolean("eff.entityGuardSelftest")
+                  && !Boolean.getBoolean("eff.pig2Lab")
               || mc.isPaused() && !(mc.screen instanceof EffScreen);
       if (pause != pauseSent) {
         pauseSent = pause;

@@ -25,6 +25,7 @@ final class EntityGuardSelfTest {
   }
 
   static void tick(Minecraft mc) {
+    if (RuntimeLink.enabled() && !RuntimeLink.initialized()) return;
     if ((!Boolean.getBoolean("eff.entityGuardSelftest") && !PIG2)
         || !RuntimeLink.enabled()
         || phase == 99) return;

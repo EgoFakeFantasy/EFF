@@ -210,6 +210,10 @@ public final class EffScreen extends Screen {
                   "\n"
                       + "换代引擎：rebuild runtime.policy; rebuild runtime.execution；换宿主：rebuild"
                       + " runtime.host");
+          JsonObject admission = Jsons.o(rt, "admission");
+          text.append("\n启动校验：").append(Jsons.b(rt, "initialized") ? "投影已核对" : "等待有效投影");
+          if (Jsons.s(admission, "hostMutation").equals("disabled"))
+            text.append(" · 第三方实验只读；退出或故障后隔离，不自动重载");
           JsonObject defense = Jsons.o(rt, "defense");
           if (defense.size() > 0) {
             JsonObject incident = Jsons.o(defense, "lastIncident");

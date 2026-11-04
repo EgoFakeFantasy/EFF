@@ -46,7 +46,7 @@ public final class Kernel {
             "journal",
             new JsonArray());
     o(s, "checkpoints").add("checkpoint.origin", saved(s, "intruder"));
-    return s;
+    return StateBoundary.checked(s);
   }
 
   private static JsonObject saved(JsonObject s, String actor) {
@@ -94,7 +94,7 @@ public final class Kernel {
   }
 
   public static JsonObject snapshot(JsonObject s) {
-    JsonObject out = s.deepCopy();
+    JsonObject out = StateBoundary.checked(s);
     out.add("fields", fields(s));
     JsonArray cps = new JsonArray(), watches = new JsonArray();
     o(s, "checkpoints")
@@ -125,7 +125,7 @@ public final class Kernel {
   public static JsonObject run(JsonObject request) {
     Kernel k = new Kernel();
     k.transaction = Jsons.s(request, "transaction");
-    k.s = o(request, "state").deepCopy();
+    k.s = StateBoundary.checked(o(request, "state"));
     String actor = Jsons.s(request, "actor"), source = Jsons.s(request, "source");
     if (!Set.of("player", "intruder", "native-observer").contains(actor)) fail("INVALID_ACTOR");
     if (i(request, "revision") != i(k.s, "revision")) fail("STALE_RESEARCH_REVISION");
@@ -231,7 +231,7 @@ public final class Kernel {
       }
     }
     if (!Jsons.s(k.s, "outcome").equals("pending")) k.s.addProperty("dirty", false);
-    return obj("state", k.s, "receipt", receipt, "actions", k.actions);
+    return obj("state", StateBoundary.checked(k.s), "receipt", receipt, "actions", k.actions);
   }
 
   private void append(JsonObject receipt) {
@@ -289,6 +289,7 @@ public final class Kernel {
         return true;
       case "unwatch":
         need(ws.has(t), "UNKNOWN_WATCH");
+        need(Jsons.s(o(ws, t), "actor").equals(actor), "WATCH_OWNERSHIP");
         ws.remove(t);
         return true;
       case "erase":
