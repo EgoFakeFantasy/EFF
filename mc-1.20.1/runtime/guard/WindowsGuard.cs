@@ -112,6 +112,7 @@ public static class IntegrityBoundary {
  [DllImport("advapi32.dll",SetLastError=true)] static extern bool OpenProcessToken(IntPtr process,uint access,out IntPtr token);
  [DllImport("advapi32.dll",SetLastError=true)] static extern bool SetTokenInformation(IntPtr token,int cls,IntPtr info,uint length);
  [DllImport("advapi32.dll",SetLastError=true)] static extern bool GetTokenInformation(IntPtr token,int cls,IntPtr info,uint length,out uint returned);
+ [DllImport("advapi32.dll",SetLastError=true)] static extern bool AdjustTokenPrivileges(IntPtr token,bool disableAll,IntPtr state,uint length,IntPtr previous,IntPtr returned);
  [DllImport("kernel32.dll")] static extern IntPtr GetCurrentProcess();
  [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr memory);
  [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
@@ -139,8 +140,19 @@ public static class IntegrityBoundary {
  }
  // Lowering one's own token is always permitted; nothing can raise it again without SeTcbPrivilege.
  public static void LowerSelf(){
-  IntPtr token,sid;if(!OpenProcessToken(GetCurrentProcess(),TokenQuery|TokenAdjustDefault,out token))throw new IOException("INTEGRITY_TOKEN_"+Marshal.GetLastWin32Error());
-  try{if(!ConvertStringSidToSidW("S-1-16-4096",out sid))throw new IOException("INTEGRITY_SID_"+Marshal.GetLastWin32Error());
+  IntPtr token,sid;if(!OpenProcessToken(GetCurrentProcess(),TokenQuery|TokenAdjustDefault|0x20,out token))throw new IOException("INTEGRITY_TOKEN_"+Marshal.GetLastWin32Error());
+  try{
+   // Merely lowering IL retains privileges from an elevated launcher (notably SeDebugPrivilege).
+   // Remove, do not just disable, every privilege before untrusted code inherits this primary token.
+   uint privilegeSize;GetTokenInformation(token,3,IntPtr.Zero,0,out privilegeSize);if(privilegeSize<4||privilegeSize>65536)throw new IOException("INTEGRITY_PRIVILEGE_BUDGET");
+   IntPtr privileges=Marshal.AllocHGlobal((int)privilegeSize);
+   try{if(!GetTokenInformation(token,3,privileges,privilegeSize,out privilegeSize))throw new IOException("INTEGRITY_PRIVILEGE_QUERY");
+    uint count=(uint)Marshal.ReadInt32(privileges);if(count>128||4L+count*12L>privilegeSize)throw new IOException("INTEGRITY_PRIVILEGE_LAYOUT");
+    for(int i=0;i<count;i++)Marshal.WriteInt32(privileges,4+i*12+8,4); // SE_PRIVILEGE_REMOVED is irreversible on this token.
+    if(!AdjustTokenPrivileges(token,false,privileges,0,IntPtr.Zero,IntPtr.Zero))throw new IOException("INTEGRITY_PRIVILEGE_REMOVE");
+    if(!GetTokenInformation(token,3,privileges,privilegeSize,out privilegeSize)||Marshal.ReadInt32(privileges)!=0)throw new IOException("INTEGRITY_PRIVILEGES_REMAIN");
+   }finally{Marshal.FreeHGlobal(privileges);}
+   if(!ConvertStringSidToSidW("S-1-16-4096",out sid))throw new IOException("INTEGRITY_SID_"+Marshal.GetLastWin32Error());
    try{var label=new SidAndAttributes{Sid=sid,Attributes=GroupIntegrity};int size=Marshal.SizeOf(label)+(int)GetLengthSid(sid);IntPtr buffer=Marshal.AllocHGlobal(size);
     try{Marshal.StructureToPtr(label,buffer,false);if(!SetTokenInformation(token,TokenIntegrityLevel,buffer,(uint)size))throw new IOException("INTEGRITY_LOWER_"+Marshal.GetLastWin32Error());}
     finally{Marshal.FreeHGlobal(buffer);}}

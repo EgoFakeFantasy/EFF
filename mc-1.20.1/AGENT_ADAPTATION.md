@@ -58,3 +58,5 @@
 - Fabric 构建与正式 Forge 分发检查单独执行；没有 Fabric 原生游戏回执。
 - 本次没有执行 ForeverLove 2.2／旧版／Pig2，也没有本地模型推理或权重训练回执；实际样本只读准入拒绝已验证。
 - Windows 虚拟机正在另行准备，来宾动态兼容与交战不包含在上述通过数内。远端 CI 及 PR 合并状态以 GitHub 页面为准。
+
+新增实验句柄探针在原 MIC 实现中发现最小 PROCESS_TERMINATE 访问仍被允许（原来的 Node kill 复合访问检查不足）。修正实验 helper：在降低完整性前以 SE_PRIVILEGE_REMOVED 去除继承令牌中的全部特权，防止管理员启动环境遗留 SeDebugPrivilege；不只禁用可重新启用的特权。默认守护不编译该代码，实验结果须以修正后的独立 CI 为准。
