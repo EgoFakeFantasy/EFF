@@ -16,7 +16,19 @@ import net.minecraftforge.fml.common.Mod;
 /** Forge binding for the same 1.20.1 game and sealed runtime protocol. */
 @Mod("eff")
 public final class EffMod {
+  private static final net.minecraftforge.registries.DeferredRegister<
+          net.minecraft.world.entity.EntityType<?>>
+      ENTITIES =
+          net.minecraftforge.registries.DeferredRegister.create(
+              net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES, "eff");
+  private static final net.minecraftforge.registries.RegistryObject<
+          net.minecraft.world.entity.EntityType<net.minecraft.world.entity.decoration.ArmorStand>>
+      PROJECTION = ENTITIES.register("projection", () -> EffEntities.PROJECTION);
+
   public EffMod() {
+    var modBus = net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext.get().getModEventBus();
+    ENTITIES.register(modBus);
+    modBus.addListener(EffMod::attributes);
     EffPackets.register();
     MinecraftForge.EVENT_BUS.addListener(EffMod::registerCommands);
     MinecraftForge.EVENT_BUS.addListener(EffMod::serverTick);
@@ -24,6 +36,11 @@ public final class EffMod {
     MinecraftForge.EVENT_BUS.addListener(EffMod::playerJoined);
     MinecraftForge.EVENT_BUS.addListener(EffMod::playerLeft);
     DistExecutor.safeRunWhenOn(Dist.CLIENT, () -> eff.minecraft.client.EffClient::initialize);
+  }
+
+  private static void attributes(
+      net.minecraftforge.event.entity.EntityAttributeCreationEvent event) {
+    event.put(PROJECTION.get(), EffEntities.attributes().build());
   }
 
   private static void registerCommands(RegisterCommandsEvent event) {

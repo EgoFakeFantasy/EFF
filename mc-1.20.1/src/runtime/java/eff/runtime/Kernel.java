@@ -46,7 +46,7 @@ public final class Kernel {
             "journal",
             new JsonArray());
     o(s, "checkpoints").add("checkpoint.origin", saved(s, "intruder"));
-    return s;
+    return StateBoundary.checked(s);
   }
 
   private static JsonObject saved(JsonObject s, String actor) {
@@ -94,7 +94,7 @@ public final class Kernel {
   }
 
   public static JsonObject snapshot(JsonObject s) {
-    JsonObject out = s.deepCopy();
+    JsonObject out = StateBoundary.checked(s);
     out.add("fields", fields(s));
     JsonArray cps = new JsonArray(), watches = new JsonArray();
     o(s, "checkpoints")
@@ -125,7 +125,7 @@ public final class Kernel {
   public static JsonObject run(JsonObject request) {
     Kernel k = new Kernel();
     k.transaction = Jsons.s(request, "transaction");
-    k.s = o(request, "state").deepCopy();
+    k.s = StateBoundary.checked(o(request, "state"));
     String actor = Jsons.s(request, "actor"), source = Jsons.s(request, "source");
     if (!Set.of("player", "intruder", "native-observer").contains(actor)) fail("INVALID_ACTOR");
     if (i(request, "revision") != i(k.s, "revision")) fail("STALE_RESEARCH_REVISION");
@@ -133,13 +133,8 @@ public final class Kernel {
     JsonObject before = fields(k.s);
     JsonArray steps = new JsonArray();
     boolean changed = false;
-    if (actor.equals("native-observer")) {
-      if (!source.equals("entity.avatar removed externally")) fail("INVALID_OBSERVATION");
-      if (b(k.s, "avatar")) {
-        k.s.addProperty("avatar", false);
-        changed = true;
-      }
-    } else {
+    if (actor.equals("native-observer")) fail("OBSERVATION_IS_NOT_AUTHORITY");
+    {
       var program =
           ResearchProgram.parse(source); // reject malformed whole programs before any effect
       for (var step : program) {
@@ -178,8 +173,7 @@ public final class Kernel {
       k.s.addProperty("revision", i(k.s, "revision") + 1);
       if (actor.equals("intruder")) k.s.addProperty("counterRounds", i(k.s, "counterRounds") + 1);
     }
-    if (actor.equals("player") && changed || actor.equals("native-observer") && changed)
-      k.s.addProperty("dirty", true);
+    if (actor.equals("player") && changed) k.s.addProperty("dirty", true);
     if (actor.equals("intruder")) k.s.addProperty("dirty", false);
     JsonObject receipt =
         obj(
@@ -231,7 +225,7 @@ public final class Kernel {
       }
     }
     if (!Jsons.s(k.s, "outcome").equals("pending")) k.s.addProperty("dirty", false);
-    return obj("state", k.s, "receipt", receipt, "actions", k.actions);
+    return obj("state", StateBoundary.checked(k.s), "receipt", receipt, "actions", k.actions);
   }
 
   private void append(JsonObject receipt) {
@@ -289,6 +283,7 @@ public final class Kernel {
         return true;
       case "unwatch":
         need(ws.has(t), "UNKNOWN_WATCH");
+        need(Jsons.s(o(ws, t), "actor").equals(actor), "WATCH_OWNERSHIP");
         ws.remove(t);
         return true;
       case "erase":

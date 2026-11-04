@@ -1,0 +1,33 @@
+tasks.register('projectionGuardTest',Exec) {
+ commandLine 'node','--test',file('../mc-1.20.1/runtime/projection-guard.test.cjs').absolutePath
+}
+tasks.register('projectionControllerTest',Exec) {
+ dependsOn 'runtimeKernelJar'
+ environment 'EFF_TEST_JAVA',javaToolchains.launcherFor(java.toolchain).get().executablePath.asFile.absolutePath
+ environment 'EFF_TEST_WORKERS',tasks.named('runtimeKernelJar').get().archiveFile.get().asFile.absolutePath
+ commandLine 'node','--test',file('../mc-1.20.1/runtime/controller-projection.test.cjs').absolutePath
+}
+check { dependsOn 'projectionGuardTest','projectionControllerTest' }
+
+
+tasks.register('securityBoundaryTest',Exec) {
+ commandLine 'node','--test',file('../mc-1.20.1/runtime/security-boundary.test.cjs').absolutePath,file('../mc-1.20.1/runtime/launch-policy.test.cjs').absolutePath,file('../mc-1.20.1/runtime/artifact-policy.test.cjs').absolutePath
+}
+tasks.register('stateBoundaryJavaTest',Exec) {
+ dependsOn 'runtimeKernelJar'
+ environment 'EFF_TEST_JAVA',javaToolchains.launcherFor(java.toolchain).get().executablePath.asFile.absolutePath
+ environment 'EFF_TEST_WORKERS',tasks.named('runtimeKernelJar').get().archiveFile.get().asFile.absolutePath
+ commandLine 'node','--test',file('../mc-1.20.1/runtime/state-boundary-java.test.cjs').absolutePath,file('../mc-1.20.1/runtime/authority-contract.test.cjs').absolutePath
+}
+check { dependsOn 'securityBoundaryTest','stateBoundaryJavaTest' }
+
+if(System.getProperty('os.name').toLowerCase().contains('windows')) {
+ tasks.register('quarantineGuardTest',Exec) {
+  dependsOn 'runtimeKernelJar','guardianBuild'
+  environment 'EFF_TEST_JAVA',javaToolchains.launcherFor(java.toolchain).get().executablePath.asFile.absolutePath
+  environment 'EFF_TEST_WORKERS',tasks.named('runtimeKernelJar').get().archiveFile.get().asFile.absolutePath
+  environment 'EFF_TEST_GUARD',layout.buildDirectory.file('guard/eff-guard.exe').get().asFile.absolutePath
+  commandLine 'node','--test',file('../mc-1.20.1/runtime/guard/quarantine.test.cjs').absolutePath
+ }
+ check { dependsOn 'quarantineGuardTest' }
+}

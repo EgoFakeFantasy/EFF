@@ -253,6 +253,8 @@ public final class EffServer {
     ticks++;
     for (Run run : List.copyOf(RUNS.values())) {
       if (run.arena.server != server) continue;
+      if (run.research instanceof ManagedResearchRuntime managed && managed.observePlayerFault())
+        continue;
       if ((System.nanoTime() - run.lastAck) / 1e9 > 15) {
         send(run.arena.player, Jsons.obj("error", "本地桥接长时间未响应，已恢复原世界。"));
         leave(run.arena.player);
@@ -270,8 +272,10 @@ public final class EffServer {
         leave(run.arena.player);
         continue;
       }
-      if (run.research != null && !run.researchBusy && run.research.needsCounter())
-        researchPlan(run, "intruder", "");
+      if (run.research != null
+          && !run.researchBusy
+          && run.research.needsCounter()
+          && !Boolean.getBoolean("eff.pig2Lab")) researchPlan(run, "intruder", "");
       if (ticks % 2 == 0 && !run.polling && run.arena.ready()) {
         run.polling = true;
         run.bridge

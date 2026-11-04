@@ -1,13 +1,15 @@
 # EFF · Minecraft 1.20.1 Forge 版
 
-运行层研究场 **0.5.2**，适配 **Minecraft Java 1.20.1 / Forge 47.4.20 及后续 47.x / Java 17**。这是独立的 Forge 模组，不依赖 Fabric API；与 [Fabric 1.20.1 版](../mc-1.20.1/README.md) 共用剧情、研究场、桥接、递代引擎和外层守护实现。
+运行层研究场 **0.6.1**，适配 **Minecraft Java 1.20.1 / Forge 47.4.20 及后续 47.x / Java 17**。这是独立的 Forge 模组，不依赖 Fabric API；与 [Fabric 1.20.1 版](../mc-1.20.1/README.md) 共用剧情、研究场、桥接、递代引擎和外层守护实现。
 
 保留原文之旅、庭院练习、运行层研究场、本地双代理，以及真实的实体、控制、事件、磁盘检查点、实例迁移和出口判定。时间冻结和画面撕裂继续作用于实际 MC 世界和游戏帧。Forge 入口改用 Forge 事件与带方向校验的 `SimpleChannel`，原文内容与终章介入时点由同一套脚本决定。
+
+0.6 增加[实体故障守护](../mc-1.20.1/ANTI_INSTANT_KILL.md)：玩家死亡或投影异常可在 JVM 仍存活时触发后继执行引擎和整树恢复；合法删除及恢复权限撤销会保留，第三次事故停止重启。此功能要求受保护多 JVM 入口。
 
 ## 普通安装
 
 1. 在启动器中新建 **Minecraft 1.20.1 + Forge 47.4.20 或更新的 47.x** 独立实例，使用 **64 位 Java 17**。本版不适用于其他 Minecraft 版本。
-2. 将 `build/libs/eff-minecraft-forge-1.20.1-0.5.2+mc1.20.1-forge.jar` 放入该实例的 `mods`。安装经过 `reobfJar` 处理的正式 JAR，不安装 `-sources.jar`；同一实例只安装一个 EFF 模组。
+2. 将 `build/libs/eff-minecraft-forge-1.20.1-0.6.1+mc1.20.1-forge.jar` 放入该实例的 `mods`。安装经过 `reobfJar` 处理的正式 JAR，不安装 `-sources.jar`；同一实例只安装一个 EFF 模组。
 3. 安装 **Node.js 22+**。启动器找不到 Node 时，添加 JVM 参数 `-Deff.node=C:/实际路径/node.exe`。
 4. 进入单人世界，按 **R** 打开 EFF；也可使用 `/eff play`、`/eff duel`、`/eff research`。用 `/eff leave` 返回原位置并恢复原有模式和能力。
 5. 本地 AI 使用玩家已有的 Ollama 服务 `127.0.0.1:11434`。在“本地模型”页检测、选择并启用已安装的模型；不自动下载权重。关闭模型时使用规则策略。
@@ -62,6 +64,8 @@ refuse ending.owned;
 .\start-protected.ps1 -Verify -AllowRuleFallback -Jdk C:\路径\jdk-17 -Directory C:\路径\EFF-Forge-QA-Rule
 ```
 
+受保护入口可通过 `-LowIntegrityHost` 显式选择实验性 Windows Low 完整性构建。本机新实验二进制被系统拒绝执行，Low 模式和真实 MC 图形兼容性尚未验收；默认保留原守护。`-ExternalControlOnly` 启用独立控制台提交，MC 只读。详见 [独立控制与实验隔离](../mc-1.20.1/PROTECTED_RUNTIME.md)。
+
 封存仅在新部署时建立信任基线；开始游玩不会自动重封存或重置战果。增加或更新模组必须准备新实例，不可把可写的 Gradle 缓存当作保护后的执行来源。完整性保护不提供对同账户或管理员的绝对防御。
 
 低内存受保护入口保留 MC 768 MiB 堆、工作 JVM 各 64 MiB 堆、控制器及剧情桥各 96 MiB V8 堆预算，使用平坦的专用引导世界。原生内存、Forge 及其他模组和本地模型仍另占内存；这些数值不是整机占用上限。实际战斗在 `eff:phenomenon` 维度中进行。
@@ -76,9 +80,15 @@ refuse ending.owned;
 # 指定另一受支持的 Forge 47.x 构建
 .\gradlew.bat --no-daemon build "-Pforge_version=47.4.28"
 # 检查正式产物中的 Forge 元数据、SRG refmap、剧情包与加载器依赖
-node tests/distribution.test.cjs build/libs/eff-minecraft-forge-1.20.1-0.5.2+mc1.20.1-forge.jar
+node tests/distribution.test.cjs build/libs/eff-minecraft-forge-1.20.1-0.6.1+mc1.20.1-forge.jar
 ```
 
 正式产物经过 Forge 的重混淆步骤，Mixin refmap 也必须具有 SRG 映射；只在开发环境启动成功不能代替正式安装包验证。构建 / 脚本测试与实际 MC 原生验收分别记录，缺少新的原生回执时不能视为游戏内验证通过。CI 只执行构建与可自动化检查，不声称覆盖真实游戏窗口、模型推理或任意整合包。
 
 原著归属见 [仓库说明](../README.md)，依赖许可见 [THIRD_PARTY.md](THIRD_PARTY.md)。
+
+## 0.6.1 启动与交接边界
+
+[权限审查与实现说明](../mc-1.20.1/RUNTIME_BOUNDARY_AUDIT.md)：严格状态 DTO、后继初值限制、玩家守卫所有权、不可由宿主取消的死亡故障，以及初始化就绪检查。额外研究模组须逐项静态审查并进入只读、退出后隔离的实验通道；摘要固定不代表安全。受保护模式请从外层窗口或 Ctrl+C 退出，单独关闭 MC 会触发恢复。
+
+独立外部控制台、只读宿主模式和实验 Low 构建见 [指南落实记录](../mc-1.20.1/AGENT_ADAPTATION.md)。

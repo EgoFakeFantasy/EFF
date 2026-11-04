@@ -22,8 +22,29 @@ public final class RuntimeLink {
       HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(1)).build();
   private static final AtomicLong CLIENT = new AtomicLong(),
       SERVER = new AtomicLong(),
-      HEARTBEAT = new AtomicLong();
-  private static volatile boolean paused, active, started;
+      HEARTBEAT = new AtomicLong(),
+      PROJECTION_SEQUENCE = new AtomicLong();
+  private static volatile boolean paused, active, started, admitted;
+  private static int diagnostics;
+  private static volatile JsonObject projection =
+      Jsons.obj("schema", 1, "sequence", 0, "enabled", false);
+
+  /** Called only on the server thread; the heartbeat thread reads this immutable copy. */
+  public static void publishProjection(JsonObject sample) {
+    if (!enabled()) return;
+    JsonObject next = sample.deepCopy();
+    next.addProperty("schema", 1);
+    next.addProperty("sequence", PROJECTION_SEQUENCE.incrementAndGet());
+    projection = next;
+  }
+
+  public static void clearProjection() {
+    publishProjection(Jsons.obj("enabled", false));
+  }
+
+  public static boolean initialized() {
+    return admitted;
+  }
 
   public static boolean enabled() {
     return ENDPOINT != null && SESSION != null && LEASE != null;
@@ -46,21 +67,52 @@ public final class RuntimeLink {
       executor.scheduleWithFixedDelay(
           () -> {
             try {
-              call(
-                  Jsons.obj(
-                      "op",
-                      "heartbeat",
-                      "sequence",
-                      HEARTBEAT.incrementAndGet(),
-                      "clientTick",
-                      CLIENT.get(),
-                      "serverTick",
-                      SERVER.get(),
-                      "paused",
-                      paused,
-                      "active",
-                      active));
+              JsonObject heartbeat =
+                  call(
+                      Jsons.obj(
+                          "op",
+                          "heartbeat",
+                          "sequence",
+                          HEARTBEAT.incrementAndGet(),
+                          "clientTick",
+                          CLIENT.get(),
+                          "serverTick",
+                          SERVER.get(),
+                          "paused",
+                          paused,
+                          "active",
+                          active,
+                          "projection",
+                          projection.deepCopy()));
+              admitted = Jsons.b(heartbeat, "initialized");
+              if (Boolean.getBoolean("eff.entityGuardSelftest") && diagnostics++ < 180)
+                System.out.println(
+                    "[EFF_INIT_QA] "
+                        + Jsons.obj(
+                            "admitted",
+                            admitted,
+                            "enabled",
+                            Jsons.b(projection, "enabled"),
+                            "revision",
+                            Jsons.i(projection, "revision"),
+                            "player",
+                            Jsons.o(projection, "player"),
+                            "avatar",
+                            Jsons.o(projection, "avatar"),
+                            "active",
+                            active,
+                            "paused",
+                            paused));
+
             } catch (Exception ignored) {
+              if (Boolean.getBoolean("eff.entityGuardSelftest") && diagnostics++ < 180)
+                System.out.println(
+                    "[EFF_INIT_QA_ERROR] "
+                        + ignored.getClass().getSimpleName()
+                        + ":"
+                        + (String.valueOf(ignored.getMessage()).matches("[A-Z0-9_]+")
+                            ? ignored.getMessage()
+                            : "runtime-link"));
             }
           },
           0,

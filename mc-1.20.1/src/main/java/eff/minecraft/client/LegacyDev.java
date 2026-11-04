@@ -6,12 +6,46 @@ import net.minecraft.client.gui.screens.TitleScreen;
 /** Options only for owned opt-in dev worlds; ordinary installation leaves user options alone. */
 final class LegacyDev {
   private static boolean logged;
+  private static long diagnosticAt;
+  private static int diagnosticCount;
 
   static void prepare(Minecraft mc) {
     if (!Boolean.getBoolean("eff.preview")
         && !Boolean.getBoolean("eff.selftest")
         && !Boolean.getBoolean("eff.researchSelftest")) return;
     mc.options.pauseOnLostFocus = false;
+    if (Boolean.getBoolean("eff.entityGuardSelftest")
+        && diagnosticCount < 40
+        && System.nanoTime() - diagnosticAt > 5_000_000_000L) {
+      diagnosticAt = System.nanoTime();
+      diagnosticCount++;
+      System.out.println(
+          "[EFF_SCREEN_QA] "
+              + eff.minecraft.Jsons.obj(
+                  "screen",
+                  mc.screen == null ? "none" : mc.screen.getClass().getName(),
+                  "paused",
+                  mc.isPaused(),
+                  "active",
+                  mc.isWindowActive(),
+                  "manual",
+                  EffClient.manualPause,
+                  "admitted",
+                  eff.minecraft.RuntimeLink.initialized(),
+                  "error",
+                  EffClient.error,
+                  "research",
+                  eff.minecraft.Jsons.o(EffClient.state, "research")));
+    }
+
+    // Only disposable native tests dismiss an incidental pause screen from background startup.
+    if ((Boolean.getBoolean("eff.entityGuardSelftest") || Boolean.getBoolean("eff.pig2Lab"))
+        && mc.player != null
+        && mc.screen instanceof net.minecraft.client.gui.screens.PauseScreen) {
+      EffClient.manualPause = false;
+      mc.setScreen(new EffScreen("research"));
+    }
+
     mc.options.onboardAccessibility = false;
     if (mc.screen != null
         && mc.screen.getClass().getSimpleName().equals("AccessibilityOnboardingScreen"))

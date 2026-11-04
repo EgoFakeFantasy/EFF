@@ -179,3 +179,9 @@ test("runtime intervention proposals require real managed faults and unrevoked r
     if (managed) assert.deepEqual(observed.runtime, s.runtime);
   }
 });
+
+ test("model receives only runtime summaries, never launch/admission credentials or paths",async()=>{
+ const s=base();s.runtime={session:'private-session',lease:'secret-lease',admission:{mods:[{audit:'C:/private/model/path'}]},execution:{engine:{artifact:'private-bytecode'}},hostEpoch:2,commit:8,initialized:true,events:[{type:'worker-replaced',reason:'WORKER_EXITED',role:'execution',privatePath:'C:/private'}]};
+ const m=model({statements:[{op:'inspect',target:'instance.world'}],explanation:'检查'});await inferResearch(m,s,'intruder');
+ const sent=JSON.parse(m.calls[0].messages[1].content);assert.deepEqual(sent.runtime,{events:[{type:'worker-replaced',reason:'WORKER_EXITED',role:'execution'}],hostEpoch:2,commit:8,initialized:true});assert.ok(!m.calls[0].messages[1].content.includes('private'));assert.ok(!m.calls[0].messages[1].content.includes('secret-lease'));
+ });

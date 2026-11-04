@@ -5,7 +5,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
-const artifact = path.resolve(process.argv[2] || "build/libs/eff-minecraft-forge-1.20.1-0.5.2+mc1.20.1-forge.jar");
+const artifact = path.resolve(process.argv[2] || "build/libs/eff-minecraft-forge-1.20.1-0.6.1+mc1.20.1-forge.jar");
 const javaHome = process.env.JAVA_HOME;
 const jarTool = javaHome ? path.join(javaHome, "bin", process.platform === "win32" ? "jar.exe" : "jar") : "jar";
 const jvm = ["-J-Xmx64m", "-J-XX:+UseSerialGC", "-J-XX:ActiveProcessorCount=2"];

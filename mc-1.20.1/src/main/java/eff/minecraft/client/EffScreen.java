@@ -152,7 +152,12 @@ public final class EffScreen extends Screen {
             counter = Jsons.o(r, "counter"),
             helper = Jsons.o(r, "advice");
         StringBuilder text =
-            new StringBuilder("实际实体：" + (Jsons.b(f, "entity.avatar.alive") ? "存在" : "已移除"))
+            new StringBuilder("权威实体：" + (Jsons.b(f, "entity.avatar.alive") ? "存在" : "已撤销"))
+                .append(
+                    f.has("projection.entity.avatar.observedAlive")
+                        ? " · 原生观测："
+                            + (Jsons.b(f, "projection.entity.avatar.observedAlive") ? "存在" : "缺失")
+                        : "")
                 .append(" · 牵引：")
                 .append(Jsons.b(f, "control.tether.active"))
                 .append(" · 事件：")
@@ -210,6 +215,20 @@ public final class EffScreen extends Screen {
                   "\n"
                       + "换代引擎：rebuild runtime.policy; rebuild runtime.execution；换宿主：rebuild"
                       + " runtime.host");
+          JsonObject admission = Jsons.o(rt, "admission");
+          text.append("\n启动校验：").append(Jsons.b(rt, "initialized") ? "投影已核对" : "等待有效投影");
+          if (Jsons.s(admission, "hostMutation").equals("disabled"))
+            text.append(" · 宿主只读：请从外部控制台提交");
+          JsonObject defense = Jsons.o(rt, "defense");
+          if (defense.size() > 0) {
+            JsonObject incident = Jsons.o(defense, "lastIncident");
+            text.append("\n实体守护：故障 ").append(Jsons.i(defense, "incidents")).append(" / 3（第三次停止恢复）");
+            if (incident.size() > 0)
+              text.append(" · ")
+                  .append(Jsons.s(incident, "subject"))
+                  .append(" / ")
+                  .append(Jsons.s(incident, "reason"));
+          }
           for (String role : new String[] {"policy", "execution"}) {
             JsonObject engine = Jsons.o(Jsons.o(rt, role), "engine");
             if (engine.size() == 0) continue;
@@ -265,6 +284,8 @@ public final class EffScreen extends Screen {
                       Jsons.i(r, "revision")));
             },
             !busy
+                && !Jsons.s(Jsons.o(Jsons.o(r, "runtime"), "admission"), "hostMutation")
+                    .equals("disabled")
                 && Jsons.s(r, "outcome").equals("pending")
                 && Jsons.b(Jsons.o(state, "native"), "ready"));
         button(

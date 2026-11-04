@@ -21,6 +21,8 @@ public final class EffClient implements ClientModInitializer {
   private static boolean pauseSent = false;
 
   public void onInitializeClient() {
+    net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry.register(
+        EffEntities.PROJECTION, net.minecraft.client.renderer.entity.ArmorStandRenderer::new);
     net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents.CLIENT_STOPPING
         .register(
             mc -> {
@@ -107,6 +109,7 @@ public final class EffClient implements ClientModInitializer {
           LegacyDev.prepare(mc);
           ManagedSelfTest.tick(mc);
           GuardedSelfTest.tick(mc);
+          EntityGuardSelfTest.tick(mc);
           EffSelfTest.tick(mc);
           ResearchSelfTest.tick(mc);
           EffPreview.tick(mc);
@@ -132,6 +135,8 @@ public final class EffClient implements ClientModInitializer {
                     || !mc.isWindowActive()
                         && !Boolean.getBoolean("eff.researchSelftest")
                         && !Boolean.getBoolean("eff.selftest")
+                        && !Boolean.getBoolean("eff.entityGuardSelftest")
+                        && !Boolean.getBoolean("eff.pig2Lab")
                     || mc.isPaused() && !(mc.screen instanceof EffScreen);
             if (pause != pauseSent) {
               pauseSent = pause;

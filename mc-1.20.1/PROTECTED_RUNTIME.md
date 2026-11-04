@@ -61,6 +61,28 @@
 - 心跳必须来自有效会话，客户端/服务端循环计数不能倒退。过期或重放数据不会刷新健康时间。超时、退避和重启窗口使用单调时间；墙钟只用于日志。
 - 应用层继续区分世界加载、原版暂停与模拟冻结；宿主加载预算为 180 秒，原生验收每段等待有 240 秒总预算；操作阶段时限从研究场原生状态就绪后开始。HTTP 请求有大小、并发、头部和读取时限，工作进程消息与对局回执也有总量限制。
 
+### 内核入侵防御与独立控制
+
+宿主 HMAC 只认证 MC 会话，不能认证真实玩家。协议字段白名单、隐藏字符拒绝和限流在控制器执行；三次违规撤销租约并进入有预算的恢复／隔离。白名单包含投影心跳，原生观测不能调用权威状态变更。每次启动再次核对 JVM 参数。
+
+受保护入口拒绝 MC 的 `goodbye`；即使随后 MC 真的退出，也只算宿主故障。人工停机使用外层窗口 Ctrl+C，或下面的外部控制台。普通未封存开发演示保留其退出便利性，不是安全模式。
+
+新封存目录生成独立的 `authority/control.json`，密钥不进入 MC 或模型环境。控制台请求使用独立签名域、会话、请求去重及当前 commit；执行角色固定为玩家，代码仍经两个受限 JVM 验证：
+
+```powershell
+node C:\path\to\deployment\payload\control.cjs C:\path\to\deployment\authority snapshot
+node C:\path\to\deployment\payload\control.cjs C:\path\to\deployment\authority execute "disable control.tether; disable event.possess"
+node C:\path\to\deployment\payload\control.cjs C:\path\to\deployment\authority stop
+```
+
+干净的剧情演示默认仍接受 MC 内的角色声明，快照明确标记 `EXPERIMENTAL_HOST_ACTOR_DEMO`；不能据此声称抵抗恶意同宿主代码。准备时加 `-ExternalControlOnly` 禁用所有宿主状态指令，仅由外部控制台提交。第三方模组实验强制只读、退出隔离，不能自动回到同一攻击环境。
+
+Windows 低完整性是**显式实验功能**，准备时加 `-LowIntegrityHost`，构建属性为 `-PeffLowIntegrityExperiment`。它包含 Claude PR #15 的 Low token、目录 MIC 标签与嵌套 Job；参数文件在 MC 不可写的 `host-launch`。默认编译保留此前通过本机验收的原守护路径，不编译此实验代码。第三方实验要求 Low；不允许用 `-MediumIntegrityHost` 降级第三方实验。
+
+本机新原生实验二进制被系统以“包含病毒或潜在垃圾软件”拒绝执行，没有关闭防护或添加排除项；本机 Low 模式和真实 MC Low 图形兼容性尚未验收。CI 单独运行实验守护测试，不用默认构建中的显式 skip 冒充 Low 通过。原 PR 的 CI 证据仅针对原 PR，整合版本需重新检查。
+
+Low MIC 的范围由系统对象标签决定，不能把它称作完整沙箱、PPL、内核驱动或对所有同用户攻击的保证。默认同级模式没有 OS 隔离；外部控制台也不防其他具有 Medium 权限的同账户程序。详见 [指南落实与验收范围](AGENT_ADAPTATION.md)。
+
 ## 准备、启动和更新
 
 需要 Windows 10/11、.NET Framework 4.8、Java 17 JDK 和 Node.js 22+。首次 Fabric/Gradle 依赖准备需要网络。守护源码位于 `runtime/guard/WindowsGuard.cs`，构建不下载第三方守护二进制。
@@ -98,3 +120,11 @@ Windows 构建包含原生守护检查：实际禁止写入/删除/替换代码�
 同 Windows 用户权限下，能任意操纵操作系统、守护内存或启动器的攻击者，仍可突破这一可信边界。DPAPI 不隔离同一用户的任意恶意程序，Job Object 也不是安全沙箱。这个版本加强的是代码文件的运行期写保护、可观察故障后的恢复和提交连续性，不承诺无缝接管任意 MC 内存或对所有运行层攻击免疫。
 
 实现依据：[Windows Job Objects](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects)、[文件共享与打开语义](https://learn.microsoft.com/en-us/windows/win32/fileio/creating-and-opening-files)。
+
+## 0.6 实体故障入口
+
+玩家死亡、投影死亡或生命值异常、登记丢失和战场外移除现在也能触发外层恢复。受保护模式的宿主退出、停滞与显式宿主替换统一通过整棵 Job 清理后再启动，防止原宿主的自重启子 JVM 留存。实体事故额外使用外层账本中的持久化计数，第三次停止自动恢复；合法身体删除、恢复权限撤销与终局保留。实现、原样 pig2 实验及观测边界见 [反秒杀守护](./ANTI_INSTANT_KILL.md)。
+
+## 0.6.1 输入准入与退出
+
+新增[启动与交接审查](./RUNTIME_BOUNDARY_AUDIT.md)。受保护宿主的 goodbye 不再有权关闭外层；退出请使用外层窗口或 Ctrl+C。第三方观察实验的写权限不会发给 MC，首次退出 / 故障后由可信控制器结束外层，旧部署不自动加载对手。既有 C# 外层源代码保留，新增策略在受封存 Node 与 Java 内检查。

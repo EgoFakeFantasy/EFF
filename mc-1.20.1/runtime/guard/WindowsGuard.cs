@@ -26,7 +26,15 @@ public sealed class NativeJob : IDisposable {
  IntPtr handle;
  public NativeJob(){handle=CreateJobObject(IntPtr.Zero,null);if(handle==IntPtr.Zero)throw new IOException("JOB_CREATE_FAILED");var l=new Limits();l.Basic.Flags=0x2000|0x8|0x200;l.Basic.Active=16;l.JobMemory=new UIntPtr(8UL*1024*1024*1024); // KILL_ON_JOB_CLOSE, no breakaway flags
   int size=Marshal.SizeOf(l);IntPtr ptr=Marshal.AllocHGlobal(size);try{Marshal.StructureToPtr(l,ptr,false);if(!SetInformationJobObject(handle,9,ptr,(uint)size))throw new IOException("JOB_LIMIT_FAILED");}finally{Marshal.FreeHGlobal(ptr);}}
- public void Add(Process process){if(!AssignProcessToJobObject(handle,process.Handle))throw new IOException("JOB_ASSIGN_FAILED_"+Marshal.GetLastWin32Error());}
+ public void Add(Process process){if(!AssignProcessToJobObject(handle,process.Handle))throw new IOException("JOB_ASSIGN_FAILED_"+Marshal.GetLastWin32Error());
+#if EFF_LOW_INTEGRITY_EXPERIMENTAL
+  if(IntegrityBoundary.Current()>=IntegrityBoundary.Medium)IntegrityBoundary.ProtectProcess(process);
+#endif
+ }
+#if EFF_LOW_INTEGRITY_EXPERIMENTAL
+ [DllImport("kernel32.dll",SetLastError=true)] static extern bool IsProcessInJob(IntPtr process,IntPtr job,out bool member);
+ public void ProtectOwned(int pid){if(pid<=0)throw new IOException("PROCESS_PROTECTION_PID");using(var p=Process.GetProcessById(pid)){bool member;if(!IsProcessInJob(p.Handle,handle,out member)||!member)throw new IOException("PROCESS_PROTECTION_NOT_OWNED");IntegrityBoundary.ProtectProcess(p);}}
+#endif
  public uint Active(){int size=Marshal.SizeOf(typeof(Accounting));IntPtr ptr=Marshal.AllocHGlobal(size);try{if(!QueryInformationJobObject(handle,1,ptr,(uint)size,IntPtr.Zero))throw new IOException("JOB_QUERY_FAILED");return ((Accounting)Marshal.PtrToStructure(ptr,typeof(Accounting))).active;}finally{Marshal.FreeHGlobal(ptr);}}
  public ulong PeakMemoryBytes(){int size=Marshal.SizeOf(typeof(Limits));IntPtr ptr=Marshal.AllocHGlobal(size);try{if(!QueryInformationJobObject(handle,9,ptr,(uint)size,IntPtr.Zero))throw new IOException("JOB_MEMORY_QUERY_FAILED");return ((Limits)Marshal.PtrToStructure(ptr,typeof(Limits))).PeakJob.ToUInt64();}finally{Marshal.FreeHGlobal(ptr);}}
  public void Drain(){if(handle==IntPtr.Zero)return;if(!TerminateJobObject(handle,71))throw new IOException("JOB_TERMINATE_FAILED");var watch=Stopwatch.StartNew();while(Active()!=0){if(watch.ElapsedMilliseconds>10000)throw new IOException("OLD_JOB_NOT_EMPTY");Thread.Sleep(20);}}
@@ -72,13 +80,131 @@ public sealed class Ledger : IDisposable {
    }
   }
  }
- void Validate(Dictionary<string,object> body){long expected=Current==null?1:Convert.ToInt64(Current["commit"])+1;if(Convert.ToInt32(body["schema"])!=1||Convert.ToInt64(body["commit"])!=expected)throw new IOException("LEDGER_REVISION_MISMATCH");var next=Map(body["state"]);if(Current!=null){var old=Map(Current["state"]);if(!Convert.ToBoolean(old["recovery"])&&Convert.ToBoolean(next["recovery"]))throw new IOException("REVOCATION_ROLLBACK");if(Convert.ToInt64(next["revision"])<Convert.ToInt64(old["revision"]))throw new IOException("STATE_ROLLBACK");if(Convert.ToString(old["outcome"])!="pending"&&Convert.ToString(old["outcome"])!=Convert.ToString(next["outcome"]))throw new IOException("ENDING_ROLLBACK");}ValidateEngines(body);}
+ void ValidateDefense(Dictionary<string,object> body){
+  bool had=Current!=null&&Current.ContainsKey("defense"),has=body.ContainsKey("defense");
+  if(!has){if(had)throw new IOException("DEFENSE_REMOVED");return;}
+  var d=Map(body["defense"]);
+  if(d.Count!=4||!d.ContainsKey("schema")||!d.ContainsKey("incidents")||!d.ContainsKey("circuitOpen")||!d.ContainsKey("lastIncident")||EngineInteger(d["schema"])!=1||!(d["circuitOpen"] is bool))throw new IOException("DEFENSE_RECORD_INVALID");
+  long count=EngineInteger(d["incidents"]);if(count<0||count>3||(bool)d["circuitOpen"]!=(count==3))throw new IOException("DEFENSE_BUDGET_INVALID");
+  if(!had&&count!=0)throw new IOException("DEFENSE_GENESIS_INVALID");
+  if(had){var prior=Map(Current["defense"]);long old=EngineInteger(prior["incidents"]);if(count<old)throw new IOException("DEFENSE_ROLLBACK");if(count>old+1)throw new IOException("DEFENSE_JUMP");if(count==old&&json.Serialize(d)!=json.Serialize(prior))throw new IOException("DEFENSE_REWRITE");}
+  if(count==0){if(d["lastIncident"]!=null)throw new IOException("DEFENSE_GENESIS_INVALID");return;}
+  var x=Map(d["lastIncident"]);if(x.Count!=5||!x.ContainsKey("id")||!x.ContainsKey("instance")||!x.ContainsKey("revision")||!x.ContainsKey("subject")||!x.ContainsKey("reason"))throw new IOException("DEFENSE_INCIDENT_INVALID");
+  string id=EngineText(x,"id"),subject=EngineText(x,"subject"),reason=EngineText(x,"reason"),instance=EngineText(x,"instance");
+  if(!System.Text.RegularExpressions.Regex.IsMatch(id,"^[a-f0-9]{32}$")||!System.Text.RegularExpressions.Regex.IsMatch(instance,"^[-a-zA-Z0-9]{16,96}$")||EngineInteger(x["revision"])<0||Array.IndexOf(new[]{"player","avatar","observer"},subject)<0||Array.IndexOf(new[]{"ENTITY_REMOVED","ENTITY_DYING","ENTITY_ZERO_HEALTH","ENTITY_INVALID_HEALTH","ENTITY_UNREGISTERED","ENTITY_DISPLACED","ENTITY_UNEXPECTED","OBSERVER_STALE"},reason)<0)throw new IOException("DEFENSE_INCIDENT_INVALID");
+  if(had&&count>EngineInteger(Map(Current["defense"])["incidents"])){
+   var state=Map(Current["state"]);if(instance!=Convert.ToString(state["instance"])||EngineInteger(x["revision"])!=Convert.ToInt64(state["revision"])||(Convert.ToString(state["outcome"])!="pending"&&!(Convert.ToString(state["outcome"])=="won"&&subject=="avatar"&&reason=="ENTITY_UNEXPECTED")))throw new IOException("DEFENSE_OBSERVATION_STALE");
+  }
+ }
+ void Validate(Dictionary<string,object> body){long expected=Current==null?1:Convert.ToInt64(Current["commit"])+1;if(Convert.ToInt32(body["schema"])!=1||Convert.ToInt64(body["commit"])!=expected)throw new IOException("LEDGER_REVISION_MISMATCH");var next=Map(body["state"]);if(Current!=null){var old=Map(Current["state"]);if(!Convert.ToBoolean(old["recovery"])&&Convert.ToBoolean(next["recovery"]))throw new IOException("REVOCATION_ROLLBACK");if(Convert.ToInt64(next["revision"])<Convert.ToInt64(old["revision"]))throw new IOException("STATE_ROLLBACK");if(Convert.ToString(old["outcome"])!="pending"&&Convert.ToString(old["outcome"])!=Convert.ToString(next["outcome"]))throw new IOException("ENDING_ROLLBACK");}ValidateEngines(body);ValidateDefense(body);}
  public object Commit(long observed,Dictionary<string,object> body){if(observed!=(Current==null?0:Convert.ToInt64(Current["commit"])))throw new IOException("STALE_LEDGER_COMMIT");Validate(body);var entry=new Dictionary<string,object>{{"previous",previous},{"body",body}};byte[] data=Encoding.UTF8.GetBytes(json.Serialize(entry));if(data.Length>131072)throw new IOException("LEDGER_BUDGET");byte[] mac=Mac(data);long offset=file.Length;
   try{file.Position=offset;var w=new BinaryWriter(file,Encoding.UTF8,true);w.Write(data.Length);w.Write(data);w.Write(mac);w.Flush();file.Flush(true);}catch{try{file.SetLength(offset);file.Flush(true);}catch{}throw;}
   Current=body;previous=Hex(mac);WriteHead();return body;}
  void WriteHead(){byte[] b=Encoding.UTF8.GetBytes((Current==null?0:Convert.ToInt64(Current["commit"]))+":"+previous);anchor.Position=0;var w=new BinaryWriter(anchor,Encoding.UTF8,true);w.Write(b.Length);w.Write(b);w.Write(Mac(b));w.Flush();anchor.SetLength(anchor.Position);anchor.Flush(true);}
  public void Dispose(){file.Dispose();anchor.Dispose();keyLock.Dispose();Array.Clear(key,0,key.Length);}
 }
+#if EFF_LOW_INTEGRITY_EXPERIMENTAL
+// Windows mandatory integrity control is the boundary MC cannot argue with: it is enforced by the OS kernel
+// on every handle open, so code loaded into a Low integrity MC JVM (mods, mixins, agents, JNA/native calls)
+// cannot open this guard, the controller or the worker JVMs for read/write/inject/terminate, cannot send
+// window messages up (UIPI), and cannot read or write the authority directory labelled below.
+public static class IntegrityBoundary {
+ [StructLayout(LayoutKind.Sequential)] struct SidAndAttributes { public IntPtr Sid; public uint Attributes; }
+ [DllImport("advapi32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool ConvertStringSecurityDescriptorToSecurityDescriptorW(string sddl,uint revision,out IntPtr descriptor,IntPtr size);
+ [DllImport("advapi32.dll",SetLastError=true)] static extern bool GetSecurityDescriptorSacl(IntPtr descriptor,out bool present,out IntPtr sacl,out bool defaulted);
+ [DllImport("advapi32.dll",CharSet=CharSet.Unicode)] static extern uint SetNamedSecurityInfoW(string name,int type,uint info,IntPtr owner,IntPtr group,IntPtr dacl,IntPtr sacl);
+ [DllImport("advapi32.dll")] static extern uint SetSecurityInfo(IntPtr handle,int type,uint info,IntPtr owner,IntPtr group,IntPtr dacl,IntPtr sacl);
+ [DllImport("advapi32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool ConvertStringSidToSidW(string sid,out IntPtr psid);
+ [DllImport("advapi32.dll")] static extern uint GetLengthSid(IntPtr sid);
+ [DllImport("advapi32.dll")] static extern IntPtr GetSidSubAuthorityCount(IntPtr sid);
+ [DllImport("advapi32.dll")] static extern IntPtr GetSidSubAuthority(IntPtr sid,uint index);
+ [DllImport("advapi32.dll",SetLastError=true)] static extern bool OpenProcessToken(IntPtr process,uint access,out IntPtr token);
+ [DllImport("advapi32.dll",SetLastError=true)] static extern bool SetTokenInformation(IntPtr token,int cls,IntPtr info,uint length);
+ [DllImport("advapi32.dll",SetLastError=true)] static extern bool GetTokenInformation(IntPtr token,int cls,IntPtr info,uint length,out uint returned);
+ [DllImport("advapi32.dll",SetLastError=true)] static extern bool AdjustTokenPrivileges(IntPtr token,bool disableAll,IntPtr state,uint length,IntPtr previous,IntPtr returned);
+ [DllImport("kernel32.dll")] static extern IntPtr GetCurrentProcess();
+ [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr memory);
+ [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
+ const int FileObject=1,TokenIntegrityLevel=25;const uint LabelInformation=0x10,TokenQuery=0x8,TokenAdjustDefault=0x80,GroupIntegrity=0x20;
+ public const uint Low=0x1000,Medium=0x2000;
+ static void Label(string path,string sddl){
+  IntPtr descriptor;if(!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl,1,out descriptor,IntPtr.Zero))throw new IOException("INTEGRITY_LABEL_SDDL_"+Marshal.GetLastWin32Error());
+  try{bool present,defaulted;IntPtr sacl;if(!GetSecurityDescriptorSacl(descriptor,out present,out sacl,out defaulted)||!present)throw new IOException("INTEGRITY_LABEL_SACL");
+   uint error=SetNamedSecurityInfoW(path,FileObject,LabelInformation,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero,sacl);if(error!=0)throw new IOException("INTEGRITY_LABEL_FAILED_"+error);}
+  finally{LocalFree(descriptor);}
+ }
+ // Medium label with no-read-up, no-write-up and no-execute-up, inherited by every file: a Low process
+ // can neither read the ledger key/state nor write anything here. Medium kernel processes are unaffected.
+ public static void SealAuthority(string directory){Label(directory,"S:(ML;OICI;NRNWNX;;;ME)");}
+ public static void ProtectProcess(Process process){
+  // PROCESS_TERMINATE is not stopped by the default process NR/NW label. Explicit NX is required.
+  // Equal-integrity user tools and the supervisor's owned handles remain usable.
+  IntPtr descriptor;if(!ConvertStringSecurityDescriptorToSecurityDescriptorW("S:(ML;;NRNWNX;;;"+(Current()>=0x3000?"HI":"ME")+")",1,out descriptor,IntPtr.Zero))throw new IOException("PROCESS_LABEL_SDDL");
+  try{bool present,defaulted;IntPtr sacl;if(!GetSecurityDescriptorSacl(descriptor,out present,out sacl,out defaulted)||!present)throw new IOException("PROCESS_LABEL_SACL");uint error=SetSecurityInfo(process.Handle,6,LabelInformation,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero,sacl);if(error!=0)throw new IOException("PROCESS_LABEL_FAILED_"+error);}
+  finally{LocalFree(descriptor);}
+ }
+ // The only tree a Low MC may write: its own game directory.
+ public static void OpenToLow(string directory){Label(directory,"S:(ML;OICI;NW;;;LW)");}
+ public static uint Current(){
+  IntPtr token;if(!OpenProcessToken(GetCurrentProcess(),TokenQuery,out token))throw new IOException("INTEGRITY_TOKEN_"+Marshal.GetLastWin32Error());
+  try{uint size;GetTokenInformation(token,TokenIntegrityLevel,IntPtr.Zero,0,out size);IntPtr buffer=Marshal.AllocHGlobal((int)size);
+   try{if(!GetTokenInformation(token,TokenIntegrityLevel,buffer,size,out size))throw new IOException("INTEGRITY_QUERY_"+Marshal.GetLastWin32Error());
+    IntPtr sid=((SidAndAttributes)Marshal.PtrToStructure(buffer,typeof(SidAndAttributes))).Sid;int count=Marshal.ReadByte(GetSidSubAuthorityCount(sid));
+    return (uint)Marshal.ReadInt32(GetSidSubAuthority(sid,(uint)(count-1)));}
+   finally{Marshal.FreeHGlobal(buffer);}}
+  finally{CloseHandle(token);}
+ }
+ // Lowering one's own token is always permitted; nothing can raise it again without SeTcbPrivilege.
+ public static void LowerSelf(){
+  IntPtr token,sid;if(!OpenProcessToken(GetCurrentProcess(),TokenQuery|TokenAdjustDefault|0x20,out token))throw new IOException("INTEGRITY_TOKEN_"+Marshal.GetLastWin32Error());
+  try{
+   // Merely lowering IL retains privileges from an elevated launcher (notably SeDebugPrivilege).
+   // Remove, do not just disable, every privilege before untrusted code inherits this primary token.
+   uint privilegeSize;GetTokenInformation(token,3,IntPtr.Zero,0,out privilegeSize);if(privilegeSize<4||privilegeSize>65536)throw new IOException("INTEGRITY_PRIVILEGE_BUDGET");
+   IntPtr privileges=Marshal.AllocHGlobal((int)privilegeSize);
+   try{if(!GetTokenInformation(token,3,privileges,privilegeSize,out privilegeSize))throw new IOException("INTEGRITY_PRIVILEGE_QUERY");
+    uint count=(uint)Marshal.ReadInt32(privileges);if(count>128||4L+count*12L>privilegeSize)throw new IOException("INTEGRITY_PRIVILEGE_LAYOUT");
+    for(int i=0;i<count;i++)Marshal.WriteInt32(privileges,4+i*12+8,4); // SE_PRIVILEGE_REMOVED is irreversible on this token.
+    if(!AdjustTokenPrivileges(token,false,privileges,0,IntPtr.Zero,IntPtr.Zero))throw new IOException("INTEGRITY_PRIVILEGE_REMOVE");
+    if(!GetTokenInformation(token,3,privileges,privilegeSize,out privilegeSize)||Marshal.ReadInt32(privileges)!=0)throw new IOException("INTEGRITY_PRIVILEGES_REMAIN");
+   }finally{Marshal.FreeHGlobal(privileges);}
+   if(!ConvertStringSidToSidW("S-1-16-4096",out sid))throw new IOException("INTEGRITY_SID_"+Marshal.GetLastWin32Error());
+   try{var label=new SidAndAttributes{Sid=sid,Attributes=GroupIntegrity};int size=Marshal.SizeOf(label)+(int)GetLengthSid(sid);IntPtr buffer=Marshal.AllocHGlobal(size);
+    try{Marshal.StructureToPtr(label,buffer,false);if(!SetTokenInformation(token,TokenIntegrityLevel,buffer,(uint)size))throw new IOException("INTEGRITY_LOWER_"+Marshal.GetLastWin32Error());}
+    finally{Marshal.FreeHGlobal(buffer);}}
+   finally{LocalFree(sid);}}
+  finally{CloseHandle(token);}
+  if(Current()!=Low)throw new IOException("INTEGRITY_NOT_LOWERED");
+ }
+}
+// `eff-guard.exe --low-integrity-host <game dir> <program> [args...]`, started by the controller instead of java.exe.
+// It labels only the game directory writable for Low, drops itself to Low and runs MC inside a nested
+// kill-on-close job, so terminating this helper (as the controller does on replacement) also ends MC.
+public static class LowIntegrityHost {
+ static string Argument(string a){
+  if(a.Length>0&&a.IndexOfAny(new[]{' ','\t','\n','\v','"'})<0)return a;
+  var b=new StringBuilder("\"");int slashes=0;
+  foreach(char c in a){if(c=='\\'){slashes++;continue;}if(c=='"')b.Append('\\',slashes*2+1).Append('"');else b.Append('\\',slashes).Append(c);slashes=0;}
+  return b.Append('\\',slashes*2).Append('"').ToString();
+ }
+ static Task Pump(Stream from,Stream to){return Task.Factory.StartNew(()=>{try{var buffer=new byte[8192];int n;while((n=from.Read(buffer,0,buffer.Length))>0){lock(to){to.Write(buffer,0,n);to.Flush();}}}catch{}},TaskCreationOptions.LongRunning);}
+ public static int Run(string[] args){
+  string game=Path.GetFullPath(args[1]);if(!Directory.Exists(game))throw new IOException("LOW_HOST_GAME_DIRECTORY");
+  for(string p=game;p!=null;p=Path.GetDirectoryName(p))if((File.GetAttributes(p)&FileAttributes.ReparsePoint)!=0)throw new IOException("REPARSE_POINT_REJECTED");
+  IntegrityBoundary.OpenToLow(game);string temp=Path.Combine(game,"tmp");Directory.CreateDirectory(temp);
+  IntegrityBoundary.LowerSelf();
+  var rest=new List<string>();for(int i=3;i<args.Length;i++)rest.Add(Argument(args[i]));
+  var start=new ProcessStartInfo(args[2],String.Join(" ",rest));start.UseShellExecute=false;start.CreateNoWindow=true;start.WorkingDirectory=game;
+  start.RedirectStandardOutput=true;start.RedirectStandardError=true;start.EnvironmentVariables["TMP"]=temp;start.EnvironmentVariables["TEMP"]=temp;
+  using(var job=new NativeJob())using(var child=Process.Start(start)){
+   try{job.Add(child);}catch{child.Kill();child.WaitForExit();throw;}
+   var pumps=new[]{Pump(child.StandardOutput.BaseStream,Console.OpenStandardOutput()),Pump(child.StandardError.BaseStream,Console.OpenStandardError())};
+   child.WaitForExit();Task.WaitAll(pumps,5000); // a grandchild holding the pipe open must not keep the helper alive
+   return child.ExitCode;
+  }
+ }
+}
+#endif
 public static class Program {
  static JavaScriptSerializer Json=new JavaScriptSerializer {MaxJsonLength=2097152,RecursionLimit=96};
  static List<FileStream> locks=new List<FileStream>();static volatile bool stopping;
@@ -91,10 +217,19 @@ public static class Program {
  static void CheckTrees(object trees){foreach(object item in (object[])trees){var tree=M(item);string root=(string)tree["root"];var want=new HashSet<string>(StringComparer.OrdinalIgnoreCase);foreach(object name in (object[])tree["entries"])want.Add((string)name);var actual=new HashSet<string>(StringComparer.OrdinalIgnoreCase);if(!Directory.Exists(root)){if(want.Count!=0)throw new IOException("CODE_TREE_MISSING");continue;}foreach(string f in Directory.GetFiles(LongPath(root),"*",SearchOption.AllDirectories)){NoReparse(f);actual.Add(f.Substring(LongPath(root).Length).TrimStart(Path.DirectorySeparatorChar));}if(!want.SetEquals(actual))throw new IOException("CODE_TREE_CHANGED");}}
  public static int Main(string[] args){string directory=null;try{
   if(args.Length==2&&args[0]=="--provision"){Ledger.Provision(args[1]);Console.WriteLine("LEDGER_PROVISIONED");return 0;}
+#if EFF_LOW_INTEGRITY_EXPERIMENTAL
+  if(args.Length>=3&&args[0]=="--low-integrity-host")return LowIntegrityHost.Run(args);
+  if(args.Length==1&&args[0]=="--integrity"){Console.WriteLine(IntegrityBoundary.Current()==IntegrityBoundary.Low?"low":IntegrityBoundary.Current()>=IntegrityBoundary.Medium?"medium-or-higher":"other");return 0;}
+#endif
   if(args.Length!=2)throw new IOException("EXPECTED_MANIFEST_AND_PIN");NoReparse(args[0]);
   var manifestLock=new FileStream(args[0],FileMode.Open,FileAccess.Read,FileShare.Read);locks.Add(manifestLock);if(!String.Equals(Sha(manifestLock),args[1],StringComparison.OrdinalIgnoreCase))throw new IOException("SEAL_MISMATCH");if(manifestLock.Length>2097152)throw new IOException("SEAL_BUDGET");manifestLock.Position=0;string text;using(var r=new StreamReader(manifestLock,Encoding.UTF8,true,4096,true))text=r.ReadToEnd();var seal=M(Json.DeserializeObject(text));if(Convert.ToInt32(seal["schema"])!=1)throw new IOException("SEAL_SCHEMA");
   foreach(object item in (object[])seal["files"]){var f=M(item);string path=(string)f["path"];NoReparse(path);var held=new FileStream(LongPath(path),FileMode.Open,FileAccess.Read,FileShare.Read);locks.Add(held);if(held.Length!=Convert.ToInt64(f["size"]))throw new IOException("CODE_SIZE_MISMATCH");if(!String.Equals(Sha(held),(string)f["sha256"],StringComparison.OrdinalIgnoreCase))throw new IOException("CODE_HASH_MISMATCH");}
-  CheckTrees(seal["trees"]);var config=M(seal["config"]);directory=(string)config["directory"];NoReparse(directory);Console.CancelKeyPress+=(s,e)=>{e.Cancel=true;stopping=true;};
+  CheckTrees(seal["trees"]);var config=M(seal["config"]);directory=(string)config["directory"];NoReparse(directory);
+#if EFF_LOW_INTEGRITY_EXPERIMENTAL
+  IntegrityBoundary.SealAuthority(directory);
+  IntegrityBoundary.ProtectProcess(Process.GetCurrentProcess());config["integrityBoundary"]=true;
+#endif
+  Console.CancelKeyPress+=(s,e)=>{e.Cancel=true;stopping=true;};
   string ruleset=null;foreach(object item in (object[])seal["files"]){var f=M(item);if(String.Equals(Path.GetFullPath((string)f["path"]),Path.GetFullPath((string)config["workerJar"]),StringComparison.OrdinalIgnoreCase))ruleset=(string)f["sha256"];}if(ruleset==null)throw new IOException("WORKER_RULESET_NOT_SEALED");
   using(var ledger=new Ledger(directory,Json,ruleset)){
    Event(directory,"guard-ready",new {pid=Process.GetCurrentProcess().Id,files=locks.Count});
@@ -112,7 +247,10 @@ public static class Program {
        if(line.IsCompleted){string raw=line.Result;if(raw==null)break;if(raw.Length>262144)throw new IOException("GUARD_MESSAGE_BUDGET");var r=M(Json.DeserializeObject(raw));string op=Convert.ToString(r["op"]);object result=null;string error=null;
         if(op=="pulse"){last=clock.ElapsedMilliseconds;ready=true;}
         else if(op=="load")result=ledger.Current;
-        else if(op=="commit"){try{result=ledger.Commit(Convert.ToInt64(r["previous"]),M(r["body"]));}catch(IOException e){if(!(e.Message.StartsWith("STALE_")||e.Message.StartsWith("STATE_")||e.Message.StartsWith("ENDING_")||e.Message.StartsWith("REVOCATION_")||e.Message.StartsWith("LEDGER_REVISION")||e.Message.StartsWith("ENGINE_LINEAGE_")))throw;error=e.Message;}}
+        else if(op=="commit"){try{result=ledger.Commit(Convert.ToInt64(r["previous"]),M(r["body"]));}catch(IOException e){if(!(e.Message.StartsWith("STALE_")||e.Message.StartsWith("STATE_")||e.Message.StartsWith("ENDING_")||e.Message.StartsWith("REVOCATION_")||e.Message.StartsWith("LEDGER_REVISION")||e.Message.StartsWith("ENGINE_LINEAGE_")||e.Message.StartsWith("DEFENSE_")))throw;error=e.Message;}}
+#if EFF_LOW_INTEGRITY_EXPERIMENTAL
+        else if(op=="protect"){try{if(!(r["pid"] is int))throw new IOException("PROCESS_PROTECTION_PID");job.ProtectOwned((int)r["pid"]);result=new {protectedPid=r["pid"]};}catch(IOException e){error=e.Message;}}
+#endif
         else if(op=="verify"){CheckTrees(seal["trees"]);result=new {verified=true};}
         else if(op=="stopped"){graceful=true;break;}
         else throw new IOException("GUARD_OP_NOT_ALLOWED");

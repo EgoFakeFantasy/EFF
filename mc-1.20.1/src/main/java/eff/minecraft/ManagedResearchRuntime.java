@@ -27,11 +27,13 @@ public final class ManagedResearchRuntime implements ResearchSession {
     this.arena = arena;
     state = RuntimeLink.call(Jsons.obj("op", "snapshot"));
     instance = Jsons.s(state, "instance");
+    if (Integer.parseInt(System.getenv().getOrDefault("EFF_RUNTIME_GUARD_GENERATION", "0")) > 0)
+      notes.add("受保护启动：退出游玩请关闭外层守护窗口或按 Ctrl+C；只关闭 MC 会触发恢复。");
     notes.add("多 JVM 托管：判定与执行可生成后继引擎，在独立 JVM 验证后接续；MC 可整体替换。已提交的权限撤销会持续保留。");
   }
 
   private boolean alive() {
-    return avatar != null && !avatar.isRemoved();
+    return ProjectionProbe.healthy(avatar, arena.world, arena.researchAnchor());
   }
 
   private boolean desired(String key) {
@@ -40,7 +42,16 @@ public final class ManagedResearchRuntime implements ResearchSession {
 
   private void spawn() {
     Vec3 p = arena.researchAnchor().add(3, 0, -3);
-    avatar = new ArmorStand(arena.world, p.x, p.y, p.z);
+    discardAvatar();
+    if (avatar != null) {
+      // A third-party no-op removal must not throw out of the arena and clear the probe.
+      // Retain the failed object so the external guard can migrate this JVM.
+      knownAlive = true;
+      if (!notes.contains("PROJECTION_REMOVAL_BLOCKED：旧投影仍被实体表引用，等待外层守护。"))
+        notes.add("PROJECTION_REMOVAL_BLOCKED：旧投影仍被实体表引用，等待外层守护。");
+      return;
+    }
+    avatar = EffEntities.createProjection(arena.world, p);
     avatar.setCustomName(Component.literal("外来者投影 · entity.avatar"));
     avatar.setCustomNameVisible(true);
     avatar.setNoGravity(true);
@@ -49,14 +60,19 @@ public final class ManagedResearchRuntime implements ResearchSession {
     avatar.addTag("eff_research_" + arena.player.getUUID());
     avatar.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.WITHER_SKELETON_SKULL));
     avatar.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.LEATHER_CHESTPLATE));
-    if (!arena.world.addFreshEntity(avatar))
-      throw new IllegalStateException("ENTITY_SPAWN_REJECTED");
+    boolean added = arena.world.addFreshEntity(avatar);
+    // Spawn suppression is also a projection fault. Keep the failed object observable rather
+    // than closing the research scope before the external guardian can receive its evidence.
     knownAlive = true;
+    if (!added) {
+      notes.add("ENTITY_SPAWN_REJECTED：投影未进入世界实体表，等待外层守护判定。");
+      while (notes.size() > 8) notes.remove(0);
+    }
   }
 
   private void accept(JsonObject next) {
     if (!Jsons.s(next, "instance").equals(instance)) {
-      if (alive()) avatar.discard();
+      discardAvatar();
       knownAlive = false;
       instance = Jsons.s(next, "instance");
       arena.researchRebuild();
@@ -68,7 +84,10 @@ public final class ManagedResearchRuntime implements ResearchSession {
     JsonObject out = state.deepCopy();
     out.addProperty("avatarUUID", alive() ? avatar.getUUID().toString() : "");
     JsonObject fields = Jsons.o(out, "fields");
-    fields.addProperty("entity.avatar.alive", alive());
+    fields.addProperty("authority.entity.avatar.desiredAlive", desired("avatar"));
+    fields.addProperty("projection.entity.avatar.observedAlive", alive());
+    fields.addProperty("projection.entity.avatar.stableId", instance + ":avatar");
+    fields.addProperty("projection.status", desired("avatar") == alive() ? "MATCHED" : "DIVERGED");
     fields.addProperty("world.frozen", LegacyFreeze.of(arena.server).isFrozen());
     fields.addProperty("world.exitOpen", Jsons.b(arena.facts(), "exitOpen"));
     out.add("counter", counter.deepCopy());
@@ -108,24 +127,23 @@ public final class ManagedResearchRuntime implements ResearchSession {
 
   public void project() {
     if (closed || !arena.ready()) return;
-    if (desired("avatar") && !alive()) spawn();
-    if (!desired("avatar") && alive()) {
-      avatar.discard();
+    // An unexpected loss under active recovery belongs to the external guardian. Replacing only
+    // the entity here would both hide the fault and reuse the possibly modified JVM.
+    boolean externalFault = knownAlive && desired("recovery") && pending() && !alive();
+    if (desired("avatar") && !alive() && !externalFault) spawn();
+    if (!desired("avatar")) {
+      discardAvatar();
       knownAlive = false;
     }
     arena.researchProject(!desired("tether"), desired("refused"));
+    publishProjection();
   }
 
   public void tick() {
     if (closed || !arena.ready()) return;
     ticks++;
-    if (knownAlive
-        && !alive()
-        && desired("avatar")
-        && Jsons.s(state, "outcome").equals("pending")) {
-      knownAlive = false;
-      execute("entity.avatar removed externally", revision(), "native-observer");
-    }
+    // Native reports never change the external avatar/recovery authority.
+    publishProjection();
     if (ticks % 40 == 0) accept(RuntimeLink.call(Jsons.obj("op", "snapshot")));
     project();
     if (desired("tether")) {
@@ -135,11 +153,56 @@ public final class ManagedResearchRuntime implements ResearchSession {
       arena.player.setDeltaMovement(Vec3.ZERO);
     }
     arena.researchContain();
+    publishProjection();
     if (desired("refused") && arena.researchAtExit()) EffServer.leave(arena.player);
+  }
+
+  private boolean pending() {
+    return Jsons.s(state, "outcome").equals("pending");
+  }
+
+  /**
+   * Preserve death/removal evidence before arena containment or player-count cleanup can hide it.
+   */
+  public boolean observePlayerFault() {
+    if (closed
+        || !arena.ready()
+        || ProjectionProbe.healthyPlayer(arena.player, arena.world, arena.researchAnchor()))
+      return false;
+    publishProjection();
+    return true;
+  }
+
+  private void publishProjection() {
+    RuntimeLink.publishProjection(
+        Jsons.obj(
+            "enabled",
+                !closed
+                    && arena.ready()
+                    && (!desired("avatar")
+                        || knownAlive
+                        || avatar != null
+                        || !ProjectionProbe.healthyPlayer(
+                            arena.player, arena.world, arena.researchAnchor())),
+            "revision", revision(),
+            "instance", instance,
+            "player", ProjectionProbe.inspect(arena.player, arena.world, arena.researchAnchor()),
+            "avatar", ProjectionProbe.inspect(avatar, arena.world, arena.researchAnchor())));
+  }
+
+  private void discardAvatar() {
+    if (avatar == null) return;
+    if (!avatar.isRemoved()) avatar.discard();
+    // Keep the object if a removal hook was cancelled or replaced. Forgetting it would falsely
+    // report successful erasure while the entity is still present in either world index.
+    if (arena.world.getEntity(avatar.getUUID()) != avatar
+        && arena.world.getEntity(avatar.getId()) != avatar) avatar = null;
   }
 
   public boolean needsCounter() {
     return !closed
+        && !Boolean.getBoolean("eff.hostObserverOnly")
+        && RuntimeLink.initialized()
         && !requested
         && desired("dirty")
         && Jsons.s(state, "outcome").equals("pending")
@@ -187,6 +250,12 @@ public final class ManagedResearchRuntime implements ResearchSession {
 
   public void close() {
     closed = true;
-    if (alive()) avatar.discard();
+    try {
+      discardAvatar();
+    } finally {
+      avatar = null;
+      knownAlive = false;
+      RuntimeLink.clearProjection();
+    }
   }
 }

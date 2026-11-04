@@ -1,0 +1,204 @@
+package eff.minecraft.client;
+
+import com.google.gson.*;
+import eff.minecraft.*;
+import java.nio.file.*;
+import java.util.*;
+import net.minecraft.client.Minecraft;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.*;
+import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.phys.AABB;
+
+/** Explicit, disposable native arena tests. Never attacks unrelated entities or worlds. */
+final class EntityGuardSelfTest {
+  private static int phase;
+  private static volatile String failure = "";
+  private static long since;
+  private static JsonObject before;
+  private static final String PROFILE = System.getProperty("eff.entityGuardCase", "dying");
+  private static final boolean PIG2 = Boolean.getBoolean("eff.pig2Lab");
+
+  private static JsonObject r() {
+    return Jsons.o(EffClient.state, "research");
+  }
+
+  static void tick(Minecraft mc) {
+    if (RuntimeLink.enabled() && !RuntimeLink.initialized()) return;
+    if ((!Boolean.getBoolean("eff.entityGuardSelftest") && !PIG2)
+        || !RuntimeLink.enabled()
+        || phase == 99) return;
+    try {
+      if (!failure.isEmpty()) throw new IllegalStateException(failure);
+      if (!Jsons.b(Jsons.o(EffClient.state, "native"), "ready") || r().size() == 0) return;
+      if (since == 0) since = System.nanoTime();
+      if ((System.nanoTime() - since) / 1e9 > 120)
+        throw new IllegalStateException("ENTITY_GUARD_LAB_TIMEOUT_" + phase);
+      int epoch =
+          Integer.parseInt(
+              System.getenv()
+                  .getOrDefault("EFF_RUNTIME_GUARD_GENERATION", String.valueOf(RuntimeLink.EPOCH)));
+      if (phase == 0 && !Jsons.b(Jsons.o(r(), "fields"), "entity.avatar.alive")) return;
+      if (phase == 0) {
+        before = r().deepCopy();
+        proof(mc, "ready", Jsons.obj("profile", PIG2 ? "pig2" : PROFILE, "research", before));
+        phase = 1;
+        var id = mc.player.getUUID();
+        mc.getSingleplayerServer()
+            .execute(
+                () -> {
+                  try {
+                    var run = EffServer.run(id);
+                    if (run == null || !(run.arena.research instanceof ManagedResearchRuntime))
+                      throw new IllegalStateException("MANAGED_LAB_REQUIRED");
+                    var entities =
+                        run.arena.world.getEntitiesOfClass(
+                            EffProjection.class,
+                            new AABB(run.arena.researchAnchor(), run.arena.researchAnchor())
+                                .inflate(32),
+                            e -> e.getTags().contains("eff_research_avatar"));
+                    if (entities.size() != 1)
+                      throw new IllegalStateException("EXACTLY_ONE_EFF_TARGET_REQUIRED");
+                    ArmorStand target = entities.get(0);
+                    if (PIG2) {
+                      var type =
+                          BuiltInRegistries.ENTITY_TYPE
+                              .getOptional(new ResourceLocation("pig2mod", "pig2"))
+                              .orElseThrow(() -> new IllegalStateException("PIG2_NOT_REGISTERED"));
+                      // Let the genuine opponent tick; the local intruder planner is disabled only
+                      // in this lab.
+                      run.arena.research.execute(
+                          "disable control.tether; disable event.possess",
+                          run.arena.research.revision(),
+                          "player");
+                      var pig = type.create(run.arena.world);
+                      if (pig == null) throw new IllegalStateException("PIG2_FACTORY_REJECTED");
+                      var pos = target.position().add(3, 0, 0);
+                      pig.setPos(pos.x, pos.y, pos.z);
+                      if (!run.arena.world.addFreshEntity(pig))
+                        throw new IllegalStateException("PIG2_SPAWN_REJECTED");
+                      proof(
+                          mc,
+                          "opponent-spawned",
+                          Jsons.obj(
+                              "opponentType",
+                              BuiltInRegistries.ENTITY_TYPE.getKey(type).toString(),
+                              "opponentClass",
+                              pig.getClass().getName(),
+                              "targetClass",
+                              target.getClass().getName(),
+                              "distance",
+                              pig.distanceTo(target),
+                              "target",
+                              ProjectionProbe.inspect(
+                                  target, run.arena.world, run.arena.researchAnchor()),
+                              "research",
+                              run.arena.research.snapshot()));
+                      return;
+                    }
+                    if (epoch == 1) {
+                      if (PROFILE.equals("player")) {
+                        run.arena.research.execute(
+                            "disable control.tether; disable event.possess; disable"
+                                + " authority.recovery",
+                            run.arena.research.revision(),
+                            "player");
+                        run.arena.player.setHealth(0);
+                      } else if (PROFILE.equals("zero-health")) target.setHealth(0);
+                      else if (PROFILE.equals("nan")) target.setHealth(Float.NaN);
+                      else if (PROFILE.equals("removed")) {
+                        target.setPos(10000, -10000, 10000);
+                        target.setRemoved(Entity.RemovalReason.KILLED);
+                      } else if (PROFILE.equals("dying")) target.deathTime = 2;
+                      else throw new IllegalStateException("UNKNOWN_GUARD_CASE");
+                      proof(
+                          mc,
+                          "fault-injected",
+                          Jsons.obj(
+                              "profile",
+                              PROFILE,
+                              "target",
+                              ProjectionProbe.inspect(
+                                  target, run.arena.world, run.arena.researchAnchor()),
+                              "player",
+                              ProjectionProbe.inspect(
+                                  run.arena.player, run.arena.world, run.arena.researchAnchor()),
+                              "research",
+                              run.arena.research.snapshot()));
+                    } else {
+                      // After real host migration, validate legal erasure with recovery revoked. No
+                      // restart
+                      // may resurrect the removed projection, and the outer state must retain
+                      // victory.
+                      run.arena.research.execute(
+                          "disable control.tether; disable event.possess; disable"
+                              + " authority.recovery",
+                          run.arena.research.revision(),
+                          "player");
+                      run.arena.research.execute(
+                          "erase entity.avatar; refuse ending.owned",
+                          run.arena.research.revision(),
+                          "player");
+                    }
+                  } catch (Exception e) {
+                    failure = e.toString();
+                  }
+                });
+      } else if (phase == 1
+          && !PIG2
+          && epoch > 1
+          && Jsons.s(r(), "outcome").equals("won")
+          && !Jsons.b(Jsons.o(r(), "fields"), "authority.recovery.active")) {
+        if ((System.nanoTime() - since) / 1e9 < 5) return;
+        proof(
+            mc,
+            "complete",
+            Jsons.obj("research", r(), "native", Jsons.o(EffClient.state, "native")));
+        phase = 99;
+      } else if (phase == 1 && PIG2 && (System.nanoTime() - since) / 1e9 > 30) {
+        proof(
+            mc,
+            "observation-window-complete",
+            Jsons.obj(
+                "research",
+                r(),
+                "native",
+                Jsons.o(EffClient.state, "native"),
+                "note",
+                "No combat victory is inferred from absence of a detected fault."));
+        phase = 99;
+      }
+    } catch (Exception e) {
+      try {
+        proof(mc, "failure", Jsons.obj("error", e.toString(), "research", r()));
+      } catch (Exception ignored) {
+      }
+      phase = 99;
+      mc.stop();
+    }
+  }
+
+  private static synchronized void proof(Minecraft mc, String check, JsonObject body)
+      throws Exception {
+    Path dir = mc.gameDirectory.toPath().resolve("entity-guard-proof");
+    Files.createDirectories(dir);
+    body = body.deepCopy();
+    int generation =
+        Integer.parseInt(
+            System.getenv()
+                .getOrDefault("EFF_RUNTIME_GUARD_GENERATION", String.valueOf(RuntimeLink.EPOCH)));
+    body.addProperty("check", check);
+    body.addProperty("epoch", RuntimeLink.EPOCH);
+    body.addProperty("guardGeneration", generation);
+    body.addProperty("mcPid", ProcessHandle.current().pid());
+    Path target = dir.resolve(generation + "-" + check + ".json");
+    Path temporary = dir.resolve(generation + "-" + check + ".tmp");
+    Files.writeString(temporary, body.toString());
+    Files.move(
+        temporary, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+    System.out.println("[EFF_ENTITY_GUARD_QA] " + check);
+  }
+
+  private EntityGuardSelfTest() {}
+}

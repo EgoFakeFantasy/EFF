@@ -17,6 +17,7 @@ test('native code locks, outer ledger and complete process-tree recovery',async 
  fs.writeFileSync(child,`require('./protected-child.cjs');module.exports=require.cache[require.resolve('./protected-child.cjs')].exports;
 module.exports.onReady=async(c,g)=>{
  if(g===1){await c.transition({actor:'player',revision:0,source:'disable control.tether; disable event.possess; disable authority.recovery'});for(let n=0;n<2;n++)await c.transition({actor:'player',revision:c.durable.state.revision,source:'rebuild runtime.execution'});}
+ if(g===1){const D=require('./projection-guard.cjs');await c.persist(c.durable.state,c.durable.engines,D.nextDefense(c.durable.defense,{subject:'avatar',reason:'ENTITY_DYING'},c.durable.state));}
  let rollbackDenied=false;try{await c.config.store.commit(c.durable.commit,{...c.durable,commit:c.durable.commit+1,state:{...c.durable.state,recovery:true}});}catch(e){rollbackDenied=e.message==='REVOCATION_ROLLBACK';}
  const lineageDenied={};
  const forge=async(name,mutate)=>{const body=JSON.parse(JSON.stringify(c.durable));body.commit++;mutate(body);try{await c.config.store.commit(c.durable.commit,body);lineageDenied[name]=false;}catch(e){lineageDenied[name]=e.message.startsWith('ENGINE_LINEAGE_');}};
@@ -26,7 +27,12 @@ module.exports.onReady=async(c,g)=>{
  await forge('changedId',b=>b.engines.execution.at(-1).id='f'.repeat(64));
  await forge('removed',b=>delete b.engines);
  await forge('ruleset',b=>b.engines.execution[0].ruleset='0'.repeat(64));
- const snapshot=await c.snapshot();require('node:fs').writeFileSync(require('node:path').join(c.directory,'proof-'+g+'.json'),JSON.stringify({pid:process.pid,generation:g,snapshot,rollbackDenied,lineageDenied,engines:c.durable.engines}));};`);
+ const defenseDenied={};for(const name of ['rollback','jump','removed','rewrite']){const body=JSON.parse(JSON.stringify(c.durable));body.commit++;if(name==='rollback')body.defense={schema:1,incidents:0,circuitOpen:false,lastIncident:null};else if(name==='jump'){body.defense.incidents=3;body.defense.circuitOpen=true;}else if(name==='removed')delete body.defense;else body.defense.lastIncident.id='f'.repeat(32);try{await c.config.store.commit(c.durable.commit,body);defenseDenied[name]=false;}catch(e){defenseDenied[name]=e.message.startsWith('DEFENSE_');}}
+ const cp=require('node:child_process'),fs=require('node:fs'),path=require('node:path');
+ const orphanFile=path.join(c.directory,'orphan-'+g+'.json');const own=cp.spawn(process.execPath,['-e',"const cp=require('node:child_process');const p=cp.spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});require('node:fs').writeFileSync(process.argv[1],JSON.stringify({child:process.pid,grandchild:p.pid}));setInterval(()=>{},1000)",orphanFile],{stdio:'ignore',windowsHide:true});
+ for(let n=0;n<100&&!fs.existsSync(orphanFile);n++)await new Promise(r=>setTimeout(r,20));const descendants=JSON.parse(fs.readFileSync(orphanFile,'utf8'));
+ let foreignProtectionDenied=null;if(c.config.integrityBoundary){try{await c.config.store.protect(process.ppid);foreignProtectionDenied=false;}catch(e){foreignProtectionDenied=e.message==='PROCESS_PROTECTION_NOT_OWNED';}}
+ const snapshot=await c.snapshot();require('node:fs').writeFileSync(require('node:path').join(c.directory,'proof-'+g+'.json'),JSON.stringify({pid:process.pid,generation:g,snapshot,rollbackDenied,lineageDenied,defenseDenied,foreignProtectionDenied,descendants,engines:c.durable.engines}));};`);
  seal.child=child;seal.files.push({path:child,sha256:sha(child),size:fs.statSync(child).size});seal.trees[0].entries.push('fixture.cjs');fs.writeFileSync(s.manifest,JSON.stringify(seal));s.pin=sha(s.manifest);
  let p=run(s);const checks=[];t.after(async()=>{if(p.exitCode===null&&p.signalCode===null){p.kill();await stopped(p);}const resolved=fs.realpathSync(root),base=fs.realpathSync(os.tmpdir());if(path.dirname(resolved)!==base||!path.basename(resolved).startsWith('eff-native-guard-'))throw Error('UNSAFE_TEST_CLEANUP');fs.rmSync(resolved,{recursive:true,force:true});});
  const file=g=>path.join(seal.config.directory,'proof-'+g+'.json');
@@ -36,8 +42,48 @@ module.exports.onReady=async(c,g)=>{
  await t.test('recursive execution engines commit an append-only ancestry outside the replaceable controller',()=>{assert.equal(first.engines.execution.length,3);assert.equal(first.engines.execution[2].parent,first.engines.execution[1].id);assert.equal(first.engines.execution[1].parent,first.engines.execution[0].id);checks.push('outer-engine-ancestry');});
  await t.test('the outer ledger rejects lineage rollback, skipped generations and removal',()=>{for(const name of ['rollback','jump','removed'])assert.equal(first.lineageDenied[name],true,name);checks.push('outer-lineage-rollback-jump-removed');});
  await t.test('the outer ledger independently pins engine identifiers and the sealed worker ruleset',()=>{for(const name of ['changedId','ruleset'])assert.equal(first.lineageDenied[name],true,name);checks.push('outer-lineage-id-ruleset');});
+ await t.test('outer ledger independently rejects defense budget rollback, jumps, removal and rewrite',()=>{for(const name of ['rollback','jump','removed','rewrite'])assert.equal(first.defenseDenied[name],true,name);assert.equal(first.snapshot.runtime.defense.incidents,1);});
  await t.test('a second guardian cannot take the same ledger or truncate it',()=>{
   const result=spawnSync(s.guard,[s.manifest,s.pin],{encoding:'utf8',windowsHide:true,timeout:20000});assert.equal(result.status,2);assert.ok(alive(first.pid));checks.push('single-outer-writer');
+ });
+ await t.test('MC launched through the low integrity helper runs below the kernel and the OS refuses it every kernel object',{skip:process.env.EFF_TEST_LOW_INTEGRITY!=='true'?'requires opt-in experimental guard build':false},()=>{
+  assert.equal(first.foreignProtectionDenied,true,'the outer process protector must reject processes outside its own Job');
+  const game=path.join(root,'low-game');fs.mkdirSync(game);
+  const level=spawnSync(s.guard,['--low-integrity-host',game,s.guard,'--integrity'],{encoding:'utf8',windowsHide:true,timeout:20000});
+  assert.equal(level.status,0,level.stderr);assert.equal(level.stdout.trim(),'low');
+  const accessSource=path.join(game,'access.cs'),accessExe=path.join(game,'access.exe');
+  fs.writeFileSync(accessSource,`using System;using System.Runtime.InteropServices;class Probe{
+ [DllImport("kernel32.dll",SetLastError=true)]static extern IntPtr OpenProcess(uint a,bool i,int p);
+ [DllImport("kernel32.dll")]static extern bool CloseHandle(IntPtr h);
+ [DllImport("kernel32.dll")]static extern IntPtr GetCurrentProcess();
+ [DllImport("advapi32.dll",SetLastError=true)]static extern bool OpenProcessToken(IntPtr p,uint a,out IntPtr t);
+ [DllImport("advapi32.dll",SetLastError=true)]static extern bool GetTokenInformation(IntPtr t,int c,IntPtr b,uint l,out uint n);
+ [DllImport("advapi32.dll")]static extern IntPtr GetSidSubAuthorityCount(IntPtr s);
+ [DllImport("advapi32.dll")]static extern IntPtr GetSidSubAuthority(IntPtr s,uint i);
+ static int Main(string[] args){IntPtr t; if(!OpenProcessToken(GetCurrentProcess(),8,out t))return 3;
+ try{foreach(int c in new[]{25,27,3}){uint n;GetTokenInformation(t,c,IntPtr.Zero,0,out n);IntPtr b=Marshal.AllocHGlobal((int)n);try{if(!GetTokenInformation(t,c,b,n,out n))return 4;if(c==25){IntPtr sid=Marshal.ReadIntPtr(b);uint count=Marshal.ReadByte(GetSidSubAuthorityCount(sid));Console.WriteLine("integrity:"+Marshal.ReadInt32(GetSidSubAuthority(sid,count-1)));}else Console.WriteLine("token"+c+":"+Marshal.ReadInt32(b));}finally{Marshal.FreeHGlobal(b);}}}finally{CloseHandle(t);}
+ bool opened=false;foreach(uint a in new uint[]{1,2,8,16,32,64}){IntPtr h=OpenProcess(a,false,Int32.Parse(args[0]));Console.WriteLine(a+":"+(h==IntPtr.Zero?"denied":"allowed"));if(h!=IntPtr.Zero){CloseHandle(h);opened=true;}}return opened?2:0;}}`);
+  const compiler=path.join(process.env.SystemRoot,'Microsoft.NET/Framework64/v4.0.30319/csc.exe');
+  const compiled=spawnSync(compiler,['/nologo','/platform:x64','/out:'+accessExe,accessSource],{encoding:'utf8',windowsHide:true,timeout:20000});assert.equal(compiled.status,0,compiled.stdout+compiled.stderr);
+  for(const pid of [p.pid,first.pid,first.snapshot.runtime.policy.pid,first.snapshot.runtime.execution.pid]){
+   const handles=spawnSync(s.guard,['--low-integrity-host',game,accessExe,String(pid)],{encoding:'utf8',windowsHide:true,timeout:20000});assert.equal(handles.status,0,'target '+pid+': '+handles.stdout+handles.stderr);assert.ok(handles.stdout.includes('integrity:4096'));assert.ok(handles.stdout.includes('token3:0'));for(const a of [1,2,8,16,32,64])assert.ok(handles.stdout.includes(a+':denied'));
+  }
+  const authority=seal.config.directory,leaked=[path.join(authority,'low-probe.txt'),path.join(seal.payload,'low-probe.txt')],probe=path.join(game,'probe.cjs');
+  // Stands in for a script loaded into MC: arbitrary code with MC's process rights, trying to reach the kernel.
+  fs.writeFileSync(probe,`const fs=require('fs'),path=require('path');const r={};const t=(k,f)=>{try{f();r[k]='allowed';}catch(e){r[k]=e.code||e.message;}};
+t('killController',()=>process.kill(${first.pid}));
+t('readLedgerKey',()=>fs.readFileSync(${JSON.stringify(path.join(authority,'ledger-key.dpapi'))}));
+t('readLedger',()=>fs.readFileSync(${JSON.stringify(path.join(authority,'ledger.bin'))}));
+t('writeAuthority',()=>fs.writeFileSync(${JSON.stringify(leaked[0])},'x'));
+t('writePayload',()=>fs.writeFileSync(${JSON.stringify(leaked[1])},'x'));
+t('writeGame',()=>fs.writeFileSync(path.join(__dirname,'own.txt'),'x'));
+process.stdout.write(JSON.stringify(r));`);
+  const result=spawnSync(s.guard,['--low-integrity-host',game,process.execPath,probe],{encoding:'utf8',windowsHide:true,timeout:20000});
+  for(const f of leaked)if(fs.existsSync(f))fs.unlinkSync(f);
+  assert.equal(result.status,0,result.stderr);const r=JSON.parse(result.stdout);
+  assert.equal(r.writeGame,'allowed');
+  for(const k of ['killController','readLedgerKey','readLedger','writeAuthority','writePayload'])assert.notEqual(r[k],'allowed',k);
+  assert.ok(alive(first.pid));checks.push('low-integrity-host-isolated');
  });
  await t.test('Windows sharing rules reject overwrite, deletion and replacement of executing code',()=>{
   for(const f of [path.join(seal.payload,'controller.cjs'),path.join(seal.payload,'workers.jar'),s.manifest,path.join(seal.payload,'eff-guard.exe.config'),path.join(seal.config.directory,'ledger.bin'),path.join(seal.config.directory,'ledger-head.bin'),path.join(seal.config.directory,'ledger-key.dpapi')]){
@@ -47,12 +93,12 @@ module.exports.onReady=async(c,g)=>{
  await t.test('killing the controller drains the old job before restarting with the same durable revocation',async()=>{
   process.kill(first.pid);const second=await until(()=>fs.existsSync(file(2))&&JSON.parse(fs.readFileSync(file(2),'utf8')));
   assert.notEqual(second.pid,first.pid);assert.equal(second.snapshot.fields['authority.recovery.active'],false);assert.deepEqual(second.engines,first.engines);
-  assert.equal(alive(first.snapshot.runtime.policy.pid),false);assert.equal(alive(first.snapshot.runtime.execution.pid),false);
+  assert.equal(alive(first.snapshot.runtime.policy.pid),false);assert.equal(alive(first.snapshot.runtime.execution.pid),false);assert.equal(alive(first.descendants.child),false);assert.equal(alive(first.descendants.grandchild),false);
   const events=fs.readFileSync(path.join(seal.config.directory,'guard-events.jsonl'),'utf8');assert.match(events,/job-drained/);assert.match(events,/"active":0/);const drained=events.trim().split("\n").map(line=>JSON.parse(line)).find(e=>e.type==="job-drained");assert.ok(drained.detail.peakCommittedBytes>0);checks.push('controller-recovery-and-no-orphans');
  });
  let second=JSON.parse(fs.readFileSync(file(2),'utf8'));
  await t.test('killing the outer guard closes its kernel job and stops all owned JVMs',async()=>{
-  p.kill();await stopped(p);await until(()=>!alive(second.pid)&&!alive(second.snapshot.runtime.policy.pid)&&!alive(second.snapshot.runtime.execution.pid));checks.push('guard-death-kills-descendants');
+  p.kill();await stopped(p);await until(()=>!alive(second.pid)&&!alive(second.snapshot.runtime.policy.pid)&&!alive(second.snapshot.runtime.execution.pid)&&!alive(second.descendants.child)&&!alive(second.descendants.grandchild));checks.push('guard-death-kills-descendants');
  });
  await t.test('offline truncation to an older authenticated ledger prefix is detected by its independent head',()=>{
   const ledger=path.join(seal.config.directory,'ledger.bin'),original=fs.readFileSync(ledger);fs.writeFileSync(ledger,original.subarray(0,4+original.readInt32LE(0)+32));
