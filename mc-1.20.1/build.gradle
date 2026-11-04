@@ -167,7 +167,7 @@ if (System.getProperty('os.name').toLowerCase().contains('windows')) {
   environment 'EFF_TEST_JAVA', javaToolchains.launcherFor(java.toolchain).get().executablePath.asFile.absolutePath
   environment 'EFF_TEST_WORKERS', tasks.named('runtimeKernelJar').get().archiveFile.get().asFile.absolutePath
   environment 'EFF_TEST_GUARD', layout.buildDirectory.file('guard/eff-guard.exe').get().asFile.absolutePath
-  commandLine 'node', '--test', 'runtime/guard/guard.test.cjs'
+  commandLine 'node', '--test', '--test-concurrency=1', 'runtime/guard/guard.test.cjs', 'runtime/guard/directory-preparation.test.cjs'
  }
  check { dependsOn guardianTest }
 }

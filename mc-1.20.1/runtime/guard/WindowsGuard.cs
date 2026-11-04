@@ -6,12 +6,52 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Security.Cryptography;
+using System.Security.Principal;
+using Microsoft.Win32.SafeHandles;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 
 namespace Eff.Guard {
+// Provision only a fresh, caller-owned tree. Owning an object supplies WRITE_DAC,
+// but inherited Modify does not supply WRITE_OWNER needed to set its MIC label.
+// Give the existing token's user that ordinary right before creating descendants.
+// This changes neither ownership, token privileges nor mandatory integrity labels.
+public static class FreshDirectory {
+ [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern SafeFileHandle CreateFileW(string name,uint access,uint share,IntPtr security,uint disposition,uint flags,IntPtr template);
+ [DllImport("advapi32.dll")] static extern uint GetSecurityInfo(IntPtr handle,int type,uint info,out IntPtr owner,out IntPtr group,out IntPtr dacl,out IntPtr sacl,out IntPtr descriptor);
+ [DllImport("advapi32.dll")] static extern uint SetSecurityInfo(IntPtr handle,int type,uint info,IntPtr owner,IntPtr group,IntPtr dacl,IntPtr sacl);
+ [DllImport("advapi32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool ConvertStringSecurityDescriptorToSecurityDescriptorW(string sddl,uint revision,out IntPtr descriptor,IntPtr size);
+ [DllImport("advapi32.dll",SetLastError=true)] static extern bool GetSecurityDescriptorDacl(IntPtr descriptor,out bool present,out IntPtr dacl,out bool defaulted);
+ [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr memory);
+ static void Empty(string p){if(Directory.GetFileSystemEntries(p).Length!=0)throw new IOException("PREPARE_DIRECTORY_NOT_EMPTY");}
+ public static void Prepare(string supplied){
+  if(String.IsNullOrEmpty(supplied)||!Path.IsPathRooted(supplied)||supplied.StartsWith(@"\\")||supplied.IndexOfAny(new[]{'\r','\n','\0'})>=0)throw new IOException("PREPARE_LOCAL_ABSOLUTE_REQUIRED");
+  string path=Path.GetFullPath(supplied).TrimEnd(Path.DirectorySeparatorChar,Path.AltDirectorySeparatorChar);
+  if(path.Length<4||String.Equals(path,Path.GetPathRoot(path).TrimEnd('\\','/'),StringComparison.OrdinalIgnoreCase))throw new IOException("PREPARE_ROOT_REJECTED");
+  if(!Directory.Exists(path))throw new IOException("PREPARE_EXISTING_DIRECTORY_REQUIRED");
+  for(string p=path;p!=null;p=Path.GetDirectoryName(p))if((File.GetAttributes(p)&FileAttributes.ReparsePoint)!=0)throw new IOException("PREPARE_REPARSE_REJECTED");
+  // No delete sharing: keep the verified directory object fixed through preparation.
+  using(var handle=CreateFileW(path,0x20000|0x40000,3,IntPtr.Zero,3,0x02000000|0x00200000,IntPtr.Zero)){
+   if(handle.IsInvalid)throw new IOException("PREPARE_HANDLE_FAILED_"+Marshal.GetLastWin32Error());
+   Empty(path);IntPtr owner,group,dacl,sacl,descriptor;
+   uint error=GetSecurityInfo(handle.DangerousGetHandle(),1,1,out owner,out group,out dacl,out sacl,out descriptor);
+   if(error!=0)throw new IOException("PREPARE_OWNER_QUERY_"+error);
+   using(var identity=WindowsIdentity.GetCurrent()){
+    try{var actual=new SecurityIdentifier(owner);if(!actual.Equals(identity.User)&&!actual.Equals(identity.Owner))throw new IOException("PREPARE_CALLER_OWNER_REQUIRED");}finally{LocalFree(descriptor);}
+    string sddl="D:P(A;OICI;FA;;;"+identity.User.Value+")(A;OICI;FA;;;SY)";
+    if(!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl,1,out descriptor,IntPtr.Zero))throw new IOException("PREPARE_DACL_SDDL_"+Marshal.GetLastWin32Error());
+    try{bool present,defaulted;if(!GetSecurityDescriptorDacl(descriptor,out present,out dacl,out defaulted)||!present)throw new IOException("PREPARE_DACL_REQUIRED");
+     // DACL and inheritance only; deliberately do not modify OWNER or LABEL information.
+     error=SetSecurityInfo(handle.DangerousGetHandle(),1,0x80000004,IntPtr.Zero,IntPtr.Zero,dacl,IntPtr.Zero);
+     if(error!=0)throw new IOException("PREPARE_DACL_FAILED_"+error);
+    }finally{LocalFree(descriptor);}
+   }
+   Empty(path);
+  }
+ }
+}
 public sealed class NativeJob : IDisposable {
  [StructLayout(LayoutKind.Sequential)] struct Basic { public long ProcessTime,JobTime;public uint Flags;public UIntPtr Min,Max;public uint Active;public UIntPtr Affinity;public uint Priority,Scheduling; }
  [StructLayout(LayoutKind.Sequential)] struct Io {public ulong a,b,c,d,e,f;}
@@ -216,18 +256,31 @@ public static class Program {
  static Dictionary<string,object> M(object o){return Ledger.Map(o);}
  static void CheckTrees(object trees){foreach(object item in (object[])trees){var tree=M(item);string root=(string)tree["root"];var want=new HashSet<string>(StringComparer.OrdinalIgnoreCase);foreach(object name in (object[])tree["entries"])want.Add((string)name);var actual=new HashSet<string>(StringComparer.OrdinalIgnoreCase);if(!Directory.Exists(root)){if(want.Count!=0)throw new IOException("CODE_TREE_MISSING");continue;}foreach(string f in Directory.GetFiles(LongPath(root),"*",SearchOption.AllDirectories)){NoReparse(f);actual.Add(f.Substring(LongPath(root).Length).TrimStart(Path.DirectorySeparatorChar));}if(!want.SetEquals(actual))throw new IOException("CODE_TREE_CHANGED");}}
  public static int Main(string[] args){string directory=null;try{
-  if(args.Length==2&&args[0]=="--provision"){Ledger.Provision(args[1]);Console.WriteLine("LEDGER_PROVISIONED");return 0;}
 #if EFF_LOW_INTEGRITY_EXPERIMENTAL
+  // These two helper modes deliberately support Low. All guard modes below
+  // enforce their token and process label before touching deployment inputs.
   if(args.Length>=3&&args[0]=="--low-integrity-host")return LowIntegrityHost.Run(args);
   if(args.Length==1&&args[0]=="--integrity"){Console.WriteLine(IntegrityBoundary.Current()==IntegrityBoundary.Low?"low":IntegrityBoundary.Current()>=IntegrityBoundary.Medium?"medium-or-higher":"other");return 0;}
+  if(IntegrityBoundary.Current()<IntegrityBoundary.Medium)throw new IOException("GUARD_MEDIUM_OR_HIGH_REQUIRED");
+  // Still post-creation: this cannot revoke handles opened before self-labeling.
+  IntegrityBoundary.ProtectProcess(Process.GetCurrentProcess());
 #endif
+  if(args.Length==2&&args[0]=="--prepare-directory"){FreshDirectory.Prepare(args[1]);Console.WriteLine("FRESH_DIRECTORY_PREPARED");return 0;}
+  if(args.Length==2&&args[0]=="--provision"){
+#if EFF_LOW_INTEGRITY_EXPERIMENTAL
+   Directory.CreateDirectory(args[1]);NoReparse(args[1]);
+   // Protect the empty directory BEFORE the DPAPI key, ledger and head exist.
+   IntegrityBoundary.SealAuthority(args[1]);
+#endif
+   Ledger.Provision(args[1]);Console.WriteLine("LEDGER_PROVISIONED");return 0;
+  }
   if(args.Length!=2)throw new IOException("EXPECTED_MANIFEST_AND_PIN");NoReparse(args[0]);
   var manifestLock=new FileStream(args[0],FileMode.Open,FileAccess.Read,FileShare.Read);locks.Add(manifestLock);if(!String.Equals(Sha(manifestLock),args[1],StringComparison.OrdinalIgnoreCase))throw new IOException("SEAL_MISMATCH");if(manifestLock.Length>2097152)throw new IOException("SEAL_BUDGET");manifestLock.Position=0;string text;using(var r=new StreamReader(manifestLock,Encoding.UTF8,true,4096,true))text=r.ReadToEnd();var seal=M(Json.DeserializeObject(text));if(Convert.ToInt32(seal["schema"])!=1)throw new IOException("SEAL_SCHEMA");
   foreach(object item in (object[])seal["files"]){var f=M(item);string path=(string)f["path"];NoReparse(path);var held=new FileStream(LongPath(path),FileMode.Open,FileAccess.Read,FileShare.Read);locks.Add(held);if(held.Length!=Convert.ToInt64(f["size"]))throw new IOException("CODE_SIZE_MISMATCH");if(!String.Equals(Sha(held),(string)f["sha256"],StringComparison.OrdinalIgnoreCase))throw new IOException("CODE_HASH_MISMATCH");}
   CheckTrees(seal["trees"]);var config=M(seal["config"]);directory=(string)config["directory"];NoReparse(directory);
 #if EFF_LOW_INTEGRITY_EXPERIMENTAL
   IntegrityBoundary.SealAuthority(directory);
-  IntegrityBoundary.ProtectProcess(Process.GetCurrentProcess());config["integrityBoundary"]=true;
+  config["integrityBoundary"]=true;
 #endif
   Console.CancelKeyPress+=(s,e)=>{e.Cancel=true;stopping=true;};
   string ruleset=null;foreach(object item in (object[])seal["files"]){var f=M(item);if(String.Equals(Path.GetFullPath((string)f["path"]),Path.GetFullPath((string)config["workerJar"]),StringComparison.OrdinalIgnoreCase))ruleset=(string)f["sha256"];}if(ruleset==null)throw new IOException("WORKER_RULESET_NOT_SEALED");

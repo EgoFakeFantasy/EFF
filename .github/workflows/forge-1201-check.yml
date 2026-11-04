@@ -27,6 +27,20 @@ permissions:
   contents: read
 
 jobs:
+  rust-supervisor:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and check experimental Rust supervisor
+        shell: pwsh
+        run: |
+          rustup toolchain install stable --profile minimal
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cargo +stable test --locked --manifest-path mc-1.20.1/runtime/rust-supervisor/Cargo.toml
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cargo +stable build --locked --release --manifest-path mc-1.20.1/runtime/rust-supervisor/Cargo.toml
+          exit $LASTEXITCODE
   low-integrity-experiment:
     runs-on: windows-latest
     timeout-minutes: 15

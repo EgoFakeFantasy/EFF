@@ -68,7 +68,7 @@ if(System.getProperty('os.name').toLowerCase().contains('windows')) {
   environment 'EFF_TEST_JAVA',javaToolchains.launcherFor(java.toolchain).get().executablePath.asFile.absolutePath
   environment 'EFF_TEST_WORKERS',tasks.named('runtimeKernelJar').get().archiveFile.get().asFile.absolutePath
   environment 'EFF_TEST_GUARD',layout.buildDirectory.file('guard/eff-guard.exe').get().asFile.absolutePath
-  commandLine 'node','--test',new File(runtime,'guard/guard.test.cjs').absolutePath
+  commandLine 'node','--test','--test-concurrency=1',new File(runtime,'guard/guard.test.cjs').absolutePath,new File(runtime,'guard/directory-preparation.test.cjs').absolutePath
  }
  check { dependsOn 'guardianTest' }
 }

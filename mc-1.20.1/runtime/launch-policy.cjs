@@ -100,4 +100,32 @@ function launcherSanitizeLines() {
   ].join("\r\n");
 }
 
-module.exports = { cleanEnv, workerEnv, assertHostArguments, launcherSanitizeLines };
+const alternateGameRoot = /^(?:-D)?(?:fabric\.(?:gameDir|modsFolder|addMods)|fml\.(?:modsFolder|modFolders|modLists)|forge\.(?:gameDir|modsFolder))=/i;
+function relocateGameDirectory(args,directory) {
+  if(!Array.isArray(args)||args.some(a=>typeof a!=="string"||/[\0\r\n]/.test(a)))throw Error("INVALID_HOST_ARGUMENTS");
+  if(typeof directory!=="string"||/[\0\r\n]/.test(directory)||
+     !(path.isAbsolute(directory)||/^[A-Za-z]:[\\/]/.test(directory))||directory.startsWith("\\\\"))throw Error("SEALED_GAME_DIRECTORY_REQUIRED");
+  const result=[...args];let index=-1;
+  for(let i=0;i<result.length;i++){
+    const a=result[i],trimmed=a.trim();
+    if(trimmed==='--'||alternateGameRoot.test(trimmed)||/^-{1,2}(?:modsDir|modDir|modFolders|modLists)(?:=|$)/i.test(trimmed))throw Error("ALTERNATE_GAME_OR_MOD_ROOT_REJECTED");
+    // Reject case variants, abbreviated/single-dash options and equals forms:
+    // launcher parsers must not disagree about which option selects the mod tree.
+    if(/^-{1,2}(?:game|g(?:a(?:m)?)?(?:=|$))/i.test(trimmed)){
+      if(a!=='--gameDir'||index!==-1)throw Error("AMBIGUOUS_GAME_DIRECTORY");
+      if(i+1>=result.length||!result[i+1].trim()||result[i+1].trimStart().startsWith('-'))throw Error("GAME_DIRECTORY_VALUE_REQUIRED");
+      index=i;i++;
+    }
+  }
+  if(index===-1)result.push('--gameDir',directory);else result[index+1]=directory;
+  return result;
+}
+function assertNoHiddenGameDirectory(text){
+  if(typeof text!=='string')throw Error("INVALID_LAUNCH_CONFIG");
+  for(const line of text.split(/\r?\n/)){
+    const a=line.trim();
+    if(a==='--'||/^-{1,2}(?:game|g(?:a(?:m)?)?(?:=|$))/i.test(a)||alternateGameRoot.test(a)||/^-{1,2}(?:modsDir|modDir|modFolders|modLists)(?:=|$)/i.test(a))throw Error("HIDDEN_GAME_OR_MOD_ROOT_REJECTED");
+  }
+  return text;
+}
+module.exports = { cleanEnv, workerEnv, assertHostArguments, launcherSanitizeLines, relocateGameDirectory, assertNoHiddenGameDirectory };

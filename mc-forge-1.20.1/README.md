@@ -6,6 +6,8 @@
 
 0.6 增加[实体故障守护](../mc-1.20.1/ANTI_INSTANT_KILL.md)：玩家死亡或投影异常可在 JVM 仍存活时触发后继执行引擎和整树恢复；合法删除及恢复权限撤销会保留，第三次事故停止重启。此功能要求受保护多 JVM 入口。
 
+最新研究增加[实验性 Rust 监督层](../mc-1.20.1/RUST_SUPERVISOR_BLUEPRINT.md)和[原包对手审查／严格交战验收](../mc-1.20.1/LATEST_OPPONENT_AUDIT.md)。Rust 子层已用真实 Guardian 与双 JVM 验证有限换代、整树排空和撤权保留，尚不代表真实 MC 对抗通过。原实体死亡／被清除、MC 崩溃或替换窗口均计为交战失败，恢复成功不抵消失败。保护机制与原生代码权限边界见[根 README 的 MC 技术说明](../README.md#mc-原生代码保护恢复与验收)。
+
 ## 普通安装
 
 1. 在启动器中新建 **Minecraft 1.20.1 + Forge 47.4.20 或更新的 47.x** 独立实例，使用 **64 位 Java 17**。本版不适用于其他 Minecraft 版本。
@@ -64,7 +66,7 @@ refuse ending.owned;
 .\start-protected.ps1 -Verify -AllowRuleFallback -Jdk C:\路径\jdk-17 -Directory C:\路径\EFF-Forge-QA-Rule
 ```
 
-受保护入口可通过 `-LowIntegrityHost` 显式选择实验性 Windows Low 完整性构建。本机新实验二进制被系统拒绝执行，Low 模式和真实 MC 图形兼容性尚未验收；默认保留原守护。`-ExternalControlOnly` 启用独立控制台提交，MC 只读。详见 [独立控制与实验隔离](../mc-1.20.1/PROTECTED_RUNTIME.md)。
+受保护入口可通过 `-LowIntegrityHost` 显式选择实验性 Windows Low 完整性构建。隔离 Windows 中的实际 Medium 启动、Low 权限边界及目录初始化原生套件已通过 19/19；真实 MC 图形与对抗兼容性仍单独验收，不能从这些权限测试推断模组实战通过。默认保留原守护。`-ExternalControlOnly` 启用独立控制台提交，MC 只读。详见 [独立控制与实验隔离](../mc-1.20.1/PROTECTED_RUNTIME.md)。
 
 封存仅在新部署时建立信任基线；开始游玩不会自动重封存或重置战果。增加或更新模组必须准备新实例，不可把可写的 Gradle 缓存当作保护后的执行来源。完整性保护不提供对同账户或管理员的绝对防御。
 

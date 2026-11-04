@@ -31,3 +31,8 @@ if(System.getProperty('os.name').toLowerCase().contains('windows')) {
  }
  check { dependsOn 'quarantineGuardTest' }
 }
+
+tasks.register('combatVerdictTest',Exec) {
+ commandLine 'node','--test',file('../mc-1.20.1/runtime/guard/combat-verdict.test.cjs').absolutePath,file('../mc-1.20.1/runtime/guard/baseline-identity.test.cjs').absolutePath,file('../mc-1.20.1/runtime/guard/atomic-proof.test.cjs').absolutePath
+}
+check { dependsOn 'combatVerdictTest' }

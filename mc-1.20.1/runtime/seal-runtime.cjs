@@ -8,7 +8,11 @@ const jarMemory=['-J-Xms8m','-J-Xmx64m','-J-XX:+UseSerialGC','-J-XX:ReservedCode
 function walk(root){if(!fs.existsSync(root))return [];let list=[];for(const e of fs.readdirSync(root,{withFileTypes:true})){const f=path.join(root,e.name);if(e.isSymbolicLink())throw Error('SEAL_SYMLINK');if(e.isDirectory())list.push(...walk(f));else if(e.isFile())list.push(f);else throw Error('SEAL_SPECIAL_FILE');}return list.sort();}
 function provision(source,destination,guardBinary,options={}){
  if(process.platform!=='win32')throw Error('WINDOWS_GUARD_REQUIRED');
- destination=path.resolve(destination);fs.mkdirSync(destination);fs.writeFileSync(path.join(destination,'.gitignore'),'*\n');const payload=path.join(destination,'payload');fs.mkdirSync(payload);
+ destination=path.resolve(destination);fs.mkdirSync(destination);
+ // A fresh owner-controlled DACL gives Medium the WRITE_OWNER access required
+ // for MIC labels. Never relax labels or retry elevated when this fails.
+ execFileSync(guardBinary,['--prepare-directory',destination],{windowsHide:true,env:Launch.cleanEnv()});
+ fs.writeFileSync(path.join(destination,'.gitignore'),'*\n');const payload=path.join(destination,'payload');fs.mkdirSync(payload);
  const config=JSON.parse(fs.readFileSync(source,'utf8'));config.integrityBoundary=false;config.admission={schema:1,hostMutation:'enabled',quarantineOnFault:false,mods:[]};config.directory=path.join(destination,'authority');fs.mkdirSync(config.directory);
  const pinned=new Set(),trees=[],dependencies=new Map();
  const dependencyDir=path.join(payload,'dependencies');fs.mkdirSync(dependencyDir);
@@ -22,7 +26,10 @@ function provision(source,destination,guardBinary,options={}){
  const executables=new Set([config.java,...Object.values(config.javaByRole||{})]);if(config.host)executables.add(config.host.command);
  for(const executable of executables){if(typeof executable!=='string'||path.basename(executable).toLowerCase()!=='java.exe')throw Error('SEAL_EXPECTED_JAVA_RUNTIME');pin(executable);if(path.basename(executable).toLowerCase()==='java.exe'){const root=path.resolve(executable,'..','..');for(const dir of ['bin','lib','conf'])for(const f of walk(path.join(root,dir)))pin(f);if(fs.existsSync(path.join(root,'release')))pin(path.join(root,'release'));}}
  if(config.host){
-  const h=config.host;h.cwd=path.join(destination,'mc-host');fs.mkdirSync(h.cwd);const args=h.args;
+  const h=config.host;h.cwd=path.join(destination,'mc-host');fs.mkdirSync(h.cwd);
+  // cwd alone does not relocate Minecraft: Forge's explicit gameDir otherwise
+  // still selects the old config/saves/mods tree outside this seal.
+  const args=h.args=Launch.relocateGameDirectory(h.args,h.cwd);
   // MC runs below the kernel's integrity level unless the person preparing the seal opts out. The choice is
   // part of the pinned manifest, so nothing running later (MC included) can switch it back.
   h.lowIntegrity=options.lowIntegrityHost===true||config.researchLab===true;
@@ -56,7 +63,7 @@ function provision(source,destination,guardBinary,options={}){
   if(!dirs.length)args[cp+1]=paths.map(dependency).join(path.delimiter);
   for(const f of args[cp+1].split(path.delimiter))pin(f);
   const dli=args.findIndex(a=>a.startsWith('-Dfabric.dli.config='));
-  if(dli>=0){const original=args[dli].split('=').slice(1).join('=');let text=fs.readFileSync(original,'utf8');
+  if(dli>=0){if(args.filter(a=>a.startsWith('-Dfabric.dli.config=')).length!==1)throw Error('AMBIGUOUS_FABRIC_LAUNCH_CONFIG');const original=args[dli].split('=').slice(1).join('=');let text=Launch.assertNoHiddenGameDirectory(fs.readFileSync(original,'utf8'));
    for(const key of ['fabric.remapClasspathFile','log4j.configurationFile']){
     const line=text.split(/\r?\n/).find(l=>l.trim().startsWith(key+'='));if(!line)continue;const f=line.trim().slice(key.length+1);const target=copy(f,path.basename(f));
     if(key==='fabric.remapClasspathFile'){const entries=fs.readFileSync(f,'utf8').trim().split(path.delimiter);if(entries.some(e=>!fs.statSync(e).isFile()))throw Error('UNSEALED_REMAP_DIRECTORY');fs.writeFileSync(target,entries.map(dependency).join(path.delimiter));}

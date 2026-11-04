@@ -12,6 +12,17 @@ test('native code locks, outer ledger and complete process-tree recovery',async 
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'eff-native-guard-')),source=path.join(root,'source.json');
  fs.writeFileSync(source,JSON.stringify({java,workerJar,directory:path.join(root,'unused')}));
  const s=provision(source,path.join(root,'sealed'),guard),seal=JSON.parse(fs.readFileSync(s.manifest,'utf8'));
+ await t.test('Low cannot read the provisioned key or ledger before the first Guardian run',{skip:process.env.EFF_TEST_LOW_INTEGRITY!=='true'?'requires opt-in experimental guard build':false},()=>{
+  const game=path.join(s.directory,'pre-run-low-game');fs.mkdirSync(game);
+  const paths=['ledger-key.dpapi','ledger.bin','ledger-head.bin'].map(n=>path.join(seal.config.directory,n));
+  assert.ok(paths.every(p=>fs.existsSync(p)));assert.equal(fs.existsSync(path.join(seal.config.directory,'guard-events.jsonl')),false);
+  const code=`const fs=require('node:fs');let denied=0;for(const p of ${JSON.stringify(paths)})try{fs.readFileSync(p);}catch(e){if(['EACCES','EPERM'].includes(e.code))denied++;}if(denied!==3)process.exit(2);console.log('PRE_RUN_KEY_AND_LEDGER_DENIED');`;
+  const probe=spawnSync(s.guard,['--low-integrity-host',game,process.execPath,'-e',code],{encoding:'utf8',windowsHide:true,timeout:20000});
+  assert.equal(probe.status,0,probe.stderr);assert.match(probe.stdout,/PRE_RUN_KEY_AND_LEDGER_DENIED/);
+  const rejected=path.join(game,'low-provision');
+  const lowProvision=spawnSync(s.guard,['--low-integrity-host',game,s.guard,'--provision',rejected],{encoding:'utf8',windowsHide:true,timeout:20000});
+  assert.equal(lowProvision.status,2,lowProvision.stderr);assert.match(lowProvision.stderr,/GUARD_MEDIUM_OR_HIGH_REQUIRED/);assert.equal(fs.existsSync(rejected),false);
+ });
  const originalPin=s.pin;
  const child=path.join(seal.payload,'fixture.cjs');
  fs.writeFileSync(child,`require('./protected-child.cjs');module.exports=require.cache[require.resolve('./protected-child.cjs')].exports;
@@ -46,7 +57,7 @@ module.exports.onReady=async(c,g)=>{
  await t.test('a second guardian cannot take the same ledger or truncate it',()=>{
   const result=spawnSync(s.guard,[s.manifest,s.pin],{encoding:'utf8',windowsHide:true,timeout:20000});assert.equal(result.status,2);assert.ok(alive(first.pid));checks.push('single-outer-writer');
  });
- await t.test('MC launched through the low integrity helper runs below the kernel and the OS refuses it every kernel object',{skip:process.env.EFF_TEST_LOW_INTEGRITY!=='true'?'requires opt-in experimental guard build':false},()=>{
+ await t.test('Low MC helper cannot access the tested authority files or protected runtime process rights',{skip:process.env.EFF_TEST_LOW_INTEGRITY!=='true'?'requires opt-in experimental guard build':false},()=>{
   assert.equal(first.foreignProtectionDenied,true,'the outer process protector must reject processes outside its own Job');
   const game=path.join(root,'low-game');fs.mkdirSync(game);
   const level=spawnSync(s.guard,['--low-integrity-host',game,s.guard,'--integrity'],{encoding:'utf8',windowsHide:true,timeout:20000});

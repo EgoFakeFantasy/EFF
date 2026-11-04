@@ -2,9 +2,29 @@
 const {test} = require("node:test");
 const assert = require("node:assert/strict");
 const {cleanEnv,workerEnv,assertHostArguments,launcherSanitizeLines} = require("./launch-policy.cjs");
+const {relocateGameDirectory,assertNoHiddenGameDirectory} = require("./launch-policy.cjs");
 
 const required = ["-XX:+DisableAttachMechanism", "-XX:+ExitOnOutOfMemoryError"];
 const windows = {SystemRoot:"C:\\Windows",Path:"C:\\poison;C:\\Windows\\System32",TEMP:"C:\\shared",TMP:"C:\\shared",USERPROFILE:"C:\\Users\\Traveler",LANG:"en_AU.UTF-8",NUMBER_OF_PROCESSORS:"8"};
+
+test('Forge explicit gameDir and Fabric default gameDir resolve to the private sealed tree',()=>{
+ const target='C:\\sealed deployment\\mc-host',forge=['-cp','classes','BootstrapLauncher','--gameDir','C:\\old-game','--assetsDir','C:\\assets'];
+ const before=[...forge],result=relocateGameDirectory(forge,target);
+ assert.deepEqual(forge,before);assert.equal(result[result.indexOf('--gameDir')+1],target);
+ assert.equal(result[result.indexOf('--assetsDir')+1],'C:\\assets');assert.equal(result.includes('C:\\old-game'),false);
+ const fabric=relocateGameDirectory(['-cp','classes','net.fabricmc.devlaunchinjector.Main'],target);
+ assert.deepEqual(fabric.slice(-2),['--gameDir',target]);assert.deepEqual(relocateGameDirectory(fabric,target),fabric);
+});
+test('ambiguous game selectors and alternate mod roots fail closed',()=>{
+ for(const args of [['--gameDir','a','--gameDir','b'],['--gameDir=a'],['-gameDir','a'],['--gamedir','a'],['--gameD','a'],['--g','a'],['--ga','a'],['--gam=a'],[' --gameDir','a'],['--gameDir'],['--gameDir','--assetsDir'],['--gameDir',''],['--','--gameDir','a'],['-Dfabric.addMods=C:\\unsealed'],['--modsDir','C:\\unsealed']])
+  assert.throws(()=>relocateGameDirectory(args,'C:\\sealed\\mc-host'),/GAME|MOD_ROOT/);
+ assert.throws(()=>relocateGameDirectory([],'relative'),/SEALED_GAME_DIRECTORY_REQUIRED/);
+});
+test('Fabric hidden game and mod-root selectors cannot override the sealed explicit value',()=>{
+ const assets='commonProperties\n\tfabric.development=true\nclientArgs\n\t--assetsDir\n\tC:\\assets\n';
+ assert.equal(assertNoHiddenGameDirectory(assets),assets);
+ for(const text of ['clientArgs\n\t--','clientArgs\n\t--gameDir\n\tC:\\old','commonArgs\n\t--gameDir=C:\\old','commonProperties\n\tfabric.addMods=C:\\old.jar'])assert.throws(()=>assertNoHiddenGameDirectory(text),/HIDDEN_GAME_OR_MOD_ROOT_REJECTED/);
+});
 
 test("positive environment list keeps usable Windows and display inputs without mutating source", () => {
   const source = {...windows,APPDATA:"C:\\Users\\Traveler\\AppData\\Roaming",DISPLAY:":0",WAYLAND_DISPLAY:"wayland-0",XDG_RUNTIME_DIR:"/run/user/1000",SECRET_TOKEN:"secret",AWS_ACCESS_KEY_ID:"secret",BASH_ENV:"/unapproved",LD_PRELOAD:"/unapproved.so",DYLD_INSERT_LIBRARIES:"/unapproved.dylib"};
