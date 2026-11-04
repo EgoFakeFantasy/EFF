@@ -152,7 +152,12 @@ public final class EffScreen extends Screen {
             counter = Jsons.o(r, "counter"),
             helper = Jsons.o(r, "advice");
         StringBuilder text =
-            new StringBuilder("实际实体：" + (Jsons.b(f, "entity.avatar.alive") ? "存在" : "已移除"))
+            new StringBuilder("权威实体：" + (Jsons.b(f, "entity.avatar.alive") ? "存在" : "已撤销"))
+                .append(
+                    f.has("projection.entity.avatar.observedAlive")
+                        ? " · 原生观测："
+                            + (Jsons.b(f, "projection.entity.avatar.observedAlive") ? "存在" : "缺失")
+                        : "")
                 .append(" · 牵引：")
                 .append(Jsons.b(f, "control.tether.active"))
                 .append(" · 事件：")
@@ -213,7 +218,7 @@ public final class EffScreen extends Screen {
           JsonObject admission = Jsons.o(rt, "admission");
           text.append("\n启动校验：").append(Jsons.b(rt, "initialized") ? "投影已核对" : "等待有效投影");
           if (Jsons.s(admission, "hostMutation").equals("disabled"))
-            text.append(" · 第三方实验只读；退出或故障后隔离，不自动重载");
+            text.append(" · 宿主只读：请从外部控制台提交");
           JsonObject defense = Jsons.o(rt, "defense");
           if (defense.size() > 0) {
             JsonObject incident = Jsons.o(defense, "lastIncident");
@@ -279,6 +284,8 @@ public final class EffScreen extends Screen {
                       Jsons.i(r, "revision")));
             },
             !busy
+                && !Jsons.s(Jsons.o(Jsons.o(r, "runtime"), "admission"), "hostMutation")
+                    .equals("disabled")
                 && Jsons.s(r, "outcome").equals("pending")
                 && Jsons.b(Jsons.o(state, "native"), "ready"));
         button(

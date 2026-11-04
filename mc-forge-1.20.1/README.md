@@ -64,6 +64,8 @@ refuse ending.owned;
 .\start-protected.ps1 -Verify -AllowRuleFallback -Jdk C:\路径\jdk-17 -Directory C:\路径\EFF-Forge-QA-Rule
 ```
 
+受保护入口可通过 `-LowIntegrityHost` 显式选择实验性 Windows Low 完整性构建。本机新实验二进制被系统拒绝执行，Low 模式和真实 MC 图形兼容性尚未验收；默认保留原守护。`-ExternalControlOnly` 启用独立控制台提交，MC 只读。详见 [独立控制与实验隔离](../mc-1.20.1/PROTECTED_RUNTIME.md)。
+
 封存仅在新部署时建立信任基线；开始游玩不会自动重封存或重置战果。增加或更新模组必须准备新实例，不可把可写的 Gradle 缓存当作保护后的执行来源。完整性保护不提供对同账户或管理员的绝对防御。
 
 低内存受保护入口保留 MC 768 MiB 堆、工作 JVM 各 64 MiB 堆、控制器及剧情桥各 96 MiB V8 堆预算，使用平坦的专用引导世界。原生内存、Forge 及其他模组和本地模型仍另占内存；这些数值不是整机占用上限。实际战斗在 `eff:phenomenon` 维度中进行。
@@ -88,3 +90,5 @@ node tests/distribution.test.cjs build/libs/eff-minecraft-forge-1.20.1-0.6.1+mc1
 ## 0.6.1 启动与交接边界
 
 [权限审查与实现说明](../mc-1.20.1/RUNTIME_BOUNDARY_AUDIT.md)：严格状态 DTO、后继初值限制、玩家守卫所有权、不可由宿主取消的死亡故障，以及初始化就绪检查。额外研究模组须逐项静态审查并进入只读、退出后隔离的实验通道；摘要固定不代表安全。受保护模式请从外层窗口或 Ctrl+C 退出，单独关闭 MC 会触发恢复。
+
+独立外部控制台、只读宿主模式和实验 Low 构建见 [指南落实记录](../mc-1.20.1/AGENT_ADAPTATION.md)。

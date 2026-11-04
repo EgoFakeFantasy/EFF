@@ -133,13 +133,8 @@ public final class Kernel {
     JsonObject before = fields(k.s);
     JsonArray steps = new JsonArray();
     boolean changed = false;
-    if (actor.equals("native-observer")) {
-      if (!source.equals("entity.avatar removed externally")) fail("INVALID_OBSERVATION");
-      if (b(k.s, "avatar")) {
-        k.s.addProperty("avatar", false);
-        changed = true;
-      }
-    } else {
+    if (actor.equals("native-observer")) fail("OBSERVATION_IS_NOT_AUTHORITY");
+    {
       var program =
           ResearchProgram.parse(source); // reject malformed whole programs before any effect
       for (var step : program) {
@@ -178,8 +173,7 @@ public final class Kernel {
       k.s.addProperty("revision", i(k.s, "revision") + 1);
       if (actor.equals("intruder")) k.s.addProperty("counterRounds", i(k.s, "counterRounds") + 1);
     }
-    if (actor.equals("player") && changed || actor.equals("native-observer") && changed)
-      k.s.addProperty("dirty", true);
+    if (actor.equals("player") && changed) k.s.addProperty("dirty", true);
     if (actor.equals("intruder")) k.s.addProperty("dirty", false);
     JsonObject receipt =
         obj(

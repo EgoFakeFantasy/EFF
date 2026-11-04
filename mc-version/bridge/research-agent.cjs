@@ -1,5 +1,17 @@
 "use strict";
 const record = (v) => v && typeof v === "object" && !Array.isArray(v);
+function runtimeSummary(r) {
+  const out={events:[]};
+  for(const key of ['hostEpoch','commit'])if(Number.isSafeInteger(r[key])&&r[key]>=0)out[key]=r[key];
+  if(typeof r.initialized==='boolean')out.initialized=r.initialized;
+  if(record(r.defense))out.defense={incidents:Number.isSafeInteger(r.defense.incidents)?r.defense.incidents:0,circuitOpen:r.defense.circuitOpen===true};
+  for(const e of Array.isArray(r.events)?r.events.slice(-8):[]){
+    if(!record(e))continue;const v={};
+    for(const key of ['type','reason','role'])if(typeof e[key]==='string'&&/^[a-zA-Z0-9_-]{1,80}$/.test(e[key]))v[key]=e[key];
+    if(v.type)out.events.push(v);
+  }
+  return out;
+}
 function validateObservation(s) {
   if (
     !record(s) ||
@@ -204,7 +216,7 @@ async function inferResearch(model, s, actor, goal = "") {
       journal: s.journal,
       currently_valid_primitive_commands: available,
     };
-    if (s.runtime) observation.runtime = s.runtime;
+    if (s.runtime) observation.runtime = runtimeSummary(s.runtime);
     if (actor === "repression") observation.player_intent = goal;
     const budget = {
       quick: [8000, 2048, 256],

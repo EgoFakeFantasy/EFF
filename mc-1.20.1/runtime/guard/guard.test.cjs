@@ -45,6 +45,32 @@ module.exports.onReady=async(c,g)=>{
  await t.test('a second guardian cannot take the same ledger or truncate it',()=>{
   const result=spawnSync(s.guard,[s.manifest,s.pin],{encoding:'utf8',windowsHide:true,timeout:20000});assert.equal(result.status,2);assert.ok(alive(first.pid));checks.push('single-outer-writer');
  });
+ await t.test('MC launched through the low integrity helper runs below the kernel and the OS refuses it every kernel object',{skip:process.env.EFF_TEST_LOW_INTEGRITY!=='true'?'requires opt-in experimental guard build':false},()=>{
+  const game=path.join(root,'low-game');fs.mkdirSync(game);
+  const level=spawnSync(s.guard,['--low-integrity-host',game,s.guard,'--integrity'],{encoding:'utf8',windowsHide:true,timeout:20000});
+  assert.equal(level.status,0,level.stderr);assert.equal(level.stdout.trim(),'low');
+  const accessSource=path.join(game,'access.cs'),accessExe=path.join(game,'access.exe');
+  fs.writeFileSync(accessSource,`using System;using System.Runtime.InteropServices;class Probe{[DllImport("kernel32.dll",SetLastError=true)]static extern IntPtr OpenProcess(uint a,bool i,int p);[DllImport("kernel32.dll")]static extern bool CloseHandle(IntPtr h);static int Main(){foreach(uint a in new uint[]{1,2,8,16,32,64}){IntPtr h=OpenProcess(a,false,${first.pid});Console.WriteLine(a+":"+(h==IntPtr.Zero?"denied":"allowed"));if(h!=IntPtr.Zero){CloseHandle(h);return 2;}}return 0;}}`);
+  const compiler=path.join(process.env.SystemRoot,'Microsoft.NET/Framework64/v4.0.30319/csc.exe');
+  const compiled=spawnSync(compiler,['/nologo','/platform:x64','/out:'+accessExe,accessSource],{encoding:'utf8',windowsHide:true,timeout:20000});assert.equal(compiled.status,0,compiled.stdout+compiled.stderr);
+  const handles=spawnSync(s.guard,['--low-integrity-host',game,accessExe],{encoding:'utf8',windowsHide:true,timeout:20000});assert.equal(handles.status,0,handles.stdout+handles.stderr);for(const a of [1,2,8,16,32,64])assert.ok(handles.stdout.includes(a+':denied'));
+  const authority=seal.config.directory,leaked=[path.join(authority,'low-probe.txt'),path.join(seal.payload,'low-probe.txt')],probe=path.join(game,'probe.cjs');
+  // Stands in for a script loaded into MC: arbitrary code with MC's process rights, trying to reach the kernel.
+  fs.writeFileSync(probe,`const fs=require('fs'),path=require('path');const r={};const t=(k,f)=>{try{f();r[k]='allowed';}catch(e){r[k]=e.code||e.message;}};
+t('killController',()=>process.kill(${first.pid}));
+t('readLedgerKey',()=>fs.readFileSync(${JSON.stringify(path.join(authority,'ledger-key.dpapi'))}));
+t('readLedger',()=>fs.readFileSync(${JSON.stringify(path.join(authority,'ledger.bin'))}));
+t('writeAuthority',()=>fs.writeFileSync(${JSON.stringify(leaked[0])},'x'));
+t('writePayload',()=>fs.writeFileSync(${JSON.stringify(leaked[1])},'x'));
+t('writeGame',()=>fs.writeFileSync(path.join(__dirname,'own.txt'),'x'));
+process.stdout.write(JSON.stringify(r));`);
+  const result=spawnSync(s.guard,['--low-integrity-host',game,process.execPath,probe],{encoding:'utf8',windowsHide:true,timeout:20000});
+  for(const f of leaked)if(fs.existsSync(f))fs.unlinkSync(f);
+  assert.equal(result.status,0,result.stderr);const r=JSON.parse(result.stdout);
+  assert.equal(r.writeGame,'allowed');
+  for(const k of ['killController','readLedgerKey','readLedger','writeAuthority','writePayload'])assert.notEqual(r[k],'allowed',k);
+  assert.ok(alive(first.pid));checks.push('low-integrity-host-isolated');
+ });
  await t.test('Windows sharing rules reject overwrite, deletion and replacement of executing code',()=>{
   for(const f of [path.join(seal.payload,'controller.cjs'),path.join(seal.payload,'workers.jar'),s.manifest,path.join(seal.payload,'eff-guard.exe.config'),path.join(seal.config.directory,'ledger.bin'),path.join(seal.config.directory,'ledger-head.bin'),path.join(seal.config.directory,'ledger-key.dpapi')]){
    assert.throws(()=>fs.writeFileSync(f,'changed'),e=>['EBUSY','EACCES','EPERM'].includes(e.code));assert.throws(()=>fs.unlinkSync(f));assert.throws(()=>fs.renameSync(f,f+'.replaced'));

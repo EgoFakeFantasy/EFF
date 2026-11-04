@@ -52,16 +52,18 @@ tasks.register('managedRuntimeTest', Exec) {
 check { dependsOn 'bridgeTest','researchJavaTest','managedRuntimeTest' }
 if(System.getProperty('os.name').toLowerCase().contains('windows')) {
  tasks.register('guardianBuild',Exec) {
+  inputs.property('lowIntegrityExperiment',providers.gradleProperty('effLowIntegrityExperiment').isPresent())
   def exe=layout.buildDirectory.file('guard/eff-guard.exe')
   inputs.files(new File(runtime,'guard/WindowsGuard.cs'),new File(runtime,'guard/WindowsGuard.exe.config'))
   outputs.file(exe); outputs.file(layout.buildDirectory.file('guard/eff-guard.exe.config'))
-  doFirst { exe.get().asFile.parentFile.mkdirs() }
+  doFirst { exe.get().asFile.parentFile.mkdirs(); if(providers.gradleProperty('effLowIntegrityExperiment').isPresent()) args '/define:EFF_LOW_INTEGRITY_EXPERIMENTAL' }
   commandLine new File(System.getenv('SystemRoot'),'Microsoft.NET/Framework64/v4.0.30319/csc.exe').absolutePath,
     '/nologo','/platform:x64','/target:exe','/r:System.Web.Extensions.dll','/r:System.Security.dll',
     '/out:'+exe.get().asFile.absolutePath,new File(runtime,'guard/WindowsGuard.cs').absolutePath
   doLast { copy { from new File(runtime,'guard/WindowsGuard.exe.config'); into exe.get().asFile.parentFile; rename { 'eff-guard.exe.config' } } }
  }
  tasks.register('guardianTest',Exec) {
+  environment 'EFF_TEST_LOW_INTEGRITY',providers.gradleProperty('effLowIntegrityExperiment').isPresent()?'true':'false'
   dependsOn guardianBuild,runtimeKernelJar
   environment 'EFF_TEST_JAVA',javaToolchains.launcherFor(java.toolchain).get().executablePath.asFile.absolutePath
   environment 'EFF_TEST_WORKERS',tasks.named('runtimeKernelJar').get().archiveFile.get().asFile.absolutePath

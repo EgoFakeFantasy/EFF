@@ -57,8 +57,8 @@ test('real generated JVM layers reject ambient capability/state pollution and re
   const child=await successor.send({op:'snapshot',state:legal});assert.equal(child.recovery,false);assert.equal(child.watches[0].fired,true);assert.ok(child.checkpoints.some(c=>c.handle==='checkpoint.player'));
   await assert.rejects(successor.send({op:'snapshot',state:{...clone(legal),ambientAuthorities:{marker:true}}}),/STATE_UNKNOWN_OR_MISSING_KEYS/);
  });
- await t.test('legal victory and native-observer records validate, terminal control cannot reappear',async()=>{
-  const observed=await transition(execution,initial,'entity.avatar removed externally','native-observer');assert.equal(observed.state.avatar,false);await execution.send({op:'snapshot',state:observed.state});
+ await t.test('legal victory validates; native reports cannot mutate authority or restore terminal control',async()=>{
+  await assert.rejects(transition(execution,initial,'entity.avatar removed externally','native-observer'),/OBSERVATION_IS_NOT_AUTHORITY/);
   const win=(await transition(execution,legal,'refuse ending.owned')).state;assert.equal(win.outcome,'won');assert.equal(win.refused,true);assert.equal((await successor.send({op:'snapshot',state:win})).recovery,false);
   await assert.rejects(successor.send({op:'snapshot',state:{...clone(win),avatar:true}}),/STATE_ENDING_INCONSISTENT/);
  });

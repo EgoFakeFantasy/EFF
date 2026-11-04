@@ -1,5 +1,7 @@
 # 0.6.1 权限边界验收
 
+> 本报告绑定指南整合前的 `637a20d` 基线；后续独立控制、投影分离与实验 MIC 改动见 [AGENT_ADAPTATION.md](AGENT_ADAPTATION.md)，不得将这里的旧回执当作新路径已验收。
+
 日期：2026-11-04。Windows 11 / Java 17.0.20.1+1 / Forge 47.4.20。实现及攻击面分析见 [边界审查](./RUNTIME_BOUNDARY_AUDIT.md)。
 
 ## 构建与自动检查

@@ -95,6 +95,88 @@ public sealed class Ledger : IDisposable {
  void WriteHead(){byte[] b=Encoding.UTF8.GetBytes((Current==null?0:Convert.ToInt64(Current["commit"]))+":"+previous);anchor.Position=0;var w=new BinaryWriter(anchor,Encoding.UTF8,true);w.Write(b.Length);w.Write(b);w.Write(Mac(b));w.Flush();anchor.SetLength(anchor.Position);anchor.Flush(true);}
  public void Dispose(){file.Dispose();anchor.Dispose();keyLock.Dispose();Array.Clear(key,0,key.Length);}
 }
+#if EFF_LOW_INTEGRITY_EXPERIMENTAL
+// Windows mandatory integrity control is the boundary MC cannot argue with: it is enforced by the OS kernel
+// on every handle open, so code loaded into a Low integrity MC JVM (mods, mixins, agents, JNA/native calls)
+// cannot open this guard, the controller or the worker JVMs for read/write/inject/terminate, cannot send
+// window messages up (UIPI), and cannot read or write the authority directory labelled below.
+public static class IntegrityBoundary {
+ [StructLayout(LayoutKind.Sequential)] struct SidAndAttributes { public IntPtr Sid; public uint Attributes; }
+ [DllImport("advapi32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool ConvertStringSecurityDescriptorToSecurityDescriptorW(string sddl,uint revision,out IntPtr descriptor,IntPtr size);
+ [DllImport("advapi32.dll",SetLastError=true)] static extern bool GetSecurityDescriptorSacl(IntPtr descriptor,out bool present,out IntPtr sacl,out bool defaulted);
+ [DllImport("advapi32.dll",CharSet=CharSet.Unicode)] static extern uint SetNamedSecurityInfoW(string name,int type,uint info,IntPtr owner,IntPtr group,IntPtr dacl,IntPtr sacl);
+ [DllImport("advapi32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool ConvertStringSidToSidW(string sid,out IntPtr psid);
+ [DllImport("advapi32.dll")] static extern uint GetLengthSid(IntPtr sid);
+ [DllImport("advapi32.dll")] static extern IntPtr GetSidSubAuthorityCount(IntPtr sid);
+ [DllImport("advapi32.dll")] static extern IntPtr GetSidSubAuthority(IntPtr sid,uint index);
+ [DllImport("advapi32.dll",SetLastError=true)] static extern bool OpenProcessToken(IntPtr process,uint access,out IntPtr token);
+ [DllImport("advapi32.dll",SetLastError=true)] static extern bool SetTokenInformation(IntPtr token,int cls,IntPtr info,uint length);
+ [DllImport("advapi32.dll",SetLastError=true)] static extern bool GetTokenInformation(IntPtr token,int cls,IntPtr info,uint length,out uint returned);
+ [DllImport("kernel32.dll")] static extern IntPtr GetCurrentProcess();
+ [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr memory);
+ [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
+ const int FileObject=1,TokenIntegrityLevel=25;const uint LabelInformation=0x10,TokenQuery=0x8,TokenAdjustDefault=0x80,GroupIntegrity=0x20;
+ public const uint Low=0x1000,Medium=0x2000;
+ static void Label(string path,string sddl){
+  IntPtr descriptor;if(!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl,1,out descriptor,IntPtr.Zero))throw new IOException("INTEGRITY_LABEL_SDDL_"+Marshal.GetLastWin32Error());
+  try{bool present,defaulted;IntPtr sacl;if(!GetSecurityDescriptorSacl(descriptor,out present,out sacl,out defaulted)||!present)throw new IOException("INTEGRITY_LABEL_SACL");
+   uint error=SetNamedSecurityInfoW(path,FileObject,LabelInformation,IntPtr.Zero,IntPtr.Zero,IntPtr.Zero,sacl);if(error!=0)throw new IOException("INTEGRITY_LABEL_FAILED_"+error);}
+  finally{LocalFree(descriptor);}
+ }
+ // Medium label with no-read-up, no-write-up and no-execute-up, inherited by every file: a Low process
+ // can neither read the ledger key/state nor write anything here. Medium kernel processes are unaffected.
+ public static void SealAuthority(string directory){Label(directory,"S:(ML;OICI;NRNWNX;;;ME)");}
+ // The only tree a Low MC may write: its own game directory.
+ public static void OpenToLow(string directory){Label(directory,"S:(ML;OICI;NW;;;LW)");}
+ public static uint Current(){
+  IntPtr token;if(!OpenProcessToken(GetCurrentProcess(),TokenQuery,out token))throw new IOException("INTEGRITY_TOKEN_"+Marshal.GetLastWin32Error());
+  try{uint size;GetTokenInformation(token,TokenIntegrityLevel,IntPtr.Zero,0,out size);IntPtr buffer=Marshal.AllocHGlobal((int)size);
+   try{if(!GetTokenInformation(token,TokenIntegrityLevel,buffer,size,out size))throw new IOException("INTEGRITY_QUERY_"+Marshal.GetLastWin32Error());
+    IntPtr sid=((SidAndAttributes)Marshal.PtrToStructure(buffer,typeof(SidAndAttributes))).Sid;int count=Marshal.ReadByte(GetSidSubAuthorityCount(sid));
+    return (uint)Marshal.ReadInt32(GetSidSubAuthority(sid,(uint)(count-1)));}
+   finally{Marshal.FreeHGlobal(buffer);}}
+  finally{CloseHandle(token);}
+ }
+ // Lowering one's own token is always permitted; nothing can raise it again without SeTcbPrivilege.
+ public static void LowerSelf(){
+  IntPtr token,sid;if(!OpenProcessToken(GetCurrentProcess(),TokenQuery|TokenAdjustDefault,out token))throw new IOException("INTEGRITY_TOKEN_"+Marshal.GetLastWin32Error());
+  try{if(!ConvertStringSidToSidW("S-1-16-4096",out sid))throw new IOException("INTEGRITY_SID_"+Marshal.GetLastWin32Error());
+   try{var label=new SidAndAttributes{Sid=sid,Attributes=GroupIntegrity};int size=Marshal.SizeOf(label)+(int)GetLengthSid(sid);IntPtr buffer=Marshal.AllocHGlobal(size);
+    try{Marshal.StructureToPtr(label,buffer,false);if(!SetTokenInformation(token,TokenIntegrityLevel,buffer,(uint)size))throw new IOException("INTEGRITY_LOWER_"+Marshal.GetLastWin32Error());}
+    finally{Marshal.FreeHGlobal(buffer);}}
+   finally{LocalFree(sid);}}
+  finally{CloseHandle(token);}
+  if(Current()!=Low)throw new IOException("INTEGRITY_NOT_LOWERED");
+ }
+}
+// `eff-guard.exe --low-integrity-host <game dir> <program> [args...]`, started by the controller instead of java.exe.
+// It labels only the game directory writable for Low, drops itself to Low and runs MC inside a nested
+// kill-on-close job, so terminating this helper (as the controller does on replacement) also ends MC.
+public static class LowIntegrityHost {
+ static string Argument(string a){
+  if(a.Length>0&&a.IndexOfAny(new[]{' ','\t','\n','\v','"'})<0)return a;
+  var b=new StringBuilder("\"");int slashes=0;
+  foreach(char c in a){if(c=='\\'){slashes++;continue;}if(c=='"')b.Append('\\',slashes*2+1).Append('"');else b.Append('\\',slashes).Append(c);slashes=0;}
+  return b.Append('\\',slashes*2).Append('"').ToString();
+ }
+ static Task Pump(Stream from,Stream to){return Task.Factory.StartNew(()=>{try{var buffer=new byte[8192];int n;while((n=from.Read(buffer,0,buffer.Length))>0){lock(to){to.Write(buffer,0,n);to.Flush();}}}catch{}},TaskCreationOptions.LongRunning);}
+ public static int Run(string[] args){
+  string game=Path.GetFullPath(args[1]);if(!Directory.Exists(game))throw new IOException("LOW_HOST_GAME_DIRECTORY");
+  for(string p=game;p!=null;p=Path.GetDirectoryName(p))if((File.GetAttributes(p)&FileAttributes.ReparsePoint)!=0)throw new IOException("REPARSE_POINT_REJECTED");
+  IntegrityBoundary.OpenToLow(game);string temp=Path.Combine(game,"tmp");Directory.CreateDirectory(temp);
+  IntegrityBoundary.LowerSelf();
+  var rest=new List<string>();for(int i=3;i<args.Length;i++)rest.Add(Argument(args[i]));
+  var start=new ProcessStartInfo(args[2],String.Join(" ",rest));start.UseShellExecute=false;start.CreateNoWindow=true;start.WorkingDirectory=game;
+  start.RedirectStandardOutput=true;start.RedirectStandardError=true;start.EnvironmentVariables["TMP"]=temp;start.EnvironmentVariables["TEMP"]=temp;
+  using(var job=new NativeJob())using(var child=Process.Start(start)){
+   try{job.Add(child);}catch{child.Kill();child.WaitForExit();throw;}
+   var pumps=new[]{Pump(child.StandardOutput.BaseStream,Console.OpenStandardOutput()),Pump(child.StandardError.BaseStream,Console.OpenStandardError())};
+   child.WaitForExit();Task.WaitAll(pumps,5000); // a grandchild holding the pipe open must not keep the helper alive
+   return child.ExitCode;
+  }
+ }
+}
+#endif
 public static class Program {
  static JavaScriptSerializer Json=new JavaScriptSerializer {MaxJsonLength=2097152,RecursionLimit=96};
  static List<FileStream> locks=new List<FileStream>();static volatile bool stopping;
@@ -107,10 +189,18 @@ public static class Program {
  static void CheckTrees(object trees){foreach(object item in (object[])trees){var tree=M(item);string root=(string)tree["root"];var want=new HashSet<string>(StringComparer.OrdinalIgnoreCase);foreach(object name in (object[])tree["entries"])want.Add((string)name);var actual=new HashSet<string>(StringComparer.OrdinalIgnoreCase);if(!Directory.Exists(root)){if(want.Count!=0)throw new IOException("CODE_TREE_MISSING");continue;}foreach(string f in Directory.GetFiles(LongPath(root),"*",SearchOption.AllDirectories)){NoReparse(f);actual.Add(f.Substring(LongPath(root).Length).TrimStart(Path.DirectorySeparatorChar));}if(!want.SetEquals(actual))throw new IOException("CODE_TREE_CHANGED");}}
  public static int Main(string[] args){string directory=null;try{
   if(args.Length==2&&args[0]=="--provision"){Ledger.Provision(args[1]);Console.WriteLine("LEDGER_PROVISIONED");return 0;}
+#if EFF_LOW_INTEGRITY_EXPERIMENTAL
+  if(args.Length>=3&&args[0]=="--low-integrity-host")return LowIntegrityHost.Run(args);
+  if(args.Length==1&&args[0]=="--integrity"){Console.WriteLine(IntegrityBoundary.Current()==IntegrityBoundary.Low?"low":IntegrityBoundary.Current()>=IntegrityBoundary.Medium?"medium-or-higher":"other");return 0;}
+#endif
   if(args.Length!=2)throw new IOException("EXPECTED_MANIFEST_AND_PIN");NoReparse(args[0]);
   var manifestLock=new FileStream(args[0],FileMode.Open,FileAccess.Read,FileShare.Read);locks.Add(manifestLock);if(!String.Equals(Sha(manifestLock),args[1],StringComparison.OrdinalIgnoreCase))throw new IOException("SEAL_MISMATCH");if(manifestLock.Length>2097152)throw new IOException("SEAL_BUDGET");manifestLock.Position=0;string text;using(var r=new StreamReader(manifestLock,Encoding.UTF8,true,4096,true))text=r.ReadToEnd();var seal=M(Json.DeserializeObject(text));if(Convert.ToInt32(seal["schema"])!=1)throw new IOException("SEAL_SCHEMA");
   foreach(object item in (object[])seal["files"]){var f=M(item);string path=(string)f["path"];NoReparse(path);var held=new FileStream(LongPath(path),FileMode.Open,FileAccess.Read,FileShare.Read);locks.Add(held);if(held.Length!=Convert.ToInt64(f["size"]))throw new IOException("CODE_SIZE_MISMATCH");if(!String.Equals(Sha(held),(string)f["sha256"],StringComparison.OrdinalIgnoreCase))throw new IOException("CODE_HASH_MISMATCH");}
-  CheckTrees(seal["trees"]);var config=M(seal["config"]);directory=(string)config["directory"];NoReparse(directory);Console.CancelKeyPress+=(s,e)=>{e.Cancel=true;stopping=true;};
+  CheckTrees(seal["trees"]);var config=M(seal["config"]);directory=(string)config["directory"];NoReparse(directory);
+#if EFF_LOW_INTEGRITY_EXPERIMENTAL
+  IntegrityBoundary.SealAuthority(directory);
+#endif
+  Console.CancelKeyPress+=(s,e)=>{e.Cancel=true;stopping=true;};
   string ruleset=null;foreach(object item in (object[])seal["files"]){var f=M(item);if(String.Equals(Path.GetFullPath((string)f["path"]),Path.GetFullPath((string)config["workerJar"]),StringComparison.OrdinalIgnoreCase))ruleset=(string)f["sha256"];}if(ruleset==null)throw new IOException("WORKER_RULESET_NOT_SEALED");
   using(var ledger=new Ledger(directory,Json,ruleset)){
    Event(directory,"guard-ready",new {pid=Process.GetCurrentProcess().Id,files=locks.Count});

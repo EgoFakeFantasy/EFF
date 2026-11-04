@@ -84,7 +84,10 @@ public final class ManagedResearchRuntime implements ResearchSession {
     JsonObject out = state.deepCopy();
     out.addProperty("avatarUUID", alive() ? avatar.getUUID().toString() : "");
     JsonObject fields = Jsons.o(out, "fields");
-    fields.addProperty("entity.avatar.alive", alive());
+    fields.addProperty("authority.entity.avatar.desiredAlive", desired("avatar"));
+    fields.addProperty("projection.entity.avatar.observedAlive", alive());
+    fields.addProperty("projection.entity.avatar.stableId", instance + ":avatar");
+    fields.addProperty("projection.status", desired("avatar") == alive() ? "MATCHED" : "DIVERGED");
     fields.addProperty("world.frozen", LegacyFreeze.of(arena.server).isFrozen());
     fields.addProperty("world.exitOpen", Jsons.b(arena.facts(), "exitOpen"));
     out.add("counter", counter.deepCopy());
@@ -139,16 +142,7 @@ public final class ManagedResearchRuntime implements ResearchSession {
   public void tick() {
     if (closed || !arena.ready()) return;
     ticks++;
-    if (RuntimeLink.initialized()
-        && knownAlive
-        && !alive()
-        && desired("avatar")
-        && pending()
-        && !desired("recovery")) {
-      // Revoked recovery must remain revoked: a real external kill is now a semantic body loss.
-      knownAlive = false;
-      execute("entity.avatar removed externally", revision(), "native-observer");
-    }
+    // Native reports never change the external avatar/recovery authority.
     publishProjection();
     if (ticks % 40 == 0) accept(RuntimeLink.call(Jsons.obj("op", "snapshot")));
     project();
@@ -207,6 +201,7 @@ public final class ManagedResearchRuntime implements ResearchSession {
 
   public boolean needsCounter() {
     return !closed
+        && !Boolean.getBoolean("eff.hostObserverOnly")
         && RuntimeLink.initialized()
         && !requested
         && desired("dirty")
