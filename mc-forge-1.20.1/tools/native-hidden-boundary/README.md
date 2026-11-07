@@ -1,0 +1,38 @@
+# Native hidden-class boundary: offline candidate
+
+This directory is an independent prototype. It does not launch Minecraft, alter installed JDK files, change system protection, or edit an opponent. Passing these fixtures is **not** a Minecraft combat result.
+
+## Exact boundary
+
+The Java-CFT boundary does not receive hidden classes. The audited native route directly resolves `JVM_LookupDefineClass`, so intercepting only Java `Lookup.defineHiddenClass` does not cover it. This candidate places an in-memory MinHook detour at that export in one private child JVM. The nine-argument ABI is from [OpenJDK 17 jvm.h](https://github.com/openjdk/jdk17u/blob/master/src/hotspot/share/include/jvm.h) and [jvm.cpp](https://github.com/openjdk/jdk17u/blob/master/src/hotspot/share/prims/jvm.cpp). Hidden/nestmate/strong flags are defined in [MethodHandleNatives](https://github.com/openjdk/jdk17u/blob/master/src/java.base/share/classes/java/lang/invoke/MethodHandleNatives.java).
+
+Pinned target: JDK `17.0.20.1+1`, `jvm.dll` SHA-256 `6b9a2354b41134986d61d1f8ff0f9614e3a6b7e235469b7e9260fe7a1d9bb84a`, export RVA `0x429510`, first 32 bytes `48895c240848896c2410488974241848897c242041564883ec508b81b0000000`. A different JDK requires a new audit; the installer rejects hash/RVA/prologue mismatches.
+
+The hook library is [official MinHook v1.3.4 source](https://github.com/TsudaKageyu/minhook/tree/c3fcafdc10146beb5919319d0683e44e3c30d537), commit `c3fcafdc10146beb5919319d0683e44e3c30d537`, BSD-2-Clause. The downloaded archive hash and every extracted source file are checked before compilation. No sample-native implementation is reused. The downloaded source and its license remain in the private preparation directory.
+
+## Provider and integration contract
+
+1. Seal the compiled `eff-hidden-boundary.dll` and provider JAR in the same runtime manifest as the existing agent. Verify the source receipt and destination SHA before `System.load(absolutePath)`; never resolve this DLL by ambient PATH. Do not ship `fixture-native-caller.dll` or fixture classes.
+2. Load `eff.hiddenboundary.NativeHiddenBoundary` in the chosen trusted loader. Preload the provider, ASM and any frame-resolution dependencies before installation. The provider method is `public static byte[] apply(Class<?> lookup, byte[] original)`. It must be thread-safe, return non-null/nonempty bytes, and preserve class name/schema. Its class is pinned by a JNI global reference and method ID; TCCL and opponent class names are not consulted.
+3. Invoke `NativeHiddenBoundary.install(providerClass)` once, before any untrusted hidden-class definition. An atomic compare/exchange admits only the first attempt; failed installation cannot be retried in that process and later callers cannot replace the provider. The candidate has no late-scan/replacement fallback. Existing hidden classes are not retroactively protected.
+4. For every hidden definition, the detour passes `lookup` plus copied class bytes to the provider, then calls the original trampoline with unchanged `lookup`, `name`, protection domain, initialization flag, flags and classData. Only the byte buffer/length can change. Non-hidden calls go directly to the original VM, retaining flag validation.
+5. Existing `FieldWriteGate.reject(Object)` must be visible to the resulting hidden class's real loader. The standalone transform uses that exact gate; fixtures supply a tiny test implementation. Real integration must use the existing EFF gate, never the fixture gate. Frame resolution uses the lookup loader and fails on unresolved hierarchy; no guessed Object fallback is used for missing classes.
+6. `stats()` returns `[hiddenCalls, changedDefinitions, activeCalls]`. Provider failures and recursive hidden definition from inside the provider fail closed with a Java exception. Prewarming is required; recursion failure is not combat success. A matching baseline must prove normal game startup and legitimate hidden/lambda definitions still work.
+7. The production API/DLL has **no uninstall method/export** and retains the hook until process exit. A separate fixture compilation enables an uninstall symbol in the fixture package, tested only after joining all definition workers. DLL unload or reinstallation is not a supported lifecycle. JNI local references use RAII cleanup on provider/native exceptions; active-call state resets in every C++ return/exception path.
+
+The standalone ASM transform adds an ownership predicate before direct `PUTFIELD` writes to Entity position/delta/stuck vectors, removalReason and bounding box (named and SRG field names). Both Entity and LivingEntity symbolic owners are recognized: inherited LivingEntity field references resolve to the Entity declaration. It evaluates the original operands once, preserves all subsequent caller work, and does not reset already-corrupted state. It contains no opponent name or package conditions. This is intentionally only the direct-write boundary; reflection/Unsafe/native raw memory, container removals, renderer changes and getter manipulation still require their separate existing guards. A same-process native adversary can overwrite this hook or its data; this is not an isolation boundary or kernel protection.
+
+## Reproduction
+
+v65n emits a declaration check at the actual write site for subclass symbolic owners. The native class-definition callback never loads game classes to resolve fields: doing so can reenter the native hidden-definition hook. At execution, the symbolic owner's Class constant (including a hidden self class) is resolved by the JVM and the gate checks the real field declaration before deciding whether the write is protected. Inherited `dead`/`deathTime` (named and SRG) are covered; same-named fields declared by subclasses remain ordinary fields. Fixtures execute the extracted production declaration-check method, then the composite agent test executes the actual gate JAR. This closes a specific direct-bytecode-write gap, not arbitrary native writes or late native ClassFileHook replacement.
+
+Run from the repository with the existing Python/MinGW/JDK tools:
+
+```text
+C:\Python314\python.exe mc-forge-1.20.1\tools\native-hidden-boundary\prepare-offline.py
+C:\Python314\python.exe mc-forge-1.20.1\tools\native-hidden-boundary\run-offline.py <printed-preparation-directory>
+```
+
+Each run creates a new private output directory; existing evidence is retained. `run-offline.py` compiles production and fixture variants plus a **separate** synthetic caller DLL. The latter resolves the genuine JVM export with `GetProcAddress`, without using Java Lookup or the boundary's trampoline. Each variant runs in its own Java process with `-Xverify:all`; child failure, timeout or crash fails the run. The production run additionally proves the uninstall symbol is absent and the hook stays active. The receipt freezes source/dependency/DLL hashes and checks the JDK disk hash after execution. MinGW libraries are linked statically; imports are restricted to bcrypt/KERNEL32/msvcrt, and tests run with PATH restricted to Windows System32.
+
+Tests compare an unhooked real write to NaN/DISCARDED against hooked owned/unowned writes. They check remaining method work, hidden identity, nest host, loader, explicit protection domain, classData, lazy/eager initialization, preexisting destroyed state remaining destroyed, null-target exceptions, ordinary-class VM flag validation/bypass, benign hidden classes unchanged, provider errors and recursion, 32 concurrent definitions, and restoration of the exact export prologue. Neither fixtures nor the receipt claim original MC entity/window survival.

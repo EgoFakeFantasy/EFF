@@ -1,17 +1,21 @@
 # EFF · Minecraft 1.20.1 Forge 版
 
-运行层研究场 **0.6.1**，适配 **Minecraft Java 1.20.1 / Forge 47.4.20 及后续 47.x / Java 17**。这是独立的 Forge 模组，不依赖 Fabric API；与 [Fabric 1.20.1 版](../mc-1.20.1/README.md) 共用剧情、研究场、桥接、递代引擎和外层守护实现。
+运行层研究场 **0.8.0**，适配 **Minecraft Java 1.20.1 / Forge 47.4.20 及后续 47.x / Java 17**。这是独立的 Forge 模组，不依赖 Fabric API；与 [Fabric 1.20.1 版](../mc-1.20.1/README.md) 共用剧情、研究场、桥接、递代引擎和外层守护实现。
 
 保留原文之旅、庭院练习、运行层研究场、本地双代理，以及真实的实体、控制、事件、磁盘检查点、实例迁移和出口判定。时间冻结和画面撕裂继续作用于实际 MC 世界和游戏帧。Forge 入口改用 Forge 事件与带方向校验的 `SimpleChannel`，原文内容与终章介入时点由同一套脚本决定。
 
 0.6 增加[实体故障守护](../mc-1.20.1/ANTI_INSTANT_KILL.md)：玩家死亡或投影异常可在 JVM 仍存活时触发后继执行引擎和整树恢复；合法删除及恢复权限撤销会保留，第三次事故停止重启。此功能要求受保护多 JVM 入口。
 
-最新研究增加[实验性 Rust 监督层](../mc-1.20.1/RUST_SUPERVISOR_BLUEPRINT.md)和[原包对手审查／严格交战验收](../mc-1.20.1/LATEST_OPPONENT_AUDIT.md)。Rust 子层已用真实 Guardian 与双 JVM 验证有限换代、整树排空和撤权保留，尚不代表真实 MC 对抗通过。原实体死亡／被清除、MC 崩溃或替换窗口均计为交战失败，恢复成功不抵消失败。保护机制与原生代码权限边界见[根 README 的 MC 技术说明](../README.md#mc-原生代码保护恢复与验收)。
+0.8.0 整合原玩家与场景实体的生命周期保护、当前登记与渲染观测、受保护代码来源检查、最终 Java 转换边界及可选原生隐藏类边界。新增离线回归和窗口录制工具，保留本地双代理、剧情与多 JVM 恢复。详见 [0.8.0 发布与安装说明](RELEASE_0.8.0.md)。
+
+普通模组与实验防御运行包是两个安装层级。仅将模组 JAR 放进 mods 不会启用启动代理、固定 JDK 的原生边界或补丁库。高级运行包固定 Windows x64、Forge 47.4.20 和经过哈希校验的 JDK，不承诺兼容其他 JVM。
+
+本版作为当前研究版本发布：最近手动交战的双端 29 次采样保持 10 个原对象身份和生命状态，但客户端随后在实体 tick 容器迭代时崩溃。发布不等于“原实体和原窗口持续正常运行”完整验收通过；崩溃、实体保护和恢复结果分项记录。原生权限边界见[根 README](../README.md#mc-原生代码保护恢复与验收)。
 
 ## 普通安装
 
 1. 在启动器中新建 **Minecraft 1.20.1 + Forge 47.4.20 或更新的 47.x** 独立实例，使用 **64 位 Java 17**。本版不适用于其他 Minecraft 版本。
-2. 将 `build/libs/eff-minecraft-forge-1.20.1-0.6.1+mc1.20.1-forge.jar` 放入该实例的 `mods`。安装经过 `reobfJar` 处理的正式 JAR，不安装 `-sources.jar`；同一实例只安装一个 EFF 模组。
+2. 将 `build/libs/eff-minecraft-forge-1.20.1-0.8.0+mc1.20.1-forge.jar` 放入该实例的 `mods`。安装经过 `reobfJar` 处理的正式 JAR，不安装 `-sources.jar`；同一实例只安装一个 EFF 模组。
 3. 安装 **Node.js 22+**。启动器找不到 Node 时，添加 JVM 参数 `-Deff.node=C:/实际路径/node.exe`。
 4. 进入单人世界，按 **R** 打开 EFF；也可使用 `/eff play`、`/eff duel`、`/eff research`。用 `/eff leave` 返回原位置并恢复原有模式和能力。
 5. 本地 AI 使用玩家已有的 Ollama 服务 `127.0.0.1:11434`。在“本地模型”页检测、选择并启用已安装的模型；不自动下载权重。关闭模型时使用规则策略。
@@ -74,6 +78,27 @@ refuse ending.owned;
 
 ## 开发与验证
 
+### 可选的实体生命周期 BOOT 门禁（实验）
+
+普通模组 JAR 包含实体 API 防护。更早的字段写入、索引替换与 tick 入口保护由独立的
+`build/runtime/eff-lifetime-gate.jar` 提供，放在 ModLauncher 的 BOOT classpath，
+不是放进 `mods` 目录，也不依赖运行中 attach。按受保护对象和操作检查，不识别对手名称。
+查询保护读取实际血量和移除字段，不把死亡值改回健康；任意 JNI/Unsafe、后续类重定义和
+未覆盖的容器操作仍可能绕过。适用范围和已知限制见[0.8.0 发布说明](RELEASE_0.8.0.md)。
+
+从仓库根目录，为已有的正式 Forge 启动配置准备一个新配置：
+
+```powershell
+.\mc-forge-1.20.1\gradlew.bat -p mc-forge-1.20.1 lifetimeGateJar lifetimeGateTest
+node mc-forge-1.20.1/tools/enable-lifetime-gate.cjs C:\配置\production-launch.json mc-forge-1.20.1/build/runtime/eff-lifetime-gate.jar C:\配置\gated-launch.json
+```
+
+工具将门禁按内容哈希放入源配置的库目录，只生成配置，不启动、不覆盖既有配置。
+后续必须重新准备完整封存实例并验证相同输入的干净基线；已有封存实例不能原地替换。
+上述步骤及有限 API 测试通过，都不等于 pig2／永爱原包对战通过。
+
+### 常规构建
+
 从完整仓库构建；剧情和工作 JVM 源码位于相邻目录，无需 npm 安装：
 
 ```powershell
@@ -82,7 +107,7 @@ refuse ending.owned;
 # 指定另一受支持的 Forge 47.x 构建
 .\gradlew.bat --no-daemon build "-Pforge_version=47.4.28"
 # 检查正式产物中的 Forge 元数据、SRG refmap、剧情包与加载器依赖
-node tests/distribution.test.cjs build/libs/eff-minecraft-forge-1.20.1-0.6.1+mc1.20.1-forge.jar
+node tests/distribution.test.cjs build/libs/eff-minecraft-forge-1.20.1-0.8.0+mc1.20.1-forge.jar
 ```
 
 正式产物经过 Forge 的重混淆步骤，Mixin refmap 也必须具有 SRG 映射；只在开发环境启动成功不能代替正式安装包验证。构建 / 脚本测试与实际 MC 原生验收分别记录，缺少新的原生回执时不能视为游戏内验证通过。CI 只执行构建与可自动化检查，不声称覆盖真实游戏窗口、模型推理或任意整合包。

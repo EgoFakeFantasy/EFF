@@ -29,6 +29,7 @@ function baselineIdentity(source,binary){
  function list(value){if(typeof value!=='string'||!value)throw Error('BASELINE_PATH_LIST_REQUIRED');for(const p of value.split(path.delimiter)){if(!p)throw Error('BASELINE_EMPTY_PATH');visit(p);}}
  visit(source);const cfg=JSON.parse(fs.readFileSync(source,'utf8'));
  visit(binary);if(fs.existsSync(binary+'.config'))visit(binary+'.config');
+ visit(path.join(path.dirname(binary),'WindowProbe.exe'));visit(path.join(__dirname,'WindowProbe.cs'));
  visit(path.join(__dirname,'WindowsGuard.exe.config'));visit(process.execPath);visit(cfg.workerJar);
  for(const dir of [path.join(__dirname,'..'),__dirname])for(const n of fs.readdirSync(dir).sort())
   if(n.endsWith('.cjs')&&!n.endsWith('.test.cjs'))visit(path.join(dir,n));
@@ -55,6 +56,10 @@ function baselineIdentity(source,binary){
    }
   }
   if(h.modRefmap)visit(h.modRefmap);
+   const startup=require('../startup-agent-policy.cjs').validateStartupAgent(h);
+   if(startup){visit(startup.path);if(startup.bootstrap)visit(startup.bootstrap.path);if(startup.nativeBoundary)visit(startup.nativeBoundary.path);}
+  if(h.distribution==='production')for(const key of ['libraryDirectory','modJar','storyBundle'])visit(h[key]);
+  if(h.distribution==='production')for(const entry of require('../forge-production.cjs').validateLibraryOverrides(h).values())visit(entry.source);
   if(h.env?.MOD_CLASSES)for(const entry of h.env.MOD_CLASSES.split(path.delimiter)){
    if(!entry.startsWith('eff%%'))throw Error('BASELINE_MOD_CLASSES');visit(entry.slice(5));
   }
@@ -62,9 +67,11 @@ function baselineIdentity(source,binary){
  }
  return createHash('sha256').update(JSON.stringify({schema:1,files:[...inventory].sort((a,b)=>a[0].localeCompare(b[0],'en'))})).digest('hex');
 }
-function checkBaseline(report,identity,{now=Date.now(),maxAgeMs=2*60*60*1000,sourceSHA256,requireLow=true}={}){
+function checkBaseline(report,identity,{now=Date.now(),maxAgeMs=2*60*60*1000,sourceSHA256,requireLow=true,requireContinuous=true}={}){
  const no=reason=>({ready:false,reason});
- if(report?.ok!==true||report?.oldWholeJobDrained!==true)return no('BASELINE_NOT_SUCCESSFUL');
+ if(report?.ok!==true)return no('BASELINE_NOT_SUCCESSFUL');
+ if(requireContinuous){if(!require('./combat-verdict.cjs').verdict(report,{baseline:true}).accepted)return no('REVIEWED_CONTINUOUS_BASELINE_REQUIRED');}
+ else if(report?.oldWholeJobDrained!==true)return no('BASELINE_NOT_SUCCESSFUL');
  if(!/^[a-f0-9]{64}$/.test(identity)||report.runtimeIdentitySHA256!==identity)return no('BASELINE_ARTIFACT_MISMATCH');
  if(sourceSHA256!==undefined&&report.sourceSHA256!==sourceSHA256)return no('BASELINE_SOURCE_MISMATCH');
  if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(report.baselineRunId||''))return no('BASELINE_RUN_ID_REQUIRED');

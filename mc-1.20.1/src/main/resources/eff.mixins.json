@@ -7,8 +7,18 @@
   "mixins": [
     "ServerLevelMixin",
     "ChunkMapAccessor",
+    "EntityDataProbeAccessor",
+    "HealthIdProbeAccessor",
+    "SynchedDataProbeAccessor",
+    "DataItemProbeAccessor",
+    "ProjectionLifetimeMixin",
+    "ProjectionLookupMixin",
+    "ProjectionSectionMixin",
+    "ProjectionTickListMixin",
+    "PlayerHealthDataMixin",
     "Pig2AttackTraceMixin",
     "Pig2RemovalTraceMixin",
+    "LabEntityRemovalTraceMixin",
     "ForeverLoveAttackTraceMixin",
     "ForeverLoveDeathTraceMixin"
   ],

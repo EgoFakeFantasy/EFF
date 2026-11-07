@@ -18,6 +18,7 @@ public final class ManagedResearchRuntime implements ResearchSession {
       counter = new JsonObject(),
       advice = new JsonObject();
   private ArmorStand avatar;
+  private final Object lifetimeOwner = new Object();
   private boolean knownAlive, closed, requested;
   private int ticks, retries;
   private final List<String> notes = new ArrayList<>();
@@ -42,6 +43,18 @@ public final class ManagedResearchRuntime implements ResearchSession {
 
   private void spawn() {
     Vec3 p = arena.researchAnchor().add(3, 0, -3);
+    // Block construction/player teleport can finish before the entity chunk's asynchronous
+    // load and visibility transition. Create the first object only after vanilla admits
+    // entities at this position. Never use this wait to hide loss of an existing object.
+    if (avatar == null && !knownAlive) {
+      var position = net.minecraft.core.BlockPos.containing(p);
+      if (!arena.world.areEntitiesLoaded(net.minecraft.world.level.ChunkPos.asLong(position))
+          || !arena.world.isPositionEntityTicking(position)) {
+        BootstrapDiagnostics.stage("projection-initial-chunk-wait", "entity-section-not-ready");
+        return;
+      }
+      BootstrapDiagnostics.stage("projection-initial-chunk-ready", "entity-section-ready-before-create");
+    }
     discardAvatar();
     if (avatar != null) {
       // A third-party no-op removal must not throw out of the arena and clear the probe.
@@ -60,6 +73,7 @@ public final class ManagedResearchRuntime implements ResearchSession {
     avatar.addTag("eff_research_" + arena.player.getUUID());
     avatar.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.WITHER_SKELETON_SKULL));
     avatar.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.LEATHER_CHESTPLATE));
+    ((EffProjection) avatar).claimLifetime(lifetimeOwner);
     boolean added = arena.world.addFreshEntity(avatar);
     // Spawn suppression is also a projection fault. Keep the failed object observable rather
     // than closing the research scope before the external guardian can receive its evidence.
@@ -169,11 +183,15 @@ public final class ManagedResearchRuntime implements ResearchSession {
         || !arena.ready()
         || ProjectionProbe.healthyPlayer(arena.player, arena.world, arena.researchAnchor()))
       return false;
+    BootstrapDiagnostics.state("manual-player-fault",
+        ProjectionProbe.inspect(arena.player, arena.world, arena.researchAnchor()));
     publishProjection();
     return true;
   }
 
   private void publishProjection() {
+    JsonObject avatarObservation = ProjectionProbe.inspect(avatar, arena.world, arena.researchAnchor());
+    BootstrapDiagnostics.projection(avatarObservation, instance, desired("avatar"), knownAlive);
     RuntimeLink.publishProjection(
         Jsons.obj(
             "enabled",
@@ -187,11 +205,12 @@ public final class ManagedResearchRuntime implements ResearchSession {
             "revision", revision(),
             "instance", instance,
             "player", ProjectionProbe.inspect(arena.player, arena.world, arena.researchAnchor()),
-            "avatar", ProjectionProbe.inspect(avatar, arena.world, arena.researchAnchor())));
+            "avatar", avatarObservation));
   }
 
   private void discardAvatar() {
     if (avatar == null) return;
+    ((EffProjection) avatar).releaseLifetime(lifetimeOwner);
     if (!avatar.isRemoved()) avatar.discard();
     // Keep the object if a removal hook was cancelled or replaced. Forgetting it would falsely
     // report successful erasure while the entity is still present in either world index.

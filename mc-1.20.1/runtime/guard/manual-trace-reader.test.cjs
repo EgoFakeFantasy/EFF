@@ -1,0 +1,27 @@
+'use strict';
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {readManualTrace}=require('./manual-trace-reader.cjs');
+const {assertManualObserverReady}=require('./manual-recording-preflight.cjs');
+function fixture(t){const dir=fs.mkdtempSync(path.join(os.tmpdir(),'eff-trace-reader-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));return dir;}
+test('rotation retains chronological rows and failure latch',t=>{const d=fixture(t);
+ fs.writeFileSync(path.join(d,'manual-scene-trace.previous.jsonl'),'{"elapsedMs":1}\n');
+ fs.writeFileSync(path.join(d,'manual-scene-trace.jsonl'),'{"elapsedMs":2,"structuralFailureLatched":true}\n');
+ const r=readManualTrace(d);assert.deepEqual(r.rows.map(x=>x.elapsedMs),[1,2]);assert.equal(r.rows[1].structuralFailureLatched,true);
+});
+test('only current incomplete final line can be ignored',t=>{const d=fixture(t),prev=path.join(d,'manual-scene-trace.previous.jsonl');
+ fs.writeFileSync(path.join(d,'manual-scene-trace.jsonl'),'{"elapsedMs":2}\n{"partial":');
+ assert.equal(readManualTrace(d).partial,true);fs.writeFileSync(prev,'{"elapsedMs":1}');
+ assert.throws(()=>readManualTrace(d),/PREVIOUS_TRACE_INCOMPLETE/);
+});
+test('preflight rejects stale data even with fresh file timestamp, wrong PID and first-loss record',t=>{const d=fixture(t),f=path.join(d,'manual-scene-trace.jsonl'),now=Date.now();
+ const good={pid:7,observedAtUnixMs:now,structuralFailureLatched:false,server:{failed:false},serverAgeMs:20};
+ const write=x=>fs.writeFileSync(f,JSON.stringify(x)+'\n');write(good);
+ assert.equal(assertManualObserverReady(d,7,now).pid,7);
+ write({...good,observedAtUnixMs:now-6000});assert.throws(()=>assertManualObserverReady(d,7,now),/EVIDENCE_UNAVAILABLE/);
+ write(good);assert.throws(()=>assertManualObserverReady(d,8,now),/EVIDENCE_UNAVAILABLE/);
+ fs.writeFileSync(path.join(d,'manual-first-structural-loss.json'),'{}');assert.throws(()=>assertManualObserverReady(d,7,now),/OBSERVER_FAILED/);
+});
+test('preflight rejects stopped observer even if last row was healthy',t=>{const d=fixture(t);
+ fs.writeFileSync(path.join(d,'manual-observer-error.json'),'{"error":"MANUAL_TRACE_BUDGET_EXCEEDED"}');
+ assert.throws(()=>assertManualObserverReady(d,7),/OBSERVER_FAILED/);
+});

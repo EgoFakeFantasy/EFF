@@ -7,19 +7,24 @@ public final class Jsons {
 
   public static JsonObject obj(Object... pairs) {
     JsonObject o = new JsonObject();
-    for (int i = 0; i < pairs.length; i += 2)
-      o.add((String) pairs[i], GSON.toJsonTree(pairs[i + 1]));
+    if ((pairs.length & 1) != 0) throw new IllegalArgumentException("JSON_PAIRS_REQUIRED");
+    for (int i = 0; i < pairs.length; i += 2) {
+      Object value = pairs[i + 1];
+      // Already-typed protocol trees must not pass through a mutable serializer registry again.
+      o.add((String) pairs[i], value instanceof JsonElement element
+          ? element.deepCopy() : GSON.toJsonTree(value));
+    }
     return o;
   }
 
   public static JsonObject o(JsonObject o, String k) {
-    return o != null && o.has(k) && o.get(k).isJsonObject()
-        ? o.getAsJsonObject(k)
-        : new JsonObject();
+    JsonElement value = o == null ? null : o.get(k);
+    return value instanceof JsonObject object ? object : new JsonObject();
   }
 
   public static JsonArray a(JsonObject o, String k) {
-    return o != null && o.has(k) && o.get(k).isJsonArray() ? o.getAsJsonArray(k) : new JsonArray();
+    JsonElement value = o == null ? null : o.get(k);
+    return value instanceof JsonArray array ? array : new JsonArray();
   }
 
   public static String s(JsonObject o, String k) {

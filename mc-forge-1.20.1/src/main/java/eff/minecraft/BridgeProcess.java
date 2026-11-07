@@ -18,12 +18,20 @@ import net.minecraftforge.fml.loading.FMLPaths;
 public final class BridgeProcess implements AutoCloseable {
   private final Process child;
   private final BufferedWriter writer;
+  private final RemoteStory remote;
   private final ConcurrentMap<Integer, CompletableFuture<JsonObject>> pending =
       new ConcurrentHashMap<>();
   private final AtomicInteger ids = new AtomicInteger();
   private volatile boolean closed;
+  // Dedicated to one blocking pipe reader: no shared-pool tasks can be starved by this read.
+  private final ForkJoinPool reader = new ForkJoinPool(1);
 
   public BridgeProcess(Path saveDir) throws Exception {
+    if (RemoteStory.enabled()) {
+      remote = new RemoteStory(saveDir); child = null; writer = null;
+      return;
+    }
+    remote = null;
     byte[] zip;
     try (InputStream in = BridgeProcess.class.getResourceAsStream("/eff-story-runtime.zip")) {
       if (in == null) throw new IOException("STORY_BUNDLE_MISSING");
@@ -78,12 +86,13 @@ public final class BridgeProcess implements AutoCloseable {
         .environment()
         .keySet()
         .removeIf(k -> k.toUpperCase(java.util.Locale.ROOT).startsWith("EFF_RUNTIME_"));
-    child = builder.start();
+    // One-element pipeline keeps process creation inside the JDK implementation.
+    child = ProcessBuilder.startPipeline(List.of(builder)).get(0);
     writer =
         new BufferedWriter(new OutputStreamWriter(child.getOutputStream(), StandardCharsets.UTF_8));
-    Thread reader =
-        new Thread(
+    CompletableFuture.supplyAsync(
             () -> {
+              BootstrapDiagnostics.note("bridge-reader-enter", Thread.currentThread().getClass().getName());
               try (BufferedReader input =
                   new BufferedReader(
                       new InputStreamReader(child.getInputStream(), StandardCharsets.UTF_8))) {
@@ -101,14 +110,42 @@ public final class BridgeProcess implements AutoCloseable {
                 fail(e);
               } finally {
                 fail(new IOException("BRIDGE_STOPPED"));
+                reader.shutdown();
               }
-            },
-            "EFF bridge reader");
-    reader.setDaemon(true);
-    reader.start();
+              return null;
+            }, reader);
   }
 
   public CompletableFuture<JsonObject> request(JsonObject req) {
+    if (remote != null) {
+      if (closed) return CompletableFuture.failedFuture(new IOException("BRIDGE_STOPPED"));
+      if (pending.size() >= 4) return CompletableFuture.failedFuture(new IOException("BRIDGE_BUSY"));
+      int id = ids.incrementAndGet();
+      CompletableFuture<JsonObject> result = new CompletableFuture<>();
+      pending.put(id, result);
+      BootstrapDiagnostics.stage("bridge-request-submit", "id=" + id + ";pending=" + pending.size());
+      CompletableFuture.supplyAsync(() -> {
+        BootstrapDiagnostics.stage("bridge-request-enter", "id=" + id);
+        try {
+          JsonObject reply = remote.call(req);
+          BootstrapDiagnostics.stage("bridge-request-reply", "id=" + id + ";sequence=" + Jsons.i(reply, "sequence"));
+          result.complete(reply);
+        }
+        catch (Exception e) {
+          BootstrapDiagnostics.stage("bridge-request-error", e.getClass().getName());
+          result.completeExceptionally(e);
+        }
+        finally { pending.remove(id); }
+        return null;
+      }, reader).whenComplete((ignored, error) -> {
+        if (error != null) {
+          pending.remove(id);
+          result.completeExceptionally(error);
+          BootstrapDiagnostics.failure("bridge-request-worker", error, reader);
+        }
+      });
+      return result.orTimeout(100, TimeUnit.SECONDS);
+    }
     if (closed || !child.isAlive())
       return CompletableFuture.failedFuture(new IOException("BRIDGE_STOPPED"));
     if (pending.size() >= 4) return CompletableFuture.failedFuture(new IOException("BRIDGE_BUSY"));
@@ -135,6 +172,14 @@ public final class BridgeProcess implements AutoCloseable {
 
   public void close() {
     if (closed) return;
+    if (remote != null) {
+      closed = true;
+      CompletableFuture.supplyAsync(() -> {
+        try { remote.call(Jsons.obj("op", "close")); } catch (Exception ignored) {}
+        return null;
+      }, reader);
+      reader.shutdown(); fail(new IOException("SESSION_CLOSED")); return;
+    }
     try {
       synchronized (writer) {
         writer.write(
@@ -146,6 +191,7 @@ public final class BridgeProcess implements AutoCloseable {
     } catch (IOException ignored) {
     }
     closed = true;
+    reader.shutdown();
     CompletableFuture.runAsync(
         () -> {
           try {

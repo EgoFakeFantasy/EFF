@@ -7,3 +7,81 @@ tasks.register('distributionTest', Exec) {
  commandLine 'node', file('tests/distribution.test.cjs').absolutePath, tasks.named('jar').get().archiveFile.get().asFile.absolutePath
 }
 check { dependsOn 'distributionTest' }
+
+sourceSets {
+ jsonBoundary {
+  java.srcDirs = ['tests', '../mc-1.20.1/src/main/java']
+  java.include 'JsonBoundaryTest.java', 'BootstrapDiagnosticsTest.java', 'ManualInputTraceTest.java', 'ManualObservationClockTest.java', 'eff/minecraft/Jsons.java', 'eff/minecraft/BootstrapDiagnostics.java', 'eff/minecraft/client/ManualInputTrace.java', 'eff/minecraft/client/ManualObservationClock.java'
+  compileClasspath = sourceSets.main.compileClasspath
+  runtimeClasspath = output + compileClasspath
+ }
+}
+tasks.register('jsonBoundaryTest', JavaExec) {
+ dependsOn 'jsonBoundaryClasses'
+ classpath = sourceSets.jsonBoundary.runtimeClasspath
+ mainClass = 'eff.minecraft.JsonBoundaryTest'
+}
+tasks.named('distributionTest') { dependsOn 'jsonBoundaryTest' }
+
+tasks.register('bootstrapDiagnosticsTest', JavaExec) {
+ dependsOn 'jsonBoundaryClasses'
+ classpath = sourceSets.jsonBoundary.runtimeClasspath
+ mainClass = 'eff.minecraft.BootstrapDiagnosticsTest'
+ doFirst {
+  def root = layout.buildDirectory.dir('bootstrap-diagnostics-tests').get().asFile.toPath()
+  java.nio.file.Files.createDirectories(root)
+  workingDir java.nio.file.Files.createTempDirectory(root, 'run-').toFile()
+ }
+}
+tasks.named('distributionTest') { dependsOn 'bootstrapDiagnosticsTest' }
+
+tasks.register('manualInputTraceTest', JavaExec) {
+ dependsOn 'jsonBoundaryClasses'
+ classpath = sourceSets.jsonBoundary.runtimeClasspath
+ mainClass = 'eff.minecraft.client.ManualInputTraceTest'
+}
+tasks.named('distributionTest') { dependsOn 'manualInputTraceTest' }
+
+tasks.register('manualObservationClockTest', JavaExec) {
+ dependsOn 'jsonBoundaryClasses'
+ classpath = sourceSets.jsonBoundary.runtimeClasspath
+ mainClass = 'eff.minecraft.client.ManualObservationClockTest'
+}
+tasks.named('distributionTest') { dependsOn 'manualObservationClockTest' }
+
+// Test the optional observer against offline fault-injection doubles only.
+// No test double is included in main, sourcesJar or the installable mod.
+sourceSets {
+ manualKeyboardObserverTest {
+  java.srcDirs = ['tests/keyboard-observer']
+  compileClasspath = sourceSets.main.compileClasspath
+  runtimeClasspath = output + compileClasspath
+ }
+}
+tasks.named('compileManualKeyboardObserverTestJava') {
+ source file('../mc-1.20.1/src/main/java/eff/minecraft/client/ManualKeyboardObserver.java')
+ source file('../mc-1.20.1/src/main/java/eff/minecraft/Jsons.java')
+}
+tasks.register('manualKeyboardObserverTest', JavaExec) {
+ dependsOn 'manualKeyboardObserverTestClasses'
+ classpath = sourceSets.manualKeyboardObserverTest.runtimeClasspath
+ mainClass = 'eff.minecraft.client.ManualKeyboardObserverTest'
+ jvmArgs '-Deff.manualCombat=offline-observer-test', '-Xverify:all'
+ maxHeapSize = '64m'
+}
+tasks.register('manualKeyboardObserverDisabledTest', JavaExec) {
+ dependsOn 'manualKeyboardObserverTestClasses'
+ classpath = sourceSets.manualKeyboardObserverTest.runtimeClasspath
+ mainClass = 'eff.minecraft.client.ManualKeyboardObserverTest'
+ jvmArgs '-Xverify:all'
+ args 'disabled'
+ maxHeapSize = '64m'
+}
+tasks.named('distributionTest') {
+ dependsOn 'manualKeyboardObserverTest', 'manualKeyboardObserverDisabledTest'
+}
+
+tasks.register('runtimeKitTest', Exec) {
+ commandLine 'node', '--test', 'tests/runtime-kit.test.cjs'
+}
+check { dependsOn 'runtimeKitTest' }

@@ -15,7 +15,7 @@ final class AttackEntryProbe implements AutoCloseable {
   private final String profile, targetUUID, runId;
   private final Object originalTarget;
   private final long started = System.nanoTime();
-  private final Thread sampler;
+  private final java.util.concurrent.ForkJoinPool sampler;
   private volatile boolean running = true;
   private volatile boolean directCall;
   private int samples, entryHits;
@@ -40,18 +40,19 @@ final class AttackEntryProbe implements AutoCloseable {
       running = false;
       return;
     }
-    sampler = new Thread(this::sample, "EFF lab read-only entry observer");
-    sampler.setDaemon(true);
-    sampler.start();
+    sampler = new java.util.concurrent.ForkJoinPool(1);
+    java.util.concurrent.CompletableFuture.supplyAsync(() -> { sample(); return null; }, sampler);
   }
 
   void beginDirectCall(Object target) {
     if (Thread.currentThread() != serverThread || target != originalTarget)
       throw new IllegalStateException("LAB_DIRECT_CALL_CONTEXT_MISMATCH");
+    AttackTraceBridge.beginDirectAttack(runId, originalTarget);
     directCall = true;
   }
 
   void endDirectCall() {
+    AttackTraceBridge.endDirectAttack(runId, originalTarget);
     directCall = false;
   }
 
@@ -82,6 +83,7 @@ final class AttackEntryProbe implements AutoCloseable {
       }
     } finally {
       running = false;
+      sampler.shutdown();
     }
   }
 
@@ -131,6 +133,6 @@ final class AttackEntryProbe implements AutoCloseable {
   @Override
   public void close() {
     running = false;
-    if (sampler != null) sampler.interrupt();
+    if (sampler != null) sampler.shutdownNow();
   }
 }

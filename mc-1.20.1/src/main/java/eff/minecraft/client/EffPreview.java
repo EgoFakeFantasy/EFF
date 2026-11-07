@@ -68,7 +68,8 @@ public final class EffPreview {
         phase = 2;
       } else if (phase == 2 && Jsons.b(Jsons.o(EffClient.state, "native"), "ready")) {
         EffClient.manualPause =
-            !Boolean.getBoolean("eff.entityGuardSelftest") && !Boolean.getBoolean("eff.pig2Lab");
+            !Boolean.getBoolean("eff.entityGuardSelftest") && !Boolean.getBoolean("eff.pig2Lab")
+                && System.getProperty("eff.manualCombat", "").isEmpty();
         EffClient.send(Jsons.obj("op", "pause", "paused", EffClient.manualPause));
         // Low-memory play starts without loading a model; the player can enable one explicitly.
         // A model-required QA run keeps its existing requirement unless fallback was requested.

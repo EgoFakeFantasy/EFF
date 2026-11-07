@@ -6,7 +6,7 @@ import org.objectweb.asm.tree.ClassNode;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 
-/** Existing EFF mixins remain enabled. Foreign observers require two explicit lab flags. */
+/** Foreign observers require two explicit lab flags. Manual mode observes only our gate and Entity removal. */
 public final class LabTraceMixinPlugin implements IMixinConfigPlugin {
   @Override
   public void onLoad(String mixinPackage) {}
@@ -18,6 +18,11 @@ public final class LabTraceMixinPlugin implements IMixinConfigPlugin {
 
   @Override
   public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
+    if (mixinClassName.equals("eff.minecraft.mixin.LabEntityRemovalTraceMixin"))
+      return "pig2".equals(System.getProperty("eff.manualCombat"))
+          || "foreverlove".equals(System.getProperty("eff.manualCombat"))
+          || Boolean.getBoolean("eff.labAttackTrace")
+              && (Boolean.getBoolean("eff.pig2Lab") || Boolean.getBoolean("eff.foreverLoveLab"));
     if (mixinClassName.equals("eff.minecraft.mixin.Pig2AttackTraceMixin")
         || mixinClassName.equals("eff.minecraft.mixin.Pig2RemovalTraceMixin"))
       return Boolean.getBoolean("eff.labAttackTrace") && Boolean.getBoolean("eff.pig2Lab");

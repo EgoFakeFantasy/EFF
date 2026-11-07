@@ -1,0 +1,32 @@
+'use strict';
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os'),{createHash}=require('node:crypto');
+const {validateLibraryOverrides,sealProduction}=require('./forge-production.cjs');
+const {baselineIdentity}=require('./guard/baseline-identity.cjs');
+const sha=p=>createHash('sha256').update(fs.readFileSync(p)).digest('hex');
+test('explicit runtime library override preserves original and binds both input hashes',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'eff-library-proof-'));
+ const put=(rel,value)=>{const f=path.join(root,rel);fs.mkdirSync(path.dirname(f),{recursive:true});fs.writeFileSync(f,value,{flag:'wx'});return f;};
+ const original=put('libraries/g/loader.jar','original'),patched=put('patch/loader.jar','defensive-copy');
+ const mod=put('eff.jar','eff'),story=put('story.zip','story'),java=put('jdk/bin/java.exe','java');
+ fs.mkdirSync(path.join(root,'jdk/lib'));fs.mkdirSync(path.join(root,'jdk/conf'));
+ const guard=put('guard.exe','guard');put('WindowProbe.exe','probe');const worker=put('worker.jar','worker');
+ const entry={relativePath:'g/loader.jar',source:patched,sha256:sha(patched),originalSHA256:sha(original)};
+ const host={loader:'forge',distribution:'production',env:{},libraryDirectory:path.join(root,'libraries'),modJar:mod,storyBundle:story,libraryOverrides:[entry],command:java};
+ const args=['-DlibraryDirectory='+host.libraryDirectory,'-p',original,'-cp',original,'--launchTarget','forgeclient'];
+ assert.equal(validateLibraryOverrides(host).size,1);
+ for(const change of [{relativePath:'../../escape.jar'},{relativePath:path.resolve('escape.jar')},{sha256:'0'.repeat(64)},{originalSHA256:'0'.repeat(64)}])
+  assert.throws(()=>validateLibraryOverrides({...host,libraryOverrides:[{...entry,...change}]}));
+ assert.throws(()=>validateLibraryOverrides({...host,libraryOverrides:[entry,entry]}),/DUPLICATE/);
+ const config=put('source.json',JSON.stringify({java,workerJar:worker,host:{...host,args}}));
+ const identity=baselineIdentity(config,guard);assert.equal(identity,baselineIdentity(config,guard));
+ fs.writeFileSync(patched,'changed');assert.throws(()=>baselineIdentity(config,guard),/HASH_MISMATCH/);fs.writeFileSync(patched,'defensive-copy');
+ const payload=path.join(root,'payload');fs.mkdirSync(payload);const pinned=[];
+ sealProduction(host,args,{payload,pin:p=>pinned.push(p),walk:()=>[original]});
+ assert.equal(fs.readFileSync(original,'utf8'),'original');assert.equal(pinned.length,1);
+ assert.equal(fs.readFileSync(pinned[0],'utf8'),'defensive-copy');
+ assert.equal(args[args.indexOf('-cp')+1],path.join(payload,'libraries/g/loader.jar'));
+ assert.equal(args[args.indexOf('-p')+1],path.join(payload,'libraries/g/loader.jar'));
+ assert.deepEqual(host.libraryOverrideReceipt,[{relativePath:path.join('g','loader.jar'),originalSHA256:entry.originalSHA256,sha256:entry.sha256}]);
+ assert.equal(host.libraryOverrides,undefined);
+ console.log('LIBRARY_OVERRIDE_PROOF_RETAINED '+root);
+});

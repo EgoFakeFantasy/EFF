@@ -1,6 +1,11 @@
 .gradle/
 .gradle-user-home/
 build/
+# These are build-tool Java sources, not generated Gradle output.
+!tools/owned-origin/agent/build/
+tools/owned-origin/agent/build/*
+!tools/owned-origin/agent/build/BuildOwnedAgent.java
+!tools/owned-origin/agent/build/StaticWritePatch.java
 /run/
 /run-*/
 *.iml
@@ -8,3 +13,6 @@ private-launch.json
 sealed-runtime.json
 ledger*.bin
 ledger-key.dpapi
+
+# Generated offline fixture runs remain local.
+tools/**/run-*/

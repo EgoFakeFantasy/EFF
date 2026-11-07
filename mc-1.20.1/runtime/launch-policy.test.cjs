@@ -7,6 +7,15 @@ const {relocateGameDirectory,assertNoHiddenGameDirectory} = require("./launch-po
 const required = ["-XX:+DisableAttachMechanism", "-XX:+ExitOnOutOfMemoryError"];
 const windows = {SystemRoot:"C:\\Windows",Path:"C:\\poison;C:\\Windows\\System32",TEMP:"C:\\shared",TMP:"C:\\shared",USERPROFILE:"C:\\Users\\Traveler",LANG:"en_AU.UTF-8",NUMBER_OF_PROCESSORS:"8"};
 
+test('software renderer selection cannot import arbitrary inherited drivers or paths',()=>{
+ const select=require('./launch-policy.cjs').softwareRendererEnvironment;
+ assert.deepEqual(select(),{});
+ assert.deepEqual(select('llvmpipe'),{GALLIUM_DRIVER:'llvmpipe',LP_NUM_THREADS:'2'});
+ for(const value of [null,true,{},'d3d12','llvmpipe\nPATH=C:\\untrusted','C:\\untrusted.dll'])assert.throws(()=>select(value),/UNAPPROVED_SOFTWARE_RENDERER/);
+ const inherited=cleanEnv({...windows,GALLIUM_DRIVER:'d3d12',LP_NUM_THREADS:'999',MESA_LOADER_DRIVER_OVERRIDE:'untrusted',LIBGL_DRIVERS_PATH:'C:\\untrusted'});
+ for(const key of ['GALLIUM_DRIVER','LP_NUM_THREADS','MESA_LOADER_DRIVER_OVERRIDE','LIBGL_DRIVERS_PATH'])assert.equal(Object.hasOwn(inherited,key),false);
+});
+
 test('Forge explicit gameDir and Fabric default gameDir resolve to the private sealed tree',()=>{
  const target='C:\\sealed deployment\\mc-host',forge=['-cp','classes','BootstrapLauncher','--gameDir','C:\\old-game','--assetsDir','C:\\assets'];
  const before=[...forge],result=relocateGameDirectory(forge,target);

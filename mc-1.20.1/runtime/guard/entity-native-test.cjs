@@ -6,6 +6,7 @@ const {randomUUID}=require('node:crypto');
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 const [source,destination,binary,profile='dying']=process.argv.slice(2);
 if(!['dying','zero-health','nan','removed','player'].includes(profile))throw Error('UNKNOWN_GUARD_CASE');
+if(['zero-health','nan'].includes(profile))throw Error('API_PREVENTION_PROFILE_USE_LIFETIME_NATIVE_TEST');
 const baselineRunId=randomUUID(),startedAtUnixMs=Date.now(),lowIntegrityHost=process.env.EFF_TEST_LOW_INTEGRITY==='true';
 const runtimeIdentitySHA256=baselineIdentity(source,binary);
 const cfg=JSON.parse(fs.readFileSync(source,'utf8'));cfg.host.args=cfg.host.args.filter(x=>!x.startsWith('-Deff.entityGuardCase=')&&!x.startsWith('-Deff.guardedSelftest=')&&!x.startsWith('-Deff.pig2Lab='));
@@ -17,7 +18,7 @@ const launcher=spawn('cmd.exe',['/d','/c',sealed.launcher],{stdio:['ignore','pip
 const events=()=>{const p=path.join(authority,'guard-events.jsonl');return fs.existsSync(p)?fs.readFileSync(p,'utf8').trim().split('\n').filter(Boolean).map(x=>JSON.parse(x)):[];};
 const proof=n=>{const p=path.join(game,'entity-guard-proof',n+'.json');return fs.existsSync(p)&&JSON.parse(fs.readFileSync(p,'utf8'));};
 function alive(pid){try{process.kill(pid,0);return true;}catch{return false;}}
-async function until(fn,limit=250000){const end=Date.now()+limit;while(Date.now()<end){for(const n of ['1-failure','2-failure']){const f=proof(n);if(f)throw Error(f.error);}const r=fn();if(r)return r;if(launcher.exitCode!==null||launcher.signalCode!==null)throw Error('GUARD_EXIT_'+stderr);await wait(200);}throw Error('NATIVE_ENTITY_GUARD_TIMEOUT');}
+async function until(fn,limit=250000){const end=Date.now()+limit;while(Date.now()<end){for(const n of ['1-failure','2-failure','1-bootstrap-failure','2-bootstrap-failure']){const f=proof(n);if(f)throw Error(f.error+':'+(f.message||''));}const r=fn();if(r)return r;if(launcher.exitCode!==null||launcher.signalCode!==null)throw Error('GUARD_EXIT_'+stderr);await wait(200);}throw Error('NATIVE_ENTITY_GUARD_TIMEOUT');}
 (async()=>{const out={ok:false,profile,modelInferenceVerified:false,baselineRunId,startedAtUnixMs,lowIntegrityHost,runtimeIdentitySHA256,sourceSHA256:require('node:crypto').createHash('sha256').update(fs.readFileSync(source)).digest('hex')};try{
  console.log('Entity guard native case',profile);
  const injected=await until(()=>proof('1-fault-injected'));out.injected=injected;
@@ -32,9 +33,16 @@ async function until(fn,limit=250000){const end=Date.now()+limit;while(Date.now(
  assert.equal(ready.research.runtime.defense.incidents,1);assert.equal(ready.research.runtime.defense.lastIncident.subject,profile==='player'?'player':'avatar');
  if(profile==='player')assert.equal(ready.research.fields['authority.recovery.active'],false);
  assert.equal(completed.research.fields['authority.recovery.active'],false);assert.equal(completed.research.outcome,'won');assert.equal(completed.native.facts.exitOpen,true);
- for(const id of [initial.mcPid,a.pid,initial.research.runtime.policy.pid])assert.equal(alive(id),false);
+ // Windows can reuse a retired JVM PID for a different process before this check. The
+ // Guardian's generation-bound kernel Job accounting proves the whole old tree drained;
+ // kill(pid,0) only proves that *some* process currently owns that integer.
+ const timeline=events(),firstController=timeline.find(e=>e.type==='controller-start'&&e.detail.generation===1);
+ assert.ok(firstController,'FIRST_CONTROLLER_IDENTITY_REQUIRED');
+ const drainedIndex=timeline.findIndex(e=>e.type==='job-drained'&&e.detail.generation===1&&e.detail.rootPid===firstController.detail.pid&&e.detail.active===0);
+ const successorIndex=timeline.findIndex(e=>e.type==='controller-start'&&e.detail.generation===2);
+ assert.ok(drainedIndex>=0&&successorIndex>drainedIndex,'OLD_WHOLE_JOB_MUST_DRAIN_BEFORE_SUCCESSOR');
+ out.oldWholeJobEvidence=timeline[drainedIndex];
  await wait(5000);assert.equal(events().filter(e=>e.type==='controller-start').length,2,'legal erase/victory must not launch a third controller');
- assert.ok(events().some(e=>e.type==='job-drained'&&e.detail.active===0));
  out.realDeathTriggeredFreshEngine=true;out.oldWholeJobDrained=true;out.legalErasurePreserved=true;out.events=events();assert.equal(baselineIdentity(source,binary),runtimeIdentitySHA256,'BASELINE_INPUT_CHANGED_DURING_RUN');out.ok=true;
  }catch(e){out.error=e.stack;process.exitCode=1;}
  finally{const outer=events().find(e=>e.type==='guard-ready')?.detail.pid;if(outer&&alive(outer))process.kill(outer);if(launcher.exitCode===null&&launcher.signalCode===null)await new Promise(r=>launcher.once('exit',r));out.finishedAtUnixMs=Date.now();fs.writeFileSync(path.join(destination,'entity-native-result.json'),JSON.stringify(out,null,2));console.log(JSON.stringify({ok:out.ok,error:out.error}));}

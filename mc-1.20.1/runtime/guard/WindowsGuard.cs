@@ -86,9 +86,9 @@ public sealed class Ledger : IDisposable {
  public static void Provision(string directory){Directory.CreateDirectory(directory);string k=Path.Combine(directory,"ledger-key.dpapi"),p=Path.Combine(directory,"ledger.bin");if(File.Exists(k)||File.Exists(p))throw new IOException("LEDGER_ALREADY_PROVISIONED");byte[] raw=new byte[32];using(var r=RandomNumberGenerator.Create())r.GetBytes(raw);File.WriteAllBytes(k,ProtectedData.Protect(raw,null,DataProtectionScope.CurrentUser));using(var f=new FileStream(p,FileMode.CreateNew,FileAccess.Write,FileShare.None)){f.Flush(true);}
  using(var f=new FileStream(Path.Combine(directory,"ledger-head.bin"),FileMode.CreateNew,FileAccess.Write,FileShare.None)){byte[] body=Encoding.UTF8.GetBytes("0:GENESIS");byte[] mac;using(var h=new HMACSHA256(raw))mac=h.ComputeHash(body);var w=new BinaryWriter(f);w.Write(body.Length);w.Write(body);w.Write(mac);w.Flush();f.Flush(true);}Array.Clear(raw,0,raw.Length);}
  static byte[] ReadAll(FileStream f){f.Position=0;var b=new byte[checked((int)f.Length)];int off=0;while(off<b.Length){int n=f.Read(b,off,b.Length-off);if(n==0)throw new IOException("TRUNCATED_FILE");off+=n;}return b;}
- public Ledger(string directory,JavaScriptSerializer serializer,string expectedRuleset){json=serializer;ruleset=expectedRuleset;keyLock=new FileStream(Path.Combine(directory,"ledger-key.dpapi"),FileMode.Open,FileAccess.Read,FileShare.Read);key=ProtectedData.Unprotect(ReadAll(keyLock),null,DataProtectionScope.CurrentUser);
-  try{file=new FileStream(Path.Combine(directory,"ledger.bin"),FileMode.Open,FileAccess.ReadWrite,FileShare.Read);var reader=new BinaryReader(file,Encoding.UTF8,true);while(file.Position<file.Length){if(file.Length-file.Position<4)throw new IOException("LEDGER_TRUNCATED");int length=reader.ReadInt32();if(length<2||length>131072||file.Length-file.Position<length+32)throw new IOException("LEDGER_TRUNCATED");byte[] data=reader.ReadBytes(length),mac=reader.ReadBytes(32);if(!Equal(mac,Mac(data)))throw new IOException("LEDGER_AUTHENTICATION_FAILED");var entry=Map(json.DeserializeObject(Encoding.UTF8.GetString(data)));if(Convert.ToString(entry["previous"])!=previous)throw new IOException("LEDGER_CHAIN_BROKEN");var body=Map(entry["body"]);Validate(body);Current=body;previous=Hex(mac);}
- anchor=new FileStream(Path.Combine(directory,"ledger-head.bin"),FileMode.Open,FileAccess.ReadWrite,FileShare.Read);byte[] head=ReadAll(anchor);if(head.Length<36)throw new IOException("LEDGER_HEAD_CORRUPT");int headLength=BitConverter.ToInt32(head,0);if(headLength<1||headLength>128||head.Length!=headLength+36)throw new IOException("LEDGER_HEAD_CORRUPT");byte[] bodyHead=new byte[headLength],tag=new byte[32];Array.Copy(head,4,bodyHead,0,headLength);Array.Copy(head,4+headLength,tag,0,32);if(!Equal(tag,Mac(bodyHead)))throw new IOException("LEDGER_HEAD_AUTHENTICATION_FAILED");string[] parts=Encoding.UTF8.GetString(bodyHead).Split(':');long sequence=long.Parse(parts[0]);long current=Current==null?0:Convert.ToInt64(Current["commit"]);if(sequence>current||sequence==current&&parts[1]!=previous)throw new IOException("LEDGER_ROLLBACK_DETECTED");if(sequence<current)WriteHead();}
+ public Ledger(string directory,JavaScriptSerializer serializer,string expectedRuleset,bool readOnly=false){json=serializer;ruleset=expectedRuleset;keyLock=new FileStream(Path.Combine(directory,"ledger-key.dpapi"),FileMode.Open,FileAccess.Read,FileShare.Read);key=ProtectedData.Unprotect(ReadAll(keyLock),null,DataProtectionScope.CurrentUser);
+  try{file=new FileStream(Path.Combine(directory,"ledger.bin"),FileMode.Open,readOnly?FileAccess.Read:FileAccess.ReadWrite,FileShare.Read);var reader=new BinaryReader(file,Encoding.UTF8,true);while(file.Position<file.Length){if(file.Length-file.Position<4)throw new IOException("LEDGER_TRUNCATED");int length=reader.ReadInt32();if(length<2||length>131072||file.Length-file.Position<length+32)throw new IOException("LEDGER_TRUNCATED");byte[] data=reader.ReadBytes(length),mac=reader.ReadBytes(32);if(!Equal(mac,Mac(data)))throw new IOException("LEDGER_AUTHENTICATION_FAILED");var entry=Map(json.DeserializeObject(Encoding.UTF8.GetString(data)));if(Convert.ToString(entry["previous"])!=previous)throw new IOException("LEDGER_CHAIN_BROKEN");var body=Map(entry["body"]);Validate(body);Current=body;previous=Hex(mac);}
+  anchor=new FileStream(Path.Combine(directory,"ledger-head.bin"),FileMode.Open,readOnly?FileAccess.Read:FileAccess.ReadWrite,FileShare.Read);byte[] head=ReadAll(anchor);if(head.Length<36)throw new IOException("LEDGER_HEAD_CORRUPT");int headLength=BitConverter.ToInt32(head,0);if(headLength<1||headLength>128||head.Length!=headLength+36)throw new IOException("LEDGER_HEAD_CORRUPT");byte[] bodyHead=new byte[headLength],tag=new byte[32];Array.Copy(head,4,bodyHead,0,headLength);Array.Copy(head,4+headLength,tag,0,32);if(!Equal(tag,Mac(bodyHead)))throw new IOException("LEDGER_HEAD_AUTHENTICATION_FAILED");string[] parts=Encoding.UTF8.GetString(bodyHead).Split(':');long sequence=long.Parse(parts[0]);long current=Current==null?0:Convert.ToInt64(Current["commit"]);if(sequence>current||sequence==current&&parts[1]!=previous)throw new IOException("LEDGER_ROLLBACK_DETECTED");if(sequence<current){if(readOnly)throw new IOException("LEDGER_HEAD_BEHIND");WriteHead();}}
   catch{keyLock.Dispose();if(file!=null)file.Dispose();if(anchor!=null)anchor.Dispose();throw;}}
  static bool Equal(byte[] a,byte[] b){int d=a.Length^b.Length;for(int i=0;i<Math.Min(a.Length,b.Length);i++)d|=a[i]^b[i];return d==0;}
  byte[] Mac(byte[] b){using(var h=new HMACSHA256(key))return h.ComputeHash(b);}
@@ -274,27 +274,30 @@ public static class Program {
 #endif
    Ledger.Provision(args[1]);Console.WriteLine("LEDGER_PROVISIONED");return 0;
   }
+  bool verifyOnly=args.Length==3&&args[0]=="--verify-only";
+  if(verifyOnly)args=new[]{args[1],args[2]};
   if(args.Length!=2)throw new IOException("EXPECTED_MANIFEST_AND_PIN");NoReparse(args[0]);
   var manifestLock=new FileStream(args[0],FileMode.Open,FileAccess.Read,FileShare.Read);locks.Add(manifestLock);if(!String.Equals(Sha(manifestLock),args[1],StringComparison.OrdinalIgnoreCase))throw new IOException("SEAL_MISMATCH");if(manifestLock.Length>2097152)throw new IOException("SEAL_BUDGET");manifestLock.Position=0;string text;using(var r=new StreamReader(manifestLock,Encoding.UTF8,true,4096,true))text=r.ReadToEnd();var seal=M(Json.DeserializeObject(text));if(Convert.ToInt32(seal["schema"])!=1)throw new IOException("SEAL_SCHEMA");
   foreach(object item in (object[])seal["files"]){var f=M(item);string path=(string)f["path"];NoReparse(path);var held=new FileStream(LongPath(path),FileMode.Open,FileAccess.Read,FileShare.Read);locks.Add(held);if(held.Length!=Convert.ToInt64(f["size"]))throw new IOException("CODE_SIZE_MISMATCH");if(!String.Equals(Sha(held),(string)f["sha256"],StringComparison.OrdinalIgnoreCase))throw new IOException("CODE_HASH_MISMATCH");}
   CheckTrees(seal["trees"]);var config=M(seal["config"]);directory=(string)config["directory"];NoReparse(directory);
 #if EFF_LOW_INTEGRITY_EXPERIMENTAL
-  IntegrityBoundary.SealAuthority(directory);
+   if(!verifyOnly)IntegrityBoundary.SealAuthority(directory);
   config["integrityBoundary"]=true;
 #endif
   Console.CancelKeyPress+=(s,e)=>{e.Cancel=true;stopping=true;};
   string ruleset=null;foreach(object item in (object[])seal["files"]){var f=M(item);if(String.Equals(Path.GetFullPath((string)f["path"]),Path.GetFullPath((string)config["workerJar"]),StringComparison.OrdinalIgnoreCase))ruleset=(string)f["sha256"];}if(ruleset==null)throw new IOException("WORKER_RULESET_NOT_SEALED");
-  using(var ledger=new Ledger(directory,Json,ruleset)){
+  using(var ledger=new Ledger(directory,Json,ruleset,verifyOnly)){
+   if(verifyOnly){Console.WriteLine("SEALED_LEDGER_VERIFIED_NO_CHILD_STARTED");return 0;}
    Event(directory,"guard-ready",new {pid=Process.GetCurrentProcess().Id,files=locks.Count});
    var failures=new Queue<long>();var clock=Stopwatch.StartNew();int generation=0,restarts=0;
    while(!stopping){CheckTrees(seal["trees"]);generation++;using(var job=new NativeJob()){
     var start=new ProcessStartInfo((string)seal["node"],"--max-old-space-size=96 --disable-proto=throw --no-addons "+Quote((string)seal["child"]));start.UseShellExecute=false;start.CreateNoWindow=true;start.RedirectStandardInput=true;start.RedirectStandardOutput=true;start.RedirectStandardError=true;start.StandardOutputEncoding=Encoding.UTF8;start.StandardErrorEncoding=Encoding.UTF8;start.WorkingDirectory=(string)seal["payload"];
     foreach(string k in new List<string>(Keys(start.EnvironmentVariables)))if(k.StartsWith("NODE_",StringComparison.OrdinalIgnoreCase)||k.StartsWith("EFF_",StringComparison.OrdinalIgnoreCase)||k.Equals("JAVA_TOOL_OPTIONS",StringComparison.OrdinalIgnoreCase)||k.Equals("JDK_JAVA_OPTIONS",StringComparison.OrdinalIgnoreCase)||k.Equals("_JAVA_OPTIONS",StringComparison.OrdinalIgnoreCase))start.EnvironmentVariables.Remove(k);
     using(var child=Process.Start(start)){
-     bool graceful=false;try{try{job.Add(child);}catch{child.Kill();child.WaitForExit();throw;}Event(directory,"controller-start",new {pid=child.Id,generation=generation});
+     bool graceful=false;var errors=new StringBuilder();Task errorReader=null;try{try{job.Add(child);}catch{child.Kill();child.WaitForExit();throw;}Event(directory,"controller-start",new {pid=child.Id,generation=generation});
       // The child cannot spawn any JVM until it receives this message after job assignment.
       Send(child,Json.Serialize(new {op="boot",generation=generation,config=config}));
-      var errors=new StringBuilder();Task.Factory.StartNew(()=>{try{var buffer=new char[1024];int n;while((n=child.StandardError.Read(buffer,0,buffer.Length))>0)lock(errors){if(errors.Length<32768)errors.Append(buffer,0,Math.Min(n,32768-errors.Length));}}catch{}},TaskCreationOptions.LongRunning);
+      errorReader=Task.Factory.StartNew(()=>{try{var buffer=new char[1024];int n;while((n=child.StandardError.Read(buffer,0,buffer.Length))>0)lock(errors){if(errors.Length<32768)errors.Append(buffer,0,Math.Min(n,32768-errors.Length));}}catch{}},TaskCreationOptions.LongRunning);
       Task<string> line=Task.Factory.StartNew(()=>ReadLine(child.StandardOutput));long last=clock.ElapsedMilliseconds,nextTree=last;bool ready=false;
       while(!stopping&&!child.HasExited){
        if(line.IsCompleted){string raw=line.Result;if(raw==null)break;if(raw.Length>262144)throw new IOException("GUARD_MESSAGE_BUDGET");var r=M(Json.DeserializeObject(raw));string op=Convert.ToString(r["op"]);object result=null;string error=null;
@@ -314,7 +317,13 @@ public static class Program {
        if(clock.ElapsedMilliseconds>=nextTree){CheckTrees(seal["trees"]);nextTree=clock.ElapsedMilliseconds+1000;}
        Thread.Sleep(5);
       }
-     }catch(IOException e){if(e.Message!="CONTROLLER_PROGRESS_TIMEOUT")throw;Event(directory,"controller-stalled",new {pid=child.Id});}finally{job.Drain();Event(directory,"job-drained",new {rootPid=child.Id,generation=generation,active=job.Active(),peakCommittedBytes=job.PeakMemoryBytes()});}
+     }catch(IOException e){if(e.Message!="CONTROLLER_PROGRESS_TIMEOUT")throw;Event(directory,"controller-stalled",new {pid=child.Id});}finally{
+      bool exitedBeforeDrain=child.HasExited;int? exitCode=exitedBeforeDrain?(int?)child.ExitCode:null;
+      job.Drain();Event(directory,"job-drained",new {rootPid=child.Id,generation=generation,active=job.Active(),peakCommittedBytes=job.PeakMemoryBytes()});
+      if(errorReader!=null)errorReader.Wait(500);
+      var codes=new List<string>();lock(errors){foreach(string value in errors.ToString().Split('\n')){string code=value.Trim();if(System.Text.RegularExpressions.Regex.IsMatch(code,"^[A-Z][A-Z0-9_]{0,95}$")&&!codes.Contains(code)){codes.Add(code);if(codes.Count==8)break;}}}
+      Event(directory,"controller-exit",new {pid=child.Id,generation=generation,exitedBeforeDrain=exitedBeforeDrain,exitCode=exitCode,reasonCodes=codes.ToArray()});
+     }
      if(stopping||graceful){Event(directory,"guard-stop",new {graceful=graceful});break;}
      // Do not revive persistent attacks indefinitely. Time decisions use Stopwatch, not wall time.
      long now=clock.ElapsedMilliseconds;while(failures.Count>0&&now-failures.Peek()>60000)failures.Dequeue();if(failures.Count>=3||++restarts>6)throw new IOException("CONTROLLER_RESTART_BUDGET");failures.Enqueue(now);Event(directory,"controller-recovery",new {generation=generation});Thread.Sleep(250*failures.Count);

@@ -33,6 +33,9 @@ public final class EffArena {
   private final boolean previousFrozen, previousGravity;
   private final Path ticket;
   private final List<Entity> actors = new ArrayList<>();
+  private final Object actorLifetimeOwner = new Object();
+  private final Object playerLifetimeOwner = new Object();
+  private boolean playerLifetimeClaimed;
   private final Map<String, ArmorStand> npcActors = new HashMap<>();
   private ArmorStand shardActor;
   private final int previousFood;
@@ -47,6 +50,7 @@ public final class EffArena {
   private final List<Placement> historyAnchor = new ArrayList<>();
   private int generation = 0, origin = 0, cinemaSeen = -1, ticks = 0, cols, rows;
   private boolean entered = false,
+      appliedState = false,
       closed = false,
       exitOpen = false,
       attributionRejected = false,
@@ -125,6 +129,7 @@ public final class EffArena {
   public void apply(JsonObject update) {
     if (closed) return;
     state = update;
+    appliedState = true;
     JsonObject story = Jsons.o(state, "story"),
         cue = Jsons.o(state, "cinema"),
         visual = Jsons.o(story, "stage");
@@ -213,7 +218,7 @@ public final class EffArena {
     historyAnchor.clear();
     flightY = 73;
     construction.clear();
-    actors.forEach(Entity::discard);
+    actors.forEach(this::discardActor);
     actors.clear();
     npcActors.clear();
     shardActor = null;
@@ -224,6 +229,7 @@ public final class EffArena {
     cols = rows == 0 ? 0 : grid.get(0).getAsString().length();
     if (rows > 80 || cols > 80 || rows < 1 || cols < 1)
       throw new IllegalStateException("INVALID_MAP_GEOMETRY");
+    if (playerLifetimeClaimed) PlayerLifetime.updateBounds(player, playerLifetimeOwner, playerSpatialBounds());
     for (int z = 0; z < rows * 2; z++)
       for (int x = 0; x < cols * 2; x++) {
         char tile = grid.get(z / 2).getAsString().charAt(x / 2);
@@ -314,17 +320,27 @@ public final class EffArena {
   }
 
   private ArmorStand stand(Vec3 p, String label, boolean visible) {
-    ArmorStand a = new ArmorStand(world, p.x, p.y, p.z);
+    ArmorStand a = research instanceof ManagedResearchRuntime
+        ? EffEntities.createProjection(world, p) : new ArmorStand(world, p.x, p.y, p.z);
     a.setNoGravity(true);
     a.setInvulnerable(true);
     a.setInvisible(!visible);
     a.setCustomName(Component.literal(label));
     a.setCustomNameVisible(true);
     a.addTag("eff_owned");
+    if (a instanceof EffProjection projection) projection.claimLifetime(actorLifetimeOwner);
     world.addFreshEntity(a);
     actors.add(a);
     return a;
   }
+
+  // Normal scene transitions may release their own actors. Combat never recreates them.
+  private void discardActor(Entity actor) {
+    if (actor instanceof EffProjection projection) projection.releaseLifetime(actorLifetimeOwner);
+    actor.discard();
+  }
+
+  public List<Entity> sceneActors() { return List.copyOf(actors); }
 
   private void populate() {
     JsonObject story = Jsons.o(state, "story");
@@ -379,7 +395,7 @@ public final class EffArena {
     for (String id : List.copyOf(npcActors.keySet()))
       if (!seen.contains(id)) {
         ArmorStand a = npcActors.remove(id);
-        a.discard();
+        discardActor(a);
         actors.remove(a);
       }
     JsonObject shard = Jsons.o(story, "shard");
@@ -392,7 +408,7 @@ public final class EffArena {
       shardActor.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.AMETHYST_SHARD));
     }
     if (shardActor != null && Jsons.b(shard, "collected")) {
-      shardActor.discard();
+      discardActor(shardActor);
       actors.remove(shardActor);
       shardActor = null;
     }
@@ -419,7 +435,7 @@ public final class EffArena {
   }
 
   public void tick() {
-    if (closed) return;
+    if (closed || !appliedState) return;
     ticks++;
     int budget = 700;
     while (budget-- > 0 && !construction.isEmpty()) {
@@ -427,7 +443,8 @@ public final class EffArena {
       world.setBlock(p.pos, p.block, 2, 512);
     }
     if (!construction.isEmpty()) return;
-    if (!entered || !actors.stream().anyMatch(a -> !a.isRemoved())) {
+    if (!entered || !(research instanceof ManagedResearchRuntime)
+        && !actors.stream().anyMatch(a -> !a.isRemoved())) {
       player.setGameMode(GameType.ADVENTURE);
       player.getAbilities().invulnerable = true;
       player.getAbilities().mayfly = false;
@@ -436,6 +453,10 @@ public final class EffArena {
       player.setYRot(stageYaw);
       player.setXRot(stagePitch);
       teleport(bound);
+      if (!playerLifetimeClaimed) {
+        PlayerLifetime.claim(player, playerLifetimeOwner, playerSpatialBounds());
+        playerLifetimeClaimed = true;
+      }
       entered = true;
       populate();
     }
@@ -543,6 +564,12 @@ public final class EffArena {
     return bound;
   }
 
+  private PlayerLifetimeRegistry.Bounds playerSpatialBounds() {
+    // An existing arena rule, enforced before assignment instead of teleporting back.
+    // The sky scenes retain vertical room; leaving the arena releases the claim first.
+    return new PlayerLifetimeRegistry.Bounds(origin, 60, 0, origin + cols * 2, world.getMaxBuildHeight(), rows * 2);
+  }
+
   public void researchContain() {
     if (player.getY() < 60
         || player.getX() < origin
@@ -604,7 +631,7 @@ public final class EffArena {
   }
 
   public boolean ready() {
-    return entered && construction.isEmpty();
+    return !closed && appliedState && entered && construction.isEmpty();
   }
 
   public int generation() {
@@ -657,9 +684,13 @@ public final class EffArena {
   public void close() {
     if (closed) return;
     closed = true;
+    if (playerLifetimeClaimed) {
+      PlayerLifetime.release(player, playerLifetimeOwner);
+      playerLifetimeClaimed = false;
+    }
     construction.clear();
     LegacyFreeze.of(server).setFrozen(previousFrozen);
-    actors.forEach(Entity::discard);
+    actors.forEach(this::discardActor);
     if (player.connection != null) {
       player.teleportTo(returnWorld, returnPos.x, returnPos.y, returnPos.z, returnYaw, returnPitch);
       player.setDeltaMovement(Vec3.ZERO);

@@ -79,9 +79,9 @@ jobs:
         run: ./mc-forge-1.20.1/gradlew.bat -p mc-forge-1.20.1 --no-daemon --max-workers=2 build "-Pforge_version=${{ matrix.forge }}"
       - name: Inspect production distribution
         shell: pwsh
-        run: node mc-forge-1.20.1/tests/distribution.test.cjs mc-forge-1.20.1/build/libs/eff-minecraft-forge-1.20.1-0.6.1+mc1.20.1-forge.jar
+        run: node mc-forge-1.20.1/tests/distribution.test.cjs mc-forge-1.20.1/build/libs/eff-minecraft-forge-1.20.1-0.8.0+mc1.20.1-forge.jar
       - uses: actions/upload-artifact@v4
         with:
           name: eff-forge-${{ matrix.forge }}
-          path: mc-forge-1.20.1/build/libs/eff-minecraft-forge-1.20.1-0.6.1+mc1.20.1-forge.jar
+          path: mc-forge-1.20.1/build/libs/eff-minecraft-forge-1.20.1-0.8.0+mc1.20.1-forge.jar
           if-no-files-found: error

@@ -5,7 +5,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
-const artifact = path.resolve(process.argv[2] || "build/libs/eff-minecraft-forge-1.20.1-0.6.1+mc1.20.1-forge.jar");
+const artifact = path.resolve(process.argv[2] || "build/libs/eff-minecraft-forge-1.20.1-0.8.0+mc1.20.1-forge.jar");
 const javaHome = process.env.JAVA_HOME;
 const jarTool = javaHome ? path.join(javaHome, "bin", process.platform === "win32" ? "jar.exe" : "jar") : "jar";
 const jvm = ["-J-Xmx64m", "-J-XX:+UseSerialGC", "-J-XX:ActiveProcessorCount=2"];
@@ -54,6 +54,14 @@ try {
   assert.match(mapped, /ServerLevelMixin/);
   assert.match(mapped, /ChunkMapAccessor/);
   assert.match(mapped, /GameRendererMixin/);
+  for (const [accessor, field] of [
+    ['EntityDataProbeAccessor', 'f_19804_'], ['HealthIdProbeAccessor', 'f_20961_'],
+    ['SynchedDataProbeAccessor', 'f_135345_'], ['DataItemProbeAccessor', 'f_135391_'],
+  ]) {
+    assert(common.mixins.includes(accessor), `missing raw-health accessor ${accessor}`);
+    const mapping = refmap.mappings[`eff/minecraft/mixin/${accessor}`];
+    assert(mapping && JSON.stringify(mapping).includes(field), `missing production field mapping ${accessor}`);
+  }
   assert.match(mapped, /m_\d+_/, "no SRG method mapping; dev-only refmap cannot install in production");
   for (const name of expected.filter(n => n.endsWith(".class"))) {
     const bytes = fs.readFileSync(path.join(temp, name));

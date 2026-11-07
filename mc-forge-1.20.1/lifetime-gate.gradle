@@ -1,0 +1,33 @@
+// Separate BOOT-layer library: no agent attach and no modification of opponent artifacts.
+sourceSets {
+ lifetimeGate
+ lifetimeGateTest
+}
+sourceSets.lifetimeGate.compileClasspath += sourceSets.main.compileClasspath
+sourceSets.lifetimeGateTest.compileClasspath += sourceSets.lifetimeGate.output + sourceSets.lifetimeGate.compileClasspath
+sourceSets.lifetimeGateTest.runtimeClasspath += sourceSets.lifetimeGateTest.compileClasspath
+tasks.named('compileLifetimeGateTestJava') {
+ source rootProject.file('../mc-1.20.1/src/main/java/eff/minecraft/CoreTickScope.java')
+ source rootProject.file('../mc-1.20.1/src/main/java/eff/minecraft/RawHealthProbe.java')
+ source rootProject.file('../mc-1.20.1/src/main/java/eff/minecraft/EntityIndexStorage.java')
+ source rootProject.file('../mc-1.20.1/src/main/java/eff/minecraft/PlayerLifetimeRegistry.java')
+ source rootProject.file('tools/native-hidden-boundary/src/eff/hiddenboundary/HiddenWriteTransform.java')
+ source rootProject.file('tools/final-lifetime/src/eff/finalgate/FinalLifetimeTransform.java')
+ source rootProject.file('tools/final-lifetime/src/eff/finalgate/TrustedTickTransform.java')
+}
+tasks.register('lifetimeGateJar', Jar) {
+ dependsOn 'lifetimeGateClasses'
+ archiveFileName = 'eff-lifetime-gate.jar'
+ destinationDirectory = layout.buildDirectory.dir('runtime')
+ from sourceSets.lifetimeGate.output
+ manifest { attributes 'Automatic-Module-Name':'eff.lifetime' }
+}
+tasks.register('lifetimeGateTest', JavaExec) {
+ dependsOn 'lifetimeGateTestClasses'
+ classpath = sourceSets.lifetimeGateTest.runtimeClasspath
+ mainClass = 'eff.lifetime.test.GateTest'
+ maxHeapSize = '128m'
+ jvmArgs '-Xverify:all'
+}
+check { dependsOn 'lifetimeGateTest' }
+assemble { dependsOn 'lifetimeGateJar' }

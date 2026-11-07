@@ -12,6 +12,11 @@ final class Pig2EngagementProbe {
   private Pig2EngagementProbe() {}
 
   static JsonObject observe(Object opponent, Object originalProjection) {
+    return observe(opponent, originalProjection, java.util.List.of(), java.util.List.of());
+  }
+
+  static JsonObject observe(Object opponent, Object originalProjection,
+      java.util.List<?> originals, java.util.List<String> identities) {
     JsonObject result = new JsonObject();
     result.addProperty("advancedAttackObserved", false);
     result.addProperty("status", "advancedAttackNotVerified");
@@ -39,8 +44,14 @@ final class Pig2EngagementProbe {
       }
       result.addProperty("enemyMatchesOriginal", enemy == originalProjection);
       result.addProperty("attackingEnemyMatchesOriginal", attackingEnemy == originalProjection);
+      result.addProperty("enemyFrozenIdentity", frozenIdentity(enemy, originals, identities));
+      result.addProperty("attackingEnemyFrozenIdentity", frozenIdentity(attackingEnemy, originals, identities));
       result.addProperty("attackLevel", level.name());
       result.addProperty("level3TickCounter", count);
+      result.addProperty("globalFightPhase", String.valueOf(read(type, null, "gMaxFightPhase")));
+      result.addProperty("globalFightStartedAt", ((Number) read(type, null, "gStartFightingTime")).longValue());
+      result.addProperty("globalFightLastAt", ((Number) read(type, null, "gLastFightingTime")).longValue());
+      result.addProperty("globalKilledAllServerEnemies", (Boolean) read(type, null, "gKilledAllServerEnemies"));
       result.addProperty("observationAvailable", true);
       result.addProperty("reason", "stage-and-target-do-not-prove-attack-entry-execution");
     } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
@@ -48,6 +59,12 @@ final class Pig2EngagementProbe {
       result.addProperty("errorType", error.getClass().getName());
     }
     return result;
+  }
+
+  private static String frozenIdentity(Object value, java.util.List<?> originals, java.util.List<String> identities) {
+    if (value != null && originals.size() == identities.size())
+      for (int i = 0; i < originals.size(); i++) if (value == originals.get(i)) return identities.get(i);
+    return "unmatched";
   }
 
   private static Object read(Class<?> type, Object opponent, String name)

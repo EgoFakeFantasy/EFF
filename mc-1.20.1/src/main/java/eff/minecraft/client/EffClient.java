@@ -22,7 +22,7 @@ public final class EffClient implements ClientModInitializer {
 
   public void onInitializeClient() {
     net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry.register(
-        EffEntities.PROJECTION, net.minecraft.client.renderer.entity.ArmorStandRenderer::new);
+        EffEntities.PROJECTION, EffProjectionRenderer::new);
     net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents.CLIENT_STOPPING
         .register(
             mc -> {
@@ -31,6 +31,7 @@ public final class EffClient implements ClientModInitializer {
                   RuntimeLink.call(Jsons.obj("op", "goodbye"));
                 } catch (Exception ignored) {
                 }
+              RuntimeLink.shutdown();
             });
     menu =
         KeyBindingHelper.registerKeyBinding(
@@ -110,6 +111,7 @@ public final class EffClient implements ClientModInitializer {
           ManagedSelfTest.tick(mc);
           GuardedSelfTest.tick(mc);
           EntityGuardSelfTest.tick(mc);
+          LifetimeSelfTest.tick(mc);
           EffSelfTest.tick(mc);
           ResearchSelfTest.tick(mc);
           EffPreview.tick(mc);

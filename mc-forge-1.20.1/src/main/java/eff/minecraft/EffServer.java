@@ -12,13 +12,9 @@ import net.minecraft.world.level.storage.LevelResource;
 public final class EffServer {
   private static final Map<UUID, Run> RUNS = new HashMap<>();
   private static final Set<UUID> STARTING = new HashSet<>();
-  private static final ExecutorService IO =
-      Executors.newCachedThreadPool(
-          r -> {
-            Thread t = new Thread(r, "EFF bridge setup");
-            t.setDaemon(true);
-            return t;
-          });
+  // Keep transport setup on JDK-owned workers. A mod can erase custom Runnable factories
+  // and suspend ordinary executor workers; this is compatibility, not a native trust boundary.
+  private static final ForkJoinPool IO = new ForkJoinPool(2);
   private static int ticks;
 
   public static final class Run {
@@ -31,7 +27,8 @@ public final class EffServer {
     boolean researchBusy;
     long researchToken;
     Path save;
-    long lastAck = System.nanoTime();
+    int unacknowledgedTicks;
+    boolean manualFault;
 
     Run(EffArena a, BridgeProcess b) {
       arena = a;
@@ -119,11 +116,7 @@ public final class EffServer {
     }
     if (RUNS.containsKey(p.getUUID())) {
       Run old = RUNS.get(p.getUUID());
-      if (old.research != null) {
-        old.research.close();
-        old.research = null;
-        old.arena.research = null;
-      }
+      // Keep the current projection until a new mode is acknowledged; accept() retires it.
       old.researchBusy = false;
       old.researchToken++;
       request(old, Jsons.obj("op", "enter", "mode", mode));
@@ -153,6 +146,7 @@ public final class EffServer {
                       () -> {
                         boolean waiting = STARTING.remove(p.getUUID());
                         if (error != null) {
+                          BootstrapDiagnostics.failure("bridge-construction", error, IO);
                           arena.close();
                           send(
                               p,
@@ -172,6 +166,7 @@ public final class EffServer {
                       }));
     } catch (Exception e) {
       STARTING.remove(p.getUUID());
+      BootstrapDiagnostics.failure("arena-enter", e, IO);
       send(p, Jsons.obj("error", e.getMessage()));
     }
   }
@@ -180,10 +175,12 @@ public final class EffServer {
     run.bridge
         .request(request)
         .whenComplete(
-            (state, error) ->
+            (state, error) -> {
+                BootstrapDiagnostics.stage("bridge-result-schedule", "failed=" + (error != null));
                 run.arena.server.execute(
                     () -> {
-                      if (!run.active) return;
+                      BootstrapDiagnostics.stage("bridge-result-enter", "active=" + run.active);
+                      if (!run.active || run.manualFault) return;
                       if (error != null) {
                         String message =
                             error.getCause() == null
@@ -192,18 +189,20 @@ public final class EffServer {
                         send(run.arena.player, Jsons.obj("error", message));
                         if (message != null
                             && (message.contains("BRIDGE_STOPPED")
-                                || message.contains("BRIDGE_FAILURE"))) leave(run.arena.player);
+                                || message.contains("BRIDGE_FAILURE"))) runtimeFailure(run);
                         return;
                       }
                       accept(run, state);
-                    }));
+                    });
+            });
   }
 
   private static void accept(Run run, JsonObject state) {
     long sequence = Jsons.i(state, "sequence");
+    BootstrapDiagnostics.stage("bridge-result-accept", "sequence=" + sequence + ";previous=" + run.sequence);
     if (sequence <= run.sequence) return;
     run.sequence = sequence;
-    run.lastAck = System.nanoTime();
+    run.unacknowledgedTicks = 0;
     run.last = state;
     try {
       boolean wantsResearch = Jsons.s(state, "mode").equals("research");
@@ -224,7 +223,7 @@ public final class EffServer {
       }
     } catch (Exception e) {
       send(run.arena.player, Jsons.obj("error", "MC 场景生成失败：" + e.getMessage()));
-      leave(run.arena.player);
+      runtimeFailure(run);
       return;
     }
     publish(run);
@@ -252,44 +251,56 @@ public final class EffServer {
     RuntimeLink.serverTick();
     ticks++;
     for (Run run : List.copyOf(RUNS.values())) {
-      if (run.arena.server != server) continue;
+      if (!run.active || run.manualFault || run.arena.server != server) continue;
       if (run.research instanceof ManagedResearchRuntime managed && managed.observePlayerFault())
         continue;
-      if ((System.nanoTime() - run.lastAck) / 1e9 > 15) {
-        send(run.arena.player, Jsons.obj("error", "本地桥接长时间未响应，已恢复原世界。"));
-        leave(run.arena.player);
+      // Count active server ticks: a paused integrated server is not a failed bridge.
+      // External supervision remains responsible for a stopped server thread.
+      if (++run.unacknowledgedTicks > 300) {
+        BootstrapDiagnostics.failure("bridge-watchdog", new TimeoutException("BRIDGE_ACK_TIMEOUT"), IO);
+        send(run.arena.player, Jsons.obj("error", System.getProperty("eff.manualCombat", "").isBlank()
+            ? "本地桥接长时间未响应，已恢复原世界。" : "桥接运行故障，保留原场景；本次验收失败。"));
+        runtimeFailure(run);
         continue;
       }
       if (server.getPlayerList().getPlayerCount() != 1) {
         send(run.arena.player, Jsons.obj("error", "有其他玩家加入，已退出并恢复 MC 时间状态。"));
-        leave(run.arena.player);
+        runtimeFailure(run);
         continue;
       }
       try {
         run.arena.tick();
       } catch (Exception e) {
+        BootstrapDiagnostics.failure("arena-tick", e, IO);
         send(run.arena.player, Jsons.obj("error", "MC_RUNTIME_FAILURE"));
-        leave(run.arena.player);
+        runtimeFailure(run);
         continue;
       }
+      if (!run.active) continue;
       if (run.research != null
           && !run.researchBusy
           && run.research.needsCounter()
-          && !Boolean.getBoolean("eff.pig2Lab")) researchPlan(run, "intruder", "");
+          && !Boolean.getBoolean("eff.pig2Lab")
+          && !Boolean.getBoolean("eff.foreverLoveLab")) researchPlan(run, "intruder", "");
       if (ticks % 2 == 0 && !run.polling && run.arena.ready()) {
         run.polling = true;
+        JsonObject step = run.arena.step();
         run.bridge
-            .request(run.arena.step())
+            .request(step)
             .whenComplete(
                 (state, error) ->
                     server.execute(
                         () -> {
                           run.polling = false;
-                          if (!run.active) return;
+                          if (!run.active || run.manualFault) return;
                           if (error == null) accept(run, state);
-                          else if (error.getMessage() != null
-                              && error.getMessage().contains("BRIDGE_STOPPED"))
-                            leave(run.arena.player);
+                          else {
+                            BootstrapDiagnostics.note("bridge-poll-request", step.toString());
+                            BootstrapDiagnostics.failure("bridge-poll", error, IO);
+                            if (error.getMessage() != null
+                                && error.getMessage().contains("BRIDGE_STOPPED"))
+                              runtimeFailure(run);
+                          }
                         }));
       }
     }
@@ -352,6 +363,26 @@ public final class EffServer {
                       }
                       publish(run);
                     }));
+  }
+
+  private static void runtimeFailure(Run run) {
+    if (System.getProperty("eff.manualCombat", "").isBlank()) {
+      leave(run.arena.player);
+      return;
+    }
+    if (run.manualFault) return;
+    run.manualFault = true;
+    // Keep original entities, world and window. This is a failed baseline/run,
+    // never a successful recovery. No more bridge projections after this fault.
+    System.err.println("[EFF_MANUAL] runtime fault; original scene retained; acceptance failed");
+    try {
+      Files.writeString(Path.of("manual-runtime-fault.json"),
+          Jsons.obj("pid", ProcessHandle.current().pid(), "failed", true,
+              "reason", "AUTOMATIC_RUNTIME_EXIT_SUPPRESSED",
+              "unacknowledgedTicks", run.unacknowledgedTicks,
+              "sceneRetained", true, "success", false).toString(),
+          StandardOpenOption.CREATE_NEW);
+    } catch (Exception error) { System.err.println("[EFF_MANUAL] fault evidence write failed: " + error); }
   }
 
   public static void leave(ServerPlayer p) {

@@ -3,7 +3,9 @@
   "package": "eff.minecraft.mixin",
   "compatibilityLevel": "JAVA_17",
   "client": [
-    "GameRendererMixin"
+    "GameRendererMixin",
+    "ProjectionRenderMixin",
+    "ManualKeyboardTraceMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -1,0 +1,5 @@
+'use strict';
+const {test}=require('node:test'),assert=require('node:assert/strict'),{stableWindow}=require('./window-preflight.cjs');
+const sample=(n,extra={})=>({pid:12,launchPid:11,processStartedUtcTicks:'123456789012345678',alive:true,responsive:true,windowPresent:true,windowHandle:'abc',atMs:n*1000,...extra});
+test('precombat loading can settle, with three healthy samples and fixed identity',()=>{const w=[sample(0,{responsive:false}),sample(1),sample(2),sample(3)];assert.equal(stableWindow(w.slice(0,3),11),null);assert.deepEqual(stableWindow(w,11),w.slice(-3));});
+test('precombat deadline and process or window replacement cannot be hidden by recovery',()=>{assert.throws(()=>stableWindow([sample(0),sample(10,{responsive:false})],11),/INITIAL_WINDOW/);assert.throws(()=>stableWindow([sample(0,{alive:false}),sample(1),sample(2),sample(3)],11),/PROCESS_LOST/);assert.throws(()=>stableWindow([sample(0),sample(1,{pid:13})],11),/IDENTITY/);assert.throws(()=>stableWindow([sample(0),sample(1,{windowHandle:'def'})],11),/WINDOW_REPLACED/);});

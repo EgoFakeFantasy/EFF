@@ -26,6 +26,8 @@ public final class EffMod {
       PROJECTION = ENTITIES.register("projection", () -> EffEntities.PROJECTION);
 
   public EffMod() {
+    BootstrapDiagnostics.stage("forge-mod-enter", "constructor");
+    ForgeBootstrapProbe.snapshot("construct");
     var modBus = net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext.get().getModEventBus();
     ENTITIES.register(modBus);
     modBus.addListener(EffMod::attributes);
@@ -36,6 +38,7 @@ public final class EffMod {
     MinecraftForge.EVENT_BUS.addListener(EffMod::playerJoined);
     MinecraftForge.EVENT_BUS.addListener(EffMod::playerLeft);
     DistExecutor.safeRunWhenOn(Dist.CLIENT, () -> eff.minecraft.client.EffClient::initialize);
+    BootstrapDiagnostics.stage("forge-mod-ready", "listeners-registered");
   }
 
   private static void attributes(
@@ -45,6 +48,7 @@ public final class EffMod {
 
   private static void registerCommands(RegisterCommandsEvent event) {
     var dispatcher = event.getDispatcher();
+    eff.minecraft.lab.ManualPlayerAttackFixture.register(dispatcher);
     dispatcher.register(
         Commands.literal("eff")
             .executes(
@@ -97,7 +101,10 @@ public final class EffMod {
   }
 
   private static void serverTick(TickEvent.ServerTickEvent event) {
-    if (event.phase == TickEvent.Phase.END) EffServer.tick(event.getServer());
+    ForgeBootstrapProbe.snapshot("server");
+    BootstrapDiagnostics.stage("forge-server-event", "wrapped=" + CoreTickScope.active(false));
+    if (event.phase == TickEvent.Phase.END && !CoreTickScope.active(false))
+      EffServer.tick(event.getServer());
   }
 
   private static void serverStopping(ServerStoppingEvent event) {

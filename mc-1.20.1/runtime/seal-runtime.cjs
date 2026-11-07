@@ -21,12 +21,13 @@ function provision(source,destination,guardBinary,options={}){
  function copy(source,name){const target=path.join(payload,name);fs.copyFileSync(source,target);pin(target);return target;}
  const guard=copy(guardBinary,'eff-guard.exe');
  const guardConfig=copy(path.join(__dirname,'guard/WindowsGuard.exe.config'),'eff-guard.exe.config');
- for(const name of ['controller.cjs','protected-child.cjs','engine-lineage.cjs','projection-guard.cjs','state-boundary.cjs','launch-policy.cjs','intrusion-defense.cjs','control.cjs','intrusion-defense.cjs','control.cjs'])copy(path.join(__dirname,name),name);
+  for(const name of ['controller.cjs','host-fault.cjs','bounded-host-log.cjs','external-story.cjs','story-service.cjs','protected-child.cjs','engine-lineage.cjs','projection-guard.cjs','state-boundary.cjs','launch-policy.cjs','startup-agent-policy.cjs','intrusion-defense.cjs','control.cjs'])copy(path.join(__dirname,name),name);
  config.workerJar=copy(config.workerJar,'workers.jar');pin(process.execPath);
  const executables=new Set([config.java,...Object.values(config.javaByRole||{})]);if(config.host)executables.add(config.host.command);
  for(const executable of executables){if(typeof executable!=='string'||path.basename(executable).toLowerCase()!=='java.exe')throw Error('SEAL_EXPECTED_JAVA_RUNTIME');pin(executable);if(path.basename(executable).toLowerCase()==='java.exe'){const root=path.resolve(executable,'..','..');for(const dir of ['bin','lib','conf'])for(const f of walk(path.join(root,dir)))pin(f);if(fs.existsSync(path.join(root,'release')))pin(path.join(root,'release'));}}
  if(config.host){
-  const h=config.host;h.cwd=path.join(destination,'mc-host');fs.mkdirSync(h.cwd);
+  const h=config.host,production=h.distribution==='production',rendererEnv=Launch.softwareRendererEnvironment(h.softwareRenderer);h.cwd=path.join(destination,'mc-host');fs.mkdirSync(h.cwd);
+  if(h.distribution!==undefined&&!production)throw Error('UNSUPPORTED_FORGE_DISTRIBUTION');
   // cwd alone does not relocate Minecraft: Forge's explicit gameDir otherwise
   // still selects the old config/saves/mods tree outside this seal.
   const args=h.args=Launch.relocateGameDirectory(h.args,h.cwd);
@@ -38,11 +39,16 @@ function provision(source,destination,guardBinary,options={}){
   if(options.externalControlOnly===true)config.admission.hostMutation='disabled';h.integrityHelper=guard;
   if(h.loader&&h.loader!=='forge')throw Error('UNSUPPORTED_SEALED_LOADER');
   if(args.includes('-Deff.lowMemory=true'))fs.writeFileSync(path.join(h.cwd,'options.txt'),'renderDistance:2\nsimulationDistance:5\nparticles:2\nmipmapLevels:0\ngraphicsMode:0\nao:false\n');
-  Launch.assertHostArguments(args);
-  if(args.some(a=>/^(@|-javaagent:|-agentlib:|-agentpath:|-Xbootclasspath|--patch-module|-XX:(OnError|OnOutOfMemoryError)=|-XX:-DisableAttachMechanism)/i.test(a)))throw Error('UNAPPROVED_JVM_INJECTION');
+  Launch.assertHostArguments(args,Launch.hostArgumentOptions(config));
+   if(args.some(a=>/^(@|-agentlib:|-agentpath:|-Xbootclasspath|--patch-module|-XX:(OnError|OnOutOfMemoryError)=|-XX:-DisableAttachMechanism)/i.test(a)))throw Error('UNAPPROVED_JVM_INJECTION');
+   require('./startup-agent-policy.cjs').sealStartupAgent(h,args,{payload,pin});
+   Launch.assertHostArguments(args,Launch.hostArgumentOptions(config));
   for(const key of Object.keys(h.env||{}))if(/^(JAVA|JDK_JAVA|_JAVA|NODE_|EFF_)/i.test(key))throw Error('UNAPPROVED_LAUNCH_ENV');
   const cp=args.indexOf('-cp');if(cp<0)throw Error('EXPECTED_EXPLICIT_CLASSPATH');
   const paths=args[cp+1].split(path.delimiter),dirs=paths.filter(p=>fs.statSync(p).isDirectory());
+  if(production){
+   require('./forge-production.cjs').sealProduction(h,args,{payload,pin,walk});
+  }
   let joined;
   if(dirs.length){joined=path.join(payload,'mc-mod.jar');const jar=path.join(config.java,'..','jar.exe');
    let manifestArgs=[],extraResources=[];
@@ -60,7 +66,7 @@ function provision(source,destination,guardBinary,options={}){
     const manifest=path.join(payload,'mc-mod.mf');fs.writeFileSync(manifest,'Manifest-Version: 1.0\nMixinConfigs: '+h.modManifest.MixinConfigs+'\n\n');pin(manifest);manifestArgs=['--manifest',manifest];
    }
    execFileSync(jar,[...jarMemory,'--create','--file',joined,...manifestArgs,...dirs.flatMap(d=>['-C',d,'.']),...extraResources],{windowsHide:true,env:Launch.cleanEnv()});pin(joined);args[cp+1]=[...paths.filter(p=>!dirs.includes(p)).map(dependency),joined].join(path.delimiter);}
-  if(!dirs.length)args[cp+1]=paths.map(dependency).join(path.delimiter);
+  if(!dirs.length&&!production)args[cp+1]=paths.map(dependency).join(path.delimiter);
   for(const f of args[cp+1].split(path.delimiter))pin(f);
   const dli=args.findIndex(a=>a.startsWith('-Dfabric.dli.config='));
   if(dli>=0){if(args.filter(a=>a.startsWith('-Dfabric.dli.config=')).length!==1)throw Error('AMBIGUOUS_FABRIC_LAUNCH_CONFIG');const original=args[dli].split('=').slice(1).join('=');let text=Launch.assertNoHiddenGameDirectory(fs.readFileSync(original,'utf8'));
@@ -71,7 +77,7 @@ function provision(source,destination,guardBinary,options={}){
    }
    const fixed=path.join(payload,'launch.cfg');fs.writeFileSync(fixed,text);pin(fixed);args[dli]='-Dfabric.dli.config='+fixed;
   }
-  if(h.loader==='forge'){
+  if(h.loader==='forge'&&!production){
    // Forge has executable dependencies outside -cp. Snapshot each one into the same closed payload.
    const modules=args.indexOf('-p');
    if(args.filter(a=>a==='-p').length!==1||args.filter(a=>a==='-cp').length!==1||args.some(a=>/^(--module-path(?:=|$)|--class-path(?:=|$)|-classpath$|--upgrade-module-path(?:=|$)|-DlegacyClassPath=)/.test(a)))throw Error('FORGE_AMBIGUOUS_CODE_PATH');
@@ -107,12 +113,14 @@ function provision(source,destination,guardBinary,options={}){
     }).join(path.delimiter);
    }
   // The bridge is extracted before play and locked, not rewritten in the writable MC config tree.
-  const bundle=dirs.map(d=>path.join(d,'eff-story-runtime.zip')).find(f=>fs.existsSync(f));
+  const bundle=production?h.storyBundle:dirs.map(d=>path.join(d,'eff-story-runtime.zip')).find(f=>fs.existsSync(f));
   if(!bundle)throw Error('STORY_BUNDLE_REQUIRED');const story=path.join(payload,'story');fs.mkdirSync(story);
   execFileSync(path.join(config.java,'..','jar.exe'),[...jarMemory,'xf',bundle],{cwd:story,windowsHide:true,env:Launch.cleanEnv()});
   for(const file of walk(story))pin(file);
-  h.env={...(h.env||{}),EFF_STORY_RUNTIME:story};args.splice(cp,0,'-Deff.node='+process.execPath);
+  h.env={...(h.env||{}),...rendererEnv,EFF_STORY_RUNTIME:story};args.splice(cp,0,'-Deff.node='+process.execPath);
+  if(h.externalStory!==undefined&&(h.externalStory!==true||h.lowIntegrity!==true))throw Error('STORY_LOW_BOUNDARY_REQUIRED');
   const mods=path.join(h.cwd,'mods');fs.mkdirSync(mods);
+  if(production){const mod=path.join(mods,'eff.jar');fs.copyFileSync(h.modJar,mod);pin(mod);h.modJar=mod;}
   if(h.researchMods!==undefined){
    if(config.researchLab!==true||!Array.isArray(h.researchMods)||h.researchMods.length>4)throw Error('RESEARCH_MODS_NOT_APPROVED');
    const seen=new Set();h.researchMods=h.researchMods.map(m=>{

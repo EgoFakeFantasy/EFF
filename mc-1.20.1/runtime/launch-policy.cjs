@@ -16,6 +16,13 @@ const allowedEnvironment = new Set([
   "DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "TMPDIR"
 ]);
 
+function softwareRendererEnvironment(mode) {
+  if (mode === undefined) return {};
+  if (mode !== 'llvmpipe') throw Error('UNAPPROVED_SOFTWARE_RENDERER');
+  // Explicit sealed choice, not inherited Mesa variables or a DLL search path.
+  return {GALLIUM_DRIVER:'llvmpipe',LP_NUM_THREADS:'2'};
+}
+
 function cleanEnv(source = process.env) {
   if (!source || typeof source !== "object" || Array.isArray(source)) throw Error("INVALID_LAUNCH_ENV");
   const result = {};
@@ -58,14 +65,40 @@ function workerEnv(java, directory, source = process.env) {
   return result;
 }
 
-function assertHostArguments(args) {
+function hostArgumentOptions(config) {
+  const h=config.host||{};
+  const startup=require('./startup-agent-policy.cjs').validateStartupAgent(h);
+  const options=startup?{startupAgentArgument:startup.argument}:{};
+  if(h.nativeCompatibility===undefined)return options;
+  const profiles={
+    'foreverlove-2.2-self-attach':'3bf3ba852bbafec9f4440210d4084bb92ba9586c9a146ae03ddf003f17f1b5f8',
+    // Local compatibility derivative: repaired ServiceLoader emitter, NOT the original sample.
+    'foreverlove-2.2-servicefilter-repair':'7eee66a0c9505a4babc502ac1707e7598e0fe284121dde1ade11936666f8ec9b'
+  };
+  const sample=Object.hasOwn(profiles,h.nativeCompatibility)?profiles[h.nativeCompatibility]:undefined;
+  const baseline=h.args?.includes('-Deff.entityGuardSelftest=true')&&!h.researchMods;
+  const opponent=Array.isArray(h.researchMods)&&h.researchMods.length===1&&h.researchMods[0].sha256===sample;
+  if(!sample||config.researchLab!==true||
+     config.researchMode!=='observe-only'||h.lowIntegrity!==true||(!baseline&&!opponent))
+    throw Error('HOST_COMPATIBILITY_PROFILE_REFUSED');
+  return {...options,allowSelfAttach:true};
+}
+
+function assertHostArguments(args, {allowSelfAttach=false,startupAgentArgument=null}={}) {
+  if(startupAgentArgument!==null&&(typeof startupAgentArgument!=='string'||!startupAgentArgument.startsWith('-javaagent:')||/[\0\r\n=]/.test(startupAgentArgument)))
+    throw Error('STARTUP_AGENT_DESCRIPTOR');
   if (!Array.isArray(args) || args.some(a => typeof a !== "string" || /[\0\r\n]/.test(a)))
     throw Error("INVALID_HOST_ARGUMENTS");
   for (const arg of args) {
     const a = arg.trimStart();
+    if (/^-noverify$/i.test(a) || /^-Xverify:none$/i.test(a) ||
+        /^-XX:-(?:BytecodeVerificationLocal|BytecodeVerificationRemote)(?:=|$)/i.test(a) ||
+        /^-XX:(?:BytecodeVerificationLocal|BytecodeVerificationRemote)=/i.test(a) ||
+        (allowSelfAttach && /^-Xverify:/i.test(a) && a!=='-Xverify:all'))
+      throw Error('HOST_BYTECODE_VERIFICATION_REQUIRED');
     if (
       a.startsWith("@") ||
-      /^-{1,2}(?:javaagent|agentlib|agentpath)(?::|=|$)/i.test(a) ||
+      (/^-{1,2}(?:javaagent|agentlib|agentpath)(?::|=|$)/i.test(a) && arg!==startupAgentArgument) ||
       /^-X(?:bootclasspath|run)/i.test(a) ||
       /^--patch-module(?:=|$)/i.test(a) ||
       /^-XX:(?:Flags|VMOptionsFile|OnError|OnOutOfMemoryError)(?:=|$)/i.test(a) ||
@@ -73,11 +106,16 @@ function assertHostArguments(args) {
       /^-XX:-(?:DisableAttachMechanism|ExitOnOutOfMemoryError)(?:=|$)/i.test(a) ||
       /^-XX:(?:DisableAttachMechanism|ExitOnOutOfMemoryError)=/i.test(a) ||
       /^-XX:\+EnableDynamicAgentLoading(?:=|$)/i.test(a) ||
-      /^-Djdk\.attach\.allowAttachSelf=(?!false$)/i.test(a)
+      (/^-Djdk\.attach\.allowAttachSelf=(?!false$)/i.test(a)&&!(allowSelfAttach&&a==='-Djdk.attach.allowAttachSelf=true'))
     ) throw Error("UNAPPROVED_JVM_INJECTION");
   }
-  if (!args.includes("-XX:+DisableAttachMechanism") || !args.includes("-XX:+ExitOnOutOfMemoryError"))
+  if(startupAgentArgument!==null&&args.filter(a=>a===startupAgentArgument).length!==1)
+    throw Error('STARTUP_AGENT_ARGUMENT_REQUIRED');
+  if ((!allowSelfAttach&&!args.includes("-XX:+DisableAttachMechanism")) || !args.includes("-XX:+ExitOnOutOfMemoryError"))
     throw Error("HOST_JVM_HARDENING_REQUIRED");
+  if(allowSelfAttach&&(args.includes('-XX:+DisableAttachMechanism')||args.filter(a=>a.startsWith('-Djdk.attach.allowAttachSelf=')).length!==1||!args.includes('-Djdk.attach.allowAttachSelf=true')))
+    throw Error('HOST_SELF_ATTACH_PROFILE_ARGUMENTS');
+  if(allowSelfAttach&&!args.includes('-Xverify:all'))throw Error('HOST_BYTECODE_VERIFICATION_REQUIRED');
   return args;
 }
 
@@ -128,4 +166,4 @@ function assertNoHiddenGameDirectory(text){
   }
   return text;
 }
-module.exports = { cleanEnv, workerEnv, assertHostArguments, launcherSanitizeLines, relocateGameDirectory, assertNoHiddenGameDirectory };
+module.exports = { cleanEnv, workerEnv, assertHostArguments, hostArgumentOptions, launcherSanitizeLines, relocateGameDirectory, assertNoHiddenGameDirectory, softwareRendererEnvironment };

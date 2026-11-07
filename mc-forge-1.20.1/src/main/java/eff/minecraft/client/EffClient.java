@@ -23,6 +23,7 @@ public final class EffClient {
   private static boolean pauseSent = false;
 
   public static void initialize() {
+    BootstrapDiagnostics.stage("forge-client-enter", "initialize");
     menu = new KeyMapping("key.eff.menu", InputConstants.KEY_R, "key.categories.gameplay");
     interact = new KeyMapping("key.eff.interact", InputConstants.KEY_V, "key.categories.gameplay");
     FMLJavaModLoadingContext.get().getModEventBus().addListener(EffClient::registerKeys);
@@ -30,13 +31,15 @@ public final class EffClient {
     EffPackets.setClientReceiver(EffClient::receive);
     MinecraftForge.EVENT_BUS.addListener(EffClient::tick);
     MinecraftForge.EVENT_BUS.addListener(EffClient::renderHud);
+    MinecraftForge.EVENT_BUS.addListener(EffClient::observeKey);
     MinecraftForge.EVENT_BUS.addListener(EffClient::shutdown);
+    BootstrapDiagnostics.stage("forge-client-ready", "listeners-registered");
   }
 
   private static void registerRenderers(
       net.minecraftforge.client.event.EntityRenderersEvent.RegisterRenderers event) {
     event.registerEntityRenderer(
-        EffEntities.PROJECTION, net.minecraft.client.renderer.entity.ArmorStandRenderer::new);
+        EffEntities.PROJECTION, EffProjectionRenderer::new);
   }
 
   private static void registerKeys(RegisterKeyMappingsEvent event) {
@@ -44,8 +47,14 @@ public final class EffClient {
     event.register(interact);
   }
 
+  private static void observeKey(net.minecraftforge.client.event.InputEvent.Key event) {
+    EntityGuardSelfTest.manualKeyEvent(
+        event.getKey(), event.getScanCode(), event.getAction(), event.getModifiers());
+  }
+
   private static void shutdown(GameShuttingDownEvent event) {
     NativeTheatre.close();
+    RuntimeLink.shutdown();
     if (RuntimeLink.enabled())
       try {
         RuntimeLink.call(Jsons.obj("op", "goodbye"));
@@ -94,7 +103,7 @@ public final class EffClient {
           agency = Jsons.b(Jsons.o(Jsons.o(next, "story"), "agency"), "active"),
           rain = (Jsons.o(Jsons.o(next, "story"), "rain").size() != 0);
       boolean ending = (Jsons.o(Jsons.o(next, "story"), "ending").size() != 0);
-      if (!key.equals(opened)
+      if (System.getProperty("eff.manualCombat", "").isEmpty() && !key.equals(opened)
           && (dialogue
               || agency
               || rain
@@ -118,13 +127,25 @@ public final class EffClient {
   }
 
   private static void tick(TickEvent.ClientTickEvent event) {
-    if (event.phase != TickEvent.Phase.END) return;
+    BootstrapDiagnostics.stage("forge-client-event", "wrapped=" + CoreTickScope.active(true));
+    eff.minecraft.ForgeBootstrapProbe.snapshot("client");
+    if (event.phase == TickEvent.Phase.END && !CoreTickScope.active(true)) coreTick();
+  }
+
+  public static void coreTick() {
+    BootstrapDiagnostics.stage("client-core-tick", "wrapped=" + CoreTickScope.active(true));
+    if (menu == null || interact == null) return;
     Minecraft mc = Minecraft.getInstance();
-    RuntimeLink.clientTick(mc.isPaused(), mc.level != null);
+    try { RuntimeLink.clientTick(mc.isPaused(), mc.level != null); }
+    catch (RuntimeException | LinkageError error) {
+      BootstrapDiagnostics.failure("client-runtime-link", error, null);
+      throw error;
+    }
     LegacyDev.prepare(mc);
     ManagedSelfTest.tick(mc);
     GuardedSelfTest.tick(mc);
     EntityGuardSelfTest.tick(mc);
+    LifetimeSelfTest.tick(mc);
     EffSelfTest.tick(mc);
     ResearchSelfTest.tick(mc);
     EffPreview.tick(mc);
